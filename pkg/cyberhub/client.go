@@ -127,6 +127,8 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body io
 		// 设置请求头
 		req.Header.Set("X-API-Key", c.apiKey)
 		req.Header.Set("Content-Type", "application/json")
+		// 后端要求显式声明 gzip 才会返回压缩数据
+		req.Header.Set("Accept-Encoding", "gzip")
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
