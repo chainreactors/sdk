@@ -1,26 +1,15 @@
 # Chainreactors SDK
 
-Chainreactors SDK 提供统一的 Go 接口，用于各种安全工具的集成和使用。
-
-[![Go Version](https://img.shields.io/badge/Go-1.20+-blue.svg)](https://golang.org)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+统一的安全扫描工具 Go SDK，提供一致的接口设计。
 
 ## 概述
 
-Chainreactors SDK 是一个统一的 SDK 框架，为多个安全工具提供一致的 API 接口。目前支持：
+Chainreactors SDK 为多个安全扫描工具提供统一接口：
 
-- **GoGo**: 端口扫描和服务识别
-- **Spray**: HTTP URL 检测和路径暴力破解
-
-## 特性
-
-- ✅ **统一接口**: 所有工具实现相同的核心接口
-- ✅ **简洁 API**: 只有 4 个核心概念（Engine, Context, Task, Result）
-- ✅ **灵活配置**: 支持默认配置和自定义配置
-- ✅ **流式处理**: 内置 Stream API，适合大规模数据处理
-- ✅ **Context 支持**: 完整支持 context 取消和超时
-- ✅ **工厂模式**: 支持通过工厂创建引擎
-- ✅ **多态使用**: 不同引擎可以通过统一接口操作
+- **Fingers**: Web 指纹识别（HTTP/Socket）
+- **Neutron**: POC/漏洞扫描
+- **GoGo**: 集成指纹识别和 POC 检测的端口扫描
+- **Spray**: HTTP 批量检测和路径爆破
 
 ## 安装
 
@@ -28,317 +17,267 @@ Chainreactors SDK 是一个统一的 SDK 框架，为多个安全工具提供一
 go get github.com/chainreactors/sdk
 ```
 
+## 架构设计
+
+### 核心架构
+
+SDK 采用简单的四组件架构：
+
+1. **Engine（引擎）**: 实现具体的扫描逻辑
+2. **Context（上下文）**: 携带配置和控制信息
+3. **Task（任务）**: 定义扫描目标
+4. **Result（结果）**: 返回扫描结果
+
+每个引擎可以独立使用，也可以与其他引擎集成（如 GoGo 同时集成 Fingers 和 Neutron）。
+
+### 数据源
+
+所有引擎支持双重加载模式：
+
+- **本地模式**: 从嵌入数据或文件系统加载
+- **远程模式**: 从 Cyberhub API 加载，支持 source 过滤
+
 ## 快速开始
 
-### 使用 GoGo SDK (端口扫描)
-
-```go
-import "github.com/chainreactors/sdk/gogo"
-
-// 创建引擎
-engine := gogo.NewGogoEngine(nil)
-engine.Init()
-
-ctx := context.Background()
-
-// 单目标扫描
-result := engine.ScanOne(ctx, "192.168.1.1", "80")
-fmt.Printf("%s:%s - %s\n", result.Ip, result.Port, result.Status)
-
-// 批量扫描
-results, _ := engine.Scan(ctx, "192.168.1.0/24", "top100")
-for _, r := range results {
-    fmt.Printf("%s:%s - %s\n", r.Ip, r.Port, r.Title)
-}
-```
-
-### 使用 Spray SDK (Web 扫描)
-
-```go
-import "github.com/chainreactors/sdk/spray"
-
-// 创建引擎
-engine := spray.NewSprayEngine(nil)
-engine.Init()
-
-ctx := context.Background()
-
-// URL 检测
-urls := []string{"http://example.com", "http://httpbin.org"}
-results, _ := engine.Check(ctx, urls)
-for _, r := range results {
-    fmt.Printf("%s [%d]\n", r.UrlString, r.Status)
-}
-
-// 路径暴力破解
-wordlist := []string{"admin", "api", ".git"}
-results, _ = engine.Brute(ctx, "http://example.com", wordlist)
-```
-
-### 使用工厂模式
-
-```go
-import rootsdk "github.com/chainreactors/sdk"
-
-// 列出所有已注册的引擎
-engines := rootsdk.ListEngines()
-fmt.Printf("Available engines: %v\n", engines)
-
-// 通过工厂创建引擎
-gogoEngine, _ := rootsdk.NewEngine("gogo", nil)
-sprayEngine, _ := rootsdk.NewEngine("spray", nil)
-```
-
-### 使用统一接口
-
-所有引擎都实现了统一的 SDK 接口，可以多态使用：
+### Fingers - 指纹识别
 
 ```go
 import (
-    rootsdk "github.com/chainreactors/sdk"
-    sdk "github.com/chainreactors/sdk/sdk"
-    "github.com/chainreactors/sdk/gogo"
-    "github.com/chainreactors/sdk/spray"
+    "context"
+    "github.com/chainreactors/sdk/fingers"
 )
 
-// 多态使用引擎
-var engines []sdk.Engine = []sdk.Engine{
-    gogo.NewGogoEngine(nil),
-    spray.NewSprayEngine(nil),
-}
+// 创建并加载引擎
+config := fingers.NewConfig().
+    SetCyberhubURL("http://127.0.0.1:8080").
+    SetAPIKey("your_key")
 
-for _, engine := range engines {
-    fmt.Printf("Engine: %s\n", engine.Name())
-}
+engine, _ := fingers.NewEngine(config)
+libEngine, _ := engine.Load(context.Background())
 
-// 使用统一的 Execute 方法
-engine, _ := rootsdk.NewEngine("gogo", nil)
-ctx := gogo.NewContext()
-task := gogo.NewScanTask("192.168.1.1", "80,443")
-resultCh, _ := engine.Execute(ctx, task)
+// 检测指纹
+frameworks, _ := libEngine.DetectContent(httpResponse)
+```
 
-for result := range resultCh {
-    if result.Success() {
-        fmt.Printf("Result: %v\n", result.Data())
+### Neutron - POC 扫描
+
+```go
+import (
+    "context"
+    "github.com/chainreactors/sdk/neutron"
+)
+
+// 创建并加载引擎
+config := neutron.NewConfig().
+    SetCyberhubURL("http://127.0.0.1:8080").
+    SetAPIKey("your_key")
+
+engine, _ := neutron.NewEngine(config)
+templates, _ := engine.Load(context.Background())  // 自动编译
+
+// 执行 POC
+for _, t := range templates {
+    result, _ := t.Execute("http://target.com", nil)
+    if result.Matched {
+        // 处理漏洞
     }
 }
 ```
 
-## 核心概念
-
-SDK 基于 4 个核心接口设计：
-
-### 1. Engine (引擎)
-
-引擎负责执行具体功能，所有引擎实现统一接口：
+### GoGo - 集成扫描
 
 ```go
-type Engine interface {
-    Name() string
-    Execute(ctx Context, task Task) (<-chan Result, error)
-    Close() error
+import (
+    "context"
+    "github.com/chainreactors/sdk/gogo"
+    "github.com/chainreactors/sdk/fingers"
+    "github.com/chainreactors/sdk/neutron"
+)
+
+// 加载指纹库
+fingersEngine, _ := fingers.NewEngine(fingersConfig)
+libEngine, _ := fingersEngine.Load(ctx)
+fEngine := libEngine.GetEngine("fingers")
+
+// 加载 POC
+neutronEngine, _ := neutron.NewEngine(neutronConfig)
+templates, _ := neutronEngine.Load(ctx)
+
+// 创建集成扫描器
+gogoEngine := gogo.NewGogoEngineWithFingersAndNeutron(nil, fEngine, templates)
+gogoEngine.Init()
+
+// 执行扫描
+task := gogo.NewScanTask("192.168.1.0/24", "80,443,8080")
+resultCh, _ := gogoEngine.Execute(gogoCtx, task)
+
+for result := range resultCh {
+    // 处理结果
 }
 ```
 
-### 2. Context (上下文)
-
-上下文包含配置和控制信息，支持链式调用：
+### Spray - HTTP 检测
 
 ```go
-type Context interface {
-    Context() context.Context
-    Config() Config
-    WithConfig(config Config) Context
-    WithTimeout(timeout time.Duration) Context
-    WithCancel() (Context, context.CancelFunc)
-}
-```
+import (
+    "context"
+    "github.com/chainreactors/sdk/spray"
+)
 
-### 3. Task (任务)
-
-任务定义要执行的操作：
-
-```go
-type Task interface {
-    Type() string
-    Validate() error
-}
-```
-
-### 4. Result (结果)
-
-结果返回执行结果和状态：
-
-```go
-type Result interface {
-    Success() bool
-    Error() error
-    Data() interface{}
-}
-```
-
-## 使用方式
-
-### 方式 1: 便捷 API（推荐）
-
-每个 SDK 都提供了便捷的 API，简化常用操作：
-
-```go
-// GoGo
-engine := gogo.NewGogoEngine(nil)
+engine := spray.NewEngine(nil)
 engine.Init()
-results, _ := engine.Scan(ctx, "192.168.1.0/24", "80,443")
 
-// Spray
-engine := spray.NewSprayEngine(nil)
-engine.Init()
-results, _ := engine.Check(ctx, urls)
+urls := []string{"http://example.com", "http://target.com"}
+task := spray.NewCheckTask(urls)
+resultCh, _ := engine.Execute(sprayCtx, task)
+
+for result := range resultCh {
+    sprayResult := result.(*spray.Result).SprayResult()
+    // 处理结果
+}
 ```
-
-### 方式 2: 统一接口
-
-使用统一的 Execute 方法，支持多态：
-
-```go
-engine := gogo.NewGogoEngine(nil)
-ctx := gogo.NewContext()
-task := gogo.NewScanTask("192.168.1.0/24", "80,443")
-resultCh, _ := engine.Execute(ctx, task)
-```
-
-### 方式 3: 工厂模式
-
-通过工厂创建引擎，支持动态选择：
-
-```go
-engine, _ := rootsdk.NewEngine("gogo", nil)
-```
-
-## 项目结构
-
-```
-D:\Programing\go\chainreactors\sdk\
-├── sdk/                  # 核心接口定义
-│   ├── interface.go     # 4 个核心接口
-│   └── helper.go        # 辅助函数
-│
-├── engine.go            # 工厂和注册
-├── sdk_test.go          # 核心接口测试
-│
-├── gogo/                # GoGo 端口扫描 SDK
-│   ├── gogo.go         # 引擎实现
-│   ├── api.go          # 便捷 API
-│   ├── init.go         # 注册
-│   ├── gogo_test.go    # 测试
-│   └── README.md       # 文档
-│
-├── spray/               # Spray Web 扫描 SDK
-│   ├── spray.go        # 引擎实现
-│   ├── api.go          # 便捷 API
-│   ├── init.go         # 注册
-│   ├── spray_test.go   # 测试
-│   └── README.md       # 文档
-│
-└── examples/            # 使用示例
-    └── main.go         # 完整示例代码
-```
-
-## 各 SDK 文档
-
-- [GoGo SDK](gogo/README.md) - 端口扫描和服务识别
-- [Spray SDK](spray/README.md) - HTTP URL 检测和路径暴力破解
 
 ## 配置
+
+### Fingers 配置
+
+```go
+config := fingers.NewConfig().
+    SetCyberhubURL("http://127.0.0.1:8080").
+    SetAPIKey("your_key").
+    SetSource("github").        // 可选：按来源过滤
+    SetTimeout(10 * time.Second).
+    SetMaxRetries(3)
+```
+
+### Neutron 配置
+
+```go
+config := neutron.NewConfig().
+    SetCyberhubURL("http://127.0.0.1:8080").
+    SetAPIKey("your_key").
+    SetSource("github").        // 可选：按来源过滤
+    SetLocalPath("./pocs").     // 可选：本地 POC 目录
+    SetTimeout(10 * time.Second)
+```
 
 ### GoGo 配置
 
 ```go
-import "github.com/chainreactors/gogo/v2/pkg"
-
-opt := pkg.DefaultRunnerOption
-opt.VersionLevel = 2      // 深度指纹识别
-opt.Exploit = "auto"      // 启用漏洞检测
-opt.Delay = 5             // 超时时间
-
-engine := gogo.NewGogoEngine(opt)
-engine.SetThreads(500)    // 设置线程数
+config := gogo.NewConfig().
+    SetThreads(1000).
+    SetVersionLevel(2).         // 0-3，数值越高检测越深
+    SetExploit("all").          // none/all/known
+    SetDelay(5)                 // 请求超时时间
 ```
 
 ### Spray 配置
 
 ```go
-opt := spray.DefaultConfig()
-opt.Threads = 200
-opt.Timeout = 10
-opt.Method = "POST"
-opt.Headers = []string{"Authorization: Bearer token"}
-opt.Filter = "current.Status == 404"
-
-engine := spray.NewSprayEngine(opt)
-engine.SetThreads(150)
-engine.SetTimeout(15)
+config := spray.NewConfig().
+    SetThreads(100).
+    SetTimeout(10)
 ```
 
-## 示例程序
+## 命令行工具
 
-运行完整示例：
+`examples/` 目录提供了预构建的命令行工具：
 
 ```bash
+# 构建所有工具
 cd examples
-go run main.go
+go build -o fingers/fingers.exe ./fingers/main.go
+go build -o neutron/neutron.exe ./neutron/main.go
+go build -o gogo/gogo.exe ./gogo/main.go
+go build -o spray/spray.exe ./spray/main.go
 ```
 
-示例包含：
-- GoGo 便捷 API 使用
-- Spray 便捷 API 使用
-- 使用统一接口
-- Context 链式调用
-- 多态使用
-- 工厂模式
+详细使用方法参见 [examples/README.md](examples/README.md)。
 
-## 测试
+## 项目结构
+
+```
+sdk/
+├── fingers/              # 指纹识别引擎
+│   ├── engine.go        # 核心引擎实现
+│   ├── config.go        # 配置
+│   └── api.go          # 公共 API
+│
+├── neutron/             # POC 扫描引擎
+│   ├── engine.go       # 核心引擎（自动编译）
+│   ├── config.go       # 配置
+│   └── api.go         # 公共 API
+│
+├── gogo/               # 端口扫描（集成）
+│   ├── gogo.go        # 支持 Fingers/Neutron 的引擎
+│   ├── config.go      # 配置
+│   └── api.go        # 公共 API
+│
+├── spray/              # HTTP 检测引擎
+│   ├── spray.go       # 核心引擎实现
+│   ├── config.go      # 配置
+│   └── api.go        # 公共 API
+│
+├── pkg/
+│   ├── cyberhub/      # 统一 API 客户端
+│   │   ├── client.go  # HTTP 客户端（支持 gzip）
+│   │   └── types.go   # API 类型
+│   ├── interface.go   # 核心 SDK 接口
+│   └── helper.go      # 工具函数
+│
+└── examples/           # CLI 工具实现
+    ├── fingers/
+    ├── neutron/
+    ├── gogo/
+    ├── spray/
+    └── README.md
+```
+
+## 核心特性
+
+### Cyberhub 集成
+
+所有引擎都支持从 Cyberhub 加载数据：
+- Gzip 压缩处理
+- 自动重试（指数退避）
+- 基于 source 的过滤
+- API Key 认证
+
+### POC 自动编译
+
+Neutron 引擎在加载时自动编译 POC：
+- 无需手动编译
+- 编译失败的 POC 自动跳过
+- ExecuterOptions 从引擎配置生成
+
+### GoGo 集成
+
+GoGo 可以同时集成 Fingers 和 Neutron：
+- 模板按指纹、ID、标签建立索引
+- 9,444 个 POC 生成 61,267 条索引（多重索引）
+- 根据检测到的指纹自动匹配模板
+
+## 开发
+
+### 运行测试
 
 ```bash
 # 运行所有测试
 go test ./...
 
-# 运行特定 SDK 的测试
+# 运行特定包的测试
+go test ./fingers -v
+go test ./neutron -v
 go test ./gogo -v
 go test ./spray -v
-
-# 运行集成测试（需要网络）
-go test ./gogo -v -run TestScanIntegration
 ```
 
-## 常见问题
+### 添加新引擎
 
-### Q: 如何选择使用哪个 API 方式？
-A:
-- 便捷 API：适合大多数场景，简单直接
-- 统一接口：需要多态或动态选择引擎时使用
-- 工厂模式：需要根据配置动态创建引擎时使用
-
-### Q: Stream 和 Sync API 有什么区别？
-A:
-- Stream: 返回 channel，实时处理结果，适合大规模数据，内存占用小
-- Sync: 返回切片，等待所有结果完成，适合小规模数据，方便处理
-
-### Q: Context 超时后会发生什么？
-A: 引擎会停止扫描并返回已经获得的结果，不会阻塞
-
-### Q: 如何添加新的 SDK？
-A: 实现 4 个核心接口，在 init.go 中注册即可
-
-## 设计优势
-
-- **统一性**: 所有 SDK 实现相同的核心接口
-- **简洁性**: 只有 4 个核心接口，方法最小化
-- **灵活性**: 保留各 SDK 的便捷 API，支持链式调用
-- **扩展性**: 新增 SDK 只需实现 4 个接口
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
+1. 实现 `pkg/interface.go` 中的核心接口
+2. 创建引擎包，包含 `engine.go`、`config.go`、`api.go`
+3. 在 `engine.go` 的 init 函数中注册
+4. 在 `examples/` 中添加 CLI 工具
 
 ## License
 
@@ -346,6 +285,7 @@ MIT License
 
 ## 相关项目
 
-- [GoGo](https://github.com/chainreactors/gogo) - 端口扫描工具
-- [Spray](https://github.com/chainreactors/spray) - Web 扫描工具
-- [Parsers](https://github.com/chainreactors/parsers) - 结果解析库
+- [Fingers](https://github.com/chainreactors/fingers) - 指纹识别库
+- [Neutron](https://github.com/chainreactors/neutron) - POC 框架
+- [GoGo](https://github.com/chainreactors/gogo) - 端口扫描器
+- [Spray](https://github.com/chainreactors/spray) - HTTP 扫描器
