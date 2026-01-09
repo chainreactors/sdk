@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -45,7 +46,8 @@ func NewClient(baseURL, apiKey string, timeout time.Duration, maxRetries int) *C
 // ExportFingerprints 导出所有指纹（使用 export API）
 // withFingerprint: 是否返回完整的指纹规则数据
 // source: 指纹来源过滤（可选，如 "github", "local" 等）
-func (c *Client) ExportFingerprints(ctx context.Context, withFingerprint bool, source string) ([]FingerprintResponse, error) {
+// filters: 筛选条件（可选，传 nil 表示不筛选）
+func (c *Client) ExportFingerprints(ctx context.Context, withFingerprint bool, source string, filters ...*ExportFilter) ([]FingerprintResponse, error) {
 	params := url.Values{}
 	if withFingerprint {
 		params.Set("with_fingerprint", "true")
@@ -53,6 +55,9 @@ func (c *Client) ExportFingerprints(ctx context.Context, withFingerprint bool, s
 	if source != "" {
 		params.Set("source", source)
 	}
+
+	// 添加筛选参数
+	applyFilterParams(params, firstFilter(filters))
 
 	endpoint := fmt.Sprintf("%s/fingerprints/export?%s", c.baseURL, params.Encode())
 
@@ -69,7 +74,8 @@ func (c *Client) ExportFingerprints(ctx context.Context, withFingerprint bool, s
 // severities: 严重程度过滤（可选）
 // pocType: POC 类型过滤（可选）
 // source: POC 来源过滤（可选，如 "github", "local" 等）
-func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []string, pocType string, source string) ([]POCResponse, error) {
+// filters: 筛选条件（可选，传 nil 表示不筛选）
+func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []string, pocType string, source string, filters ...*ExportFilter) ([]POCResponse, error) {
 	params := url.Values{}
 
 	// 添加标签过滤
@@ -95,6 +101,9 @@ func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []str
 	// 只导出激活状态的 POC
 	params.Set("status", "active")
 
+	// 添加筛选参数
+	applyFilterParams(params, firstFilter(filters))
+
 	endpoint := fmt.Sprintf("%s/pocs/export?%s", c.baseURL, params.Encode())
 
 	var response POCListResponse
@@ -103,6 +112,76 @@ func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []str
 	}
 
 	return response.POCs, nil
+}
+
+// firstFilter 返回第一个非 nil 的筛选器
+func firstFilter(filters []*ExportFilter) *ExportFilter {
+	for _, filter := range filters {
+		if filter != nil {
+			return filter
+		}
+	}
+	return nil
+}
+
+// applyFilterParams 将筛选条件应用到 URL 参数
+func applyFilterParams(params url.Values, filter *ExportFilter) {
+	if filter == nil {
+		return
+	}
+
+	if filter.Keyword != "" {
+		params.Set("keyword", filter.Keyword)
+	}
+
+	if len(filter.Tags) > 0 {
+		existingTags := make(map[string]struct{})
+		for _, tag := range params["tags"] {
+			if tag == "" {
+				continue
+			}
+			existingTags[tag] = struct{}{}
+		}
+		for _, tag := range filter.Tags {
+			if tag == "" {
+				continue
+			}
+			if _, exists := existingTags[tag]; exists {
+				continue
+			}
+			params.Add("tags", tag)
+			existingTags[tag] = struct{}{}
+		}
+	}
+
+	if filter.CreatedAfter != nil {
+		params.Set("created_after", filter.CreatedAfter.Format(time.RFC3339))
+	}
+
+	if filter.CreatedBefore != nil {
+		params.Set("created_before", filter.CreatedBefore.Format(time.RFC3339))
+	}
+
+	if filter.UpdatedAfter != nil {
+		params.Set("updated_after", filter.UpdatedAfter.Format(time.RFC3339))
+	}
+
+	if filter.UpdatedBefore != nil {
+		params.Set("updated_before", filter.UpdatedBefore.Format(time.RFC3339))
+	}
+
+	hasPagination := filter.Page > 0 || filter.PageSize > 0
+	if filter.Page > 0 {
+		params.Set("page", strconv.Itoa(filter.Page))
+	}
+
+	if filter.PageSize > 0 {
+		params.Set("page_size", strconv.Itoa(filter.PageSize))
+	}
+
+	if !hasPagination && filter.Limit > 0 {
+		params.Set("limit", strconv.Itoa(filter.Limit))
+	}
 }
 
 // doRequest 执行 HTTP 请求（带重试）

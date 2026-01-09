@@ -1,10 +1,90 @@
 package cyberhub
 
 import (
+	"time"
+
 	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/neutron/templates"
 )
+
+// ========================================
+// 导出筛选器
+// ========================================
+
+// ExportFilter 通用导出筛选选项
+type ExportFilter struct {
+	// 名称/关键词筛选（模糊匹配）
+	Keyword string
+
+	// 标签筛选（多个标签为 OR 关系）
+	Tags []string
+
+	// 时间范围筛选
+	CreatedAfter  *time.Time // 创建时间起始
+	CreatedBefore *time.Time // 创建时间截止
+	UpdatedAfter  *time.Time // 更新时间起始
+	UpdatedBefore *time.Time // 更新时间截止
+
+	// 分页
+	Page     int // 页码（从1开始）
+	PageSize int // 每页数量
+	Limit    int // 最大返回数量（不分页时使用）
+}
+
+// NewExportFilter 创建空的筛选器
+func NewExportFilter() *ExportFilter {
+	return &ExportFilter{}
+}
+
+// WithKeyword 设置关键词筛选
+func (f *ExportFilter) WithKeyword(keyword string) *ExportFilter {
+	f.Keyword = keyword
+	return f
+}
+
+// WithTags 设置标签筛选
+func (f *ExportFilter) WithTags(tags ...string) *ExportFilter {
+	f.Tags = tags
+	return f
+}
+
+// WithCreatedAfter 设置创建时间起始
+func (f *ExportFilter) WithCreatedAfter(t time.Time) *ExportFilter {
+	f.CreatedAfter = &t
+	return f
+}
+
+// WithCreatedBefore 设置创建时间截止
+func (f *ExportFilter) WithCreatedBefore(t time.Time) *ExportFilter {
+	f.CreatedBefore = &t
+	return f
+}
+
+// WithUpdatedAfter 设置更新时间起始
+func (f *ExportFilter) WithUpdatedAfter(t time.Time) *ExportFilter {
+	f.UpdatedAfter = &t
+	return f
+}
+
+// WithUpdatedBefore 设置更新时间截止
+func (f *ExportFilter) WithUpdatedBefore(t time.Time) *ExportFilter {
+	f.UpdatedBefore = &t
+	return f
+}
+
+// WithPagination 设置分页
+func (f *ExportFilter) WithPagination(page, pageSize int) *ExportFilter {
+	f.Page = page
+	f.PageSize = pageSize
+	return f
+}
+
+// WithLimit 设置数量限制
+func (f *ExportFilter) WithLimit(limit int) *ExportFilter {
+	f.Limit = limit
+	return f
+}
 
 // ========================================
 // Cyberhub API 响应（简化版 - 匹配后端 ExportFinger）
