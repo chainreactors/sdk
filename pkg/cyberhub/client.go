@@ -1,6 +1,7 @@
 package cyberhub
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -45,14 +47,19 @@ func NewClient(baseURL, apiKey string, timeout time.Duration, maxRetries int) *C
 // ExportFingerprints 导出所有指纹（使用 export API）
 // withFingerprint: 是否返回完整的指纹规则数据
 // source: 指纹来源过滤（可选，如 "github", "local" 等）
-func (c *Client) ExportFingerprints(ctx context.Context, withFingerprint bool, source string) ([]FingerprintResponse, error) {
+// filters: 筛选条件（可选，传 nil 表示不筛选）
+func (c *Client) ExportFingerprints(ctx context.Context, withFingerprint bool, source string, filters ...*ExportFilter) ([]FingerprintResponse, error) {
 	params := url.Values{}
 	if withFingerprint {
 		params.Set("with_fingerprint", "true")
 	}
 	if source != "" {
 		params.Set("source", source)
+		params.Add("sources", source)
 	}
+
+	// 添加筛选参数
+	applyFilterParams(params, firstFilter(filters))
 
 	endpoint := fmt.Sprintf("%s/fingerprints/export?%s", c.baseURL, params.Encode())
 
@@ -69,7 +76,8 @@ func (c *Client) ExportFingerprints(ctx context.Context, withFingerprint bool, s
 // severities: 严重程度过滤（可选）
 // pocType: POC 类型过滤（可选）
 // source: POC 来源过滤（可选，如 "github", "local" 等）
-func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []string, pocType string, source string) ([]POCResponse, error) {
+// filters: 筛选条件（可选，传 nil 表示不筛选）
+func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []string, pocType string, source string, filters ...*ExportFilter) ([]POCResponse, error) {
 	params := url.Values{}
 
 	// 添加标签过滤
@@ -95,6 +103,9 @@ func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []str
 	// 只导出激活状态的 POC
 	params.Set("status", "active")
 
+	// 添加筛选参数
+	applyFilterParams(params, firstFilter(filters))
+
 	endpoint := fmt.Sprintf("%s/pocs/export?%s", c.baseURL, params.Encode())
 
 	var response POCListResponse
@@ -105,9 +116,201 @@ func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []str
 	return response.POCs, nil
 }
 
+// ExportPOCsByNames 按名称列表导出 POC
+func (c *Client) ExportPOCsByNames(ctx context.Context, names []string) ([]POCResponse, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+
+	params := url.Values{}
+	for _, name := range names {
+		params.Add("names", name)
+	}
+	params.Set("status", "active")
+
+	endpoint := fmt.Sprintf("%s/pocs/export?%s", c.baseURL, params.Encode())
+
+	var response POCListResponse
+	if err := c.doRequest(ctx, "GET", endpoint, nil, &response); err != nil {
+		return nil, fmt.Errorf("export pocs by names failed: %w", err)
+	}
+
+	return response.POCs, nil
+}
+
+// ExportPOCsWithQuery 使用 Query 构建器导出 POC
+func (c *Client) ExportPOCsWithQuery(ctx context.Context, query *Query) ([]POCResponse, error) {
+	params := url.Values{}
+
+	hasStatus := false
+	if query != nil {
+		if values := query.Values(); len(values["status"]) > 0 || len(values["statuses"]) > 0 {
+			hasStatus = true
+		}
+	}
+	if !hasStatus {
+		params.Set("status", "active")
+	}
+
+	// 合并 Query 参数
+	if query != nil {
+		for key, values := range query.Values() {
+			for _, v := range values {
+				params.Add(key, v)
+			}
+		}
+	}
+
+	endpoint := fmt.Sprintf("%s/pocs/export?%s", c.baseURL, params.Encode())
+
+	var response POCListResponse
+	if err := c.doRequest(ctx, "GET", endpoint, nil, &response); err != nil {
+		return nil, fmt.Errorf("export pocs failed: %w", err)
+	}
+
+	return response.POCs, nil
+}
+
+// ExportFingerprintsWithQuery 使用 Query 构建器导出指纹
+func (c *Client) ExportFingerprintsWithQuery(ctx context.Context, query *Query) ([]FingerprintResponse, error) {
+	params := url.Values{}
+
+	// 合并 Query 参数
+	if query != nil {
+		for key, values := range query.Values() {
+			for _, v := range values {
+				params.Add(key, v)
+			}
+		}
+	}
+
+	endpoint := fmt.Sprintf("%s/fingerprints/export?%s", c.baseURL, params.Encode())
+
+	var response FingerprintListResponse
+	if err := c.doRequest(ctx, "GET", endpoint, nil, &response); err != nil {
+		return nil, fmt.Errorf("export fingerprints failed: %w", err)
+	}
+
+	return response.Fingerprints, nil
+}
+
+// firstFilter 返回第一个非 nil 的筛选器
+func firstFilter(filters []*ExportFilter) *ExportFilter {
+	for _, filter := range filters {
+		if filter != nil {
+			return filter
+		}
+	}
+	return nil
+}
+
+// applyFilterParams 将筛选条件应用到 URL 参数
+func applyFilterParams(params url.Values, filter *ExportFilter) {
+	if filter == nil {
+		return
+	}
+
+	if filter.Keyword != "" {
+		params.Set("keyword", filter.Keyword)
+	}
+
+	if len(filter.Tags) > 0 {
+		existingTags := make(map[string]struct{})
+		for _, tag := range params["tags"] {
+			if tag == "" {
+				continue
+			}
+			existingTags[tag] = struct{}{}
+		}
+		for _, tag := range filter.Tags {
+			if tag == "" {
+				continue
+			}
+			if _, exists := existingTags[tag]; exists {
+				continue
+			}
+			params.Add("tags", tag)
+			existingTags[tag] = struct{}{}
+		}
+	}
+
+	if filter.CreatedAfter != nil {
+		params.Set("created_after", filter.CreatedAfter.Format(time.RFC3339))
+	}
+
+	if filter.CreatedBefore != nil {
+		params.Set("created_before", filter.CreatedBefore.Format(time.RFC3339))
+	}
+
+	if filter.UpdatedAfter != nil {
+		params.Set("updated_after", filter.UpdatedAfter.Format(time.RFC3339))
+	}
+
+	if filter.UpdatedBefore != nil {
+		params.Set("updated_before", filter.UpdatedBefore.Format(time.RFC3339))
+	}
+
+	hasPagination := filter.Page > 0 || filter.PageSize > 0
+	if filter.Page > 0 {
+		params.Set("page", strconv.Itoa(filter.Page))
+	}
+
+	if filter.PageSize > 0 {
+		params.Set("page_size", strconv.Itoa(filter.PageSize))
+	}
+
+	if !hasPagination && filter.Limit > 0 {
+		params.Set("limit", strconv.Itoa(filter.Limit))
+	}
+}
+
+type requestBodyProvider struct {
+	data    []byte
+	hasBody bool
+}
+
+func newRequestBodyProvider(body io.Reader) (*requestBodyProvider, error) {
+	if body == nil {
+		return &requestBodyProvider{hasBody: false}, nil
+	}
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return nil, fmt.Errorf("read request body failed: %w", err)
+	}
+	return &requestBodyProvider{data: data, hasBody: true}, nil
+}
+
+func (p *requestBodyProvider) Reader() io.Reader {
+	if p == nil || !p.hasBody {
+		return nil
+	}
+	return bytes.NewReader(p.data)
+}
+
+func readResponseBody(resp *http.Response) ([]byte, error) {
+	defer resp.Body.Close()
+
+	var reader io.Reader = resp.Body
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		gzipReader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		defer gzipReader.Close()
+		reader = gzipReader
+	}
+
+	return io.ReadAll(reader)
+}
+
 // doRequest 执行 HTTP 请求（带重试）
 func (c *Client) doRequest(ctx context.Context, method, endpoint string, body io.Reader, result interface{}) error {
 	var lastErr error
+
+	bodyProvider, err := newRequestBodyProvider(body)
+	if err != nil {
+		return err
+	}
 
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
@@ -119,7 +322,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body io
 			}
 		}
 
-		req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
+		req, err := http.NewRequestWithContext(ctx, method, endpoint, bodyProvider.Reader())
 		if err != nil {
 			return fmt.Errorf("create request failed: %w", err)
 		}
@@ -136,22 +339,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body io
 			continue
 		}
 
-		defer resp.Body.Close()
-
-		// 处理 gzip 压缩的响应
-		var reader io.Reader = resp.Body
-		if resp.Header.Get("Content-Encoding") == "gzip" {
-			gzipReader, err := gzip.NewReader(resp.Body)
-			if err != nil {
-				lastErr = fmt.Errorf("create gzip reader failed: %w", err)
-				continue
-			}
-			defer gzipReader.Close()
-			reader = gzipReader
-		}
-
-		// 读取响应体
-		bodyBytes, err := io.ReadAll(reader)
+		bodyBytes, err := readResponseBody(resp)
 		if err != nil {
 			lastErr = fmt.Errorf("read response failed: %w", err)
 			continue
