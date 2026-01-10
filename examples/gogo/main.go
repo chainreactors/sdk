@@ -8,8 +8,6 @@ import (
 	"os"
 	"strings"
 
-	fingersEngine "github.com/chainreactors/fingers/fingers"
-	neutronTemplates "github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/gogo"
 	"github.com/chainreactors/sdk/neutron"
@@ -17,23 +15,23 @@ import (
 
 var (
 	// Cyberhub 配置
-	cyberhubURL    = flag.String("url", "", "Cyberhub URL (e.g., http://127.0.0.1:8080)")
-	apiKey         = flag.String("key", "", "Cyberhub API Key")
-	source         = flag.String("source", "", "Filter by source (optional)")
-	loadFingers    = flag.Bool("fingers", true, "Load fingers from Cyberhub")
-	loadNeutron    = flag.Bool("neutron", false, "Load neutron POCs from Cyberhub")
+	cyberhubURL = flag.String("url", "", "Cyberhub URL (e.g., http://127.0.0.1:8080)")
+	apiKey      = flag.String("key", "", "Cyberhub API Key")
+	source      = flag.String("source", "", "Filter by source (optional)")
+	loadFingers = flag.Bool("fingers", true, "Load fingers from Cyberhub")
+	loadNeutron = flag.Bool("neutron", false, "Load neutron POCs from Cyberhub")
 
 	// 扫描配置
-	target         = flag.String("target", "", "Target IP or CIDR (required)")
-	ports          = flag.String("ports", "80,443,8080,8443", "Ports to scan (comma separated)")
-	threads        = flag.Int("threads", 1000, "Number of threads")
-	versionLevel   = flag.Int("version", 0, "Version detection level (0-3)")
-	exploit        = flag.String("exploit", "none", "Exploit mode (none/all/known)")
-	timeout        = flag.Int("timeout", 5, "Request timeout in seconds")
+	target       = flag.String("target", "", "Target IP or CIDR (required)")
+	ports        = flag.String("ports", "80,443,8080,8443", "Ports to scan (comma separated)")
+	threads      = flag.Int("threads", 1000, "Number of threads")
+	versionLevel = flag.Int("version", 0, "Version detection level (0-3)")
+	exploit      = flag.String("exploit", "none", "Exploit mode (none/all/known)")
+	timeout      = flag.Int("timeout", 5, "Request timeout in seconds")
 
 	// 输出选项
-	jsonOut        = flag.Bool("json", false, "Output as JSON")
-	verbose        = flag.Bool("v", false, "Verbose output")
+	jsonOut = flag.Bool("json", false, "Output as JSON")
+	verbose = flag.Bool("v", false, "Verbose output")
 )
 
 func main() {
@@ -69,8 +67,9 @@ func main() {
 	ctx := context.Background()
 
 	// 1. 加载 Fingers 和 Neutron (可选)
-	var fEngine *fingersEngine.FingersEngine
-	var templates []*neutronTemplates.Template
+	var fEngine *fingers.Engine
+	var neutronEng *neutron.Engine
+	templatesCount := 0
 
 	// 加载 Fingers
 	if *loadFingers {
@@ -78,12 +77,12 @@ func main() {
 			fmt.Printf("Loading fingerprints from Cyberhub (%s)...\n", *cyberhubURL)
 		}
 
-		fingersConfig := fingers.NewConfig().
-			SetCyberhubURL(*cyberhubURL).
-			SetAPIKey(*apiKey)
+		fingersConfig := fingers.NewConfig()
+		fingersConfig.SetCyberhubURL(*cyberhubURL)
+		fingersConfig.SetAPIKey(*apiKey)
 
 		if *source != "" {
-			fingersConfig.SetSource(*source)
+			fingersConfig.SetSources(*source)
 		}
 
 		fingersEng, err := fingers.NewEngine(fingersConfig)
@@ -92,18 +91,22 @@ func main() {
 			os.Exit(1)
 		}
 
-		libEngine, err := fingersEng.Load(ctx)
+		_, err = fingersEng.Load(ctx)
 		if err != nil {
 			fmt.Printf("Error loading fingerprints: %v\n", err)
 			os.Exit(1)
 		}
 
-		impl := libEngine.GetEngine("fingers")
+		impl, err := fingersEng.GetFingersEngine()
+		if err != nil {
+			fmt.Printf("Error getting fingers engine: %v\n", err)
+			os.Exit(1)
+		}
 		if impl != nil {
-			fEngine = impl.(*fingersEngine.FingersEngine)
+			fEngine = fingersEng
 			if !*jsonOut {
-				fmt.Printf("✅ Loaded %d HTTP fingerprints, %d Socket fingerprints\n",
-					len(fEngine.HTTPFingers), len(fEngine.SocketFingers))
+				fmt.Printf("? Loaded %d HTTP fingerprints, %d Socket fingerprints\n",
+					len(impl.HTTPFingers), len(impl.SocketFingers))
 			}
 		}
 	}
@@ -114,28 +117,29 @@ func main() {
 			fmt.Printf("Loading POCs from Cyberhub (%s)...\n", *cyberhubURL)
 		}
 
-		neutronConfig := neutron.NewConfig().
-			SetCyberhubURL(*cyberhubURL).
-			SetAPIKey(*apiKey)
+		neutronConfig := neutron.NewConfig()
+		neutronConfig.SetCyberhubURL(*cyberhubURL)
+		neutronConfig.SetAPIKey(*apiKey)
 
 		if *source != "" {
-			neutronConfig.SetSource(*source)
+			neutronConfig.SetSources(*source)
 		}
 
-		neutronEng, err := neutron.NewEngine(neutronConfig)
+		neutronEng, err = neutron.NewEngine(neutronConfig)
 		if err != nil {
 			fmt.Printf("Error creating neutron engine: %v\n", err)
 			os.Exit(1)
 		}
 
-		templates, err = neutronEng.Load(ctx)
+		templates, err := neutronEng.Load(ctx)
 		if err != nil {
 			fmt.Printf("Error loading POCs: %v\n", err)
 			os.Exit(1)
 		}
 
+		templatesCount = len(templates)
 		if !*jsonOut {
-			fmt.Printf("✅ Loaded and compiled %d POCs\n", len(templates))
+			fmt.Printf("? Loaded and compiled %d POCs\n", templatesCount)
 		}
 	}
 
@@ -144,17 +148,14 @@ func main() {
 		fmt.Println("\nInitializing GoGo engine...")
 	}
 
-	var gogoEngine *gogo.GogoEngine
-
-	if fEngine != nil && templates != nil {
-		gogoEngine = gogo.NewGogoEngineWithFingersAndNeutron(nil, fEngine, templates)
-	} else if fEngine != nil {
-		gogoEngine = gogo.NewGogoEngineWithFingers(nil, fEngine)
-	} else if templates != nil {
-		gogoEngine = gogo.NewGogoEngineWithNeutron(nil, templates)
-	} else {
-		gogoEngine = gogo.NewGogoEngine(nil)
+	gogoConfig := gogo.NewConfig()
+	if fEngine != nil {
+		gogoConfig.WithFingersEngine(fEngine)
 	}
+	if neutronEng != nil {
+		gogoConfig.WithNeutronEngine(neutronEng)
+	}
+	gogoEngine := gogo.NewEngine(gogoConfig)
 
 	if err := gogoEngine.Init(); err != nil {
 		fmt.Printf("Error initializing gogo: %v\n", err)
@@ -166,13 +167,11 @@ func main() {
 	}
 
 	// 3. 配置扫描参数
-	config := gogo.NewConfig().
+	gogoCtx := gogo.NewContext().
 		SetThreads(*threads).
 		SetVersionLevel(*versionLevel).
 		SetExploit(*exploit).
 		SetDelay(*timeout)
-
-	gogoCtx := gogo.NewContext().WithConfig(config)
 
 	// 4. 执行扫描
 	if !*jsonOut {
@@ -243,10 +242,10 @@ func main() {
 	// 6. 输出汇总
 	if *jsonOut {
 		output := map[string]interface{}{
-			"target":       *target,
-			"ports":        *ports,
-			"alive_count":  aliveCount,
-			"results":      results,
+			"target":      *target,
+			"ports":       *ports,
+			"alive_count": aliveCount,
+			"results":     results,
 		}
 		jsonData, _ := json.MarshalIndent(output, "", "  ")
 		fmt.Println(string(jsonData))

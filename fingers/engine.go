@@ -592,15 +592,13 @@ func (e *Engine) executeMatch(ctx sdk.Context, task *MatchTask) (<-chan sdk.Resu
 
 // Context Fingers 上下文
 type Context struct {
-	ctx    context.Context
-	config *Config
+	ctx context.Context
 }
 
 // NewContext 创建 Fingers 上下文
 func NewContext() *Context {
 	return &Context{
-		ctx:    context.Background(),
-		config: NewConfig(),
+		ctx: context.Background(),
 	}
 }
 
@@ -608,30 +606,17 @@ func (c *Context) Context() context.Context {
 	return c.ctx
 }
 
-func (c *Context) Config() sdk.Config {
-	return c.config
-}
-
-func (c *Context) WithConfig(config sdk.Config) sdk.Context {
-	return &Context{
-		ctx:    c.ctx,
-		config: config.(*Config),
-	}
-}
-
 func (c *Context) WithTimeout(timeout time.Duration) sdk.Context {
 	ctx, _ := context.WithTimeout(c.ctx, timeout)
 	return &Context{
-		ctx:    ctx,
-		config: c.config,
+		ctx: ctx,
 	}
 }
 
 func (c *Context) WithCancel() (sdk.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(c.ctx)
 	return &Context{
-		ctx:    ctx,
-		config: c.config,
+		ctx: ctx,
 	}, cancel
 }
 

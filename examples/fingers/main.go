@@ -55,9 +55,10 @@ func main() {
 			fmt.Println("Error: -key is required when using -url")
 			os.Exit(1)
 		}
-		config.SetCyberhubURL(*cyberhubURL).SetAPIKey(*apiKey)
+		config.SetCyberhubURL(*cyberhubURL)
+		config.SetAPIKey(*apiKey)
 		if *source != "" {
-			config.SetSource(*source)
+			config.SetSources(*source)
 		}
 		fmt.Printf("Loading fingerprints from Cyberhub (%s)...\n", *cyberhubURL)
 	} else {

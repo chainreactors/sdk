@@ -7,13 +7,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/gogo/v2/core"
 	"github.com/chainreactors/gogo/v2/engine"
 	"github.com/chainreactors/gogo/v2/pkg"
 	"github.com/chainreactors/logs"
 	neutronTemplates "github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/parsers"
+	sdkfingers "github.com/chainreactors/sdk/fingers"
+	"github.com/chainreactors/sdk/neutron"
 	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/panjf2000/ants/v2"
 )
@@ -24,45 +25,22 @@ import (
 
 // GogoEngine GoGo 引擎实现
 type GogoEngine struct {
-	opt             *pkg.RunnerOption
-	threads         int
-	inited          bool
-	fingersEngine   *fingersEngine.FingersEngine          // 可选的自定义 fingers 引擎
-	neutronTemplates map[string][]*neutronTemplates.Template // 可选的 neutron templates map
+	inited        bool
+	fingersEngine *sdkfingers.Engine // 可选的自定义 fingers 引擎
+	neutronEngine *neutron.Engine    // 可选的 neutron 引擎
 }
 
 // NewGogoEngine 创建 GoGo 引擎
-func NewGogoEngine(opt *pkg.RunnerOption) *GogoEngine {
-	if opt == nil {
-		opt = pkg.DefaultRunnerOption
+func NewGogoEngine(config *Config) *GogoEngine {
+	if config == nil {
+		config = NewConfig()
 	}
+
 	return &GogoEngine{
-		opt:     opt,
-		threads: 1000,
-		inited:  false,
+		inited:        false,
+		fingersEngine: config.FingersEngine,
+		neutronEngine: config.NeutronEngine,
 	}
-}
-
-// NewGogoEngineWithFingers 创建 GoGo 引擎并设置自定义 fingers 引擎
-func NewGogoEngineWithFingers(opt *pkg.RunnerOption, fingersEngine *fingersEngine.FingersEngine) *GogoEngine {
-	engine := NewGogoEngine(opt)
-	engine.fingersEngine = fingersEngine
-	return engine
-}
-
-// NewGogoEngineWithNeutron 创建 GoGo 引擎并设置 neutron templates
-func NewGogoEngineWithNeutron(opt *pkg.RunnerOption, templates []*neutronTemplates.Template) *GogoEngine {
-	engine := NewGogoEngine(opt)
-	engine.neutronTemplates = buildTemplateMap(templates)
-	return engine
-}
-
-// NewGogoEngineWithFingersAndNeutron 创建 GoGo 引擎并同时设置 fingers 和 neutron
-func NewGogoEngineWithFingersAndNeutron(opt *pkg.RunnerOption, fingersEngine *fingersEngine.FingersEngine, templates []*neutronTemplates.Template) *GogoEngine {
-	engine := NewGogoEngine(opt)
-	engine.fingersEngine = fingersEngine
-	engine.neutronTemplates = buildTemplateMap(templates)
-	return engine
 }
 
 // buildTemplateMap 构建 template map（按 finger、id、tag 分类）
@@ -97,9 +75,9 @@ func toLowerKey(s string) string {
 	return s // gogo 内部会处理大小写
 }
 
-// NewEngine 创建 GoGo 引擎 (兼容旧 API)
-func NewEngine(opt *pkg.RunnerOption) *GogoEngine {
-	return NewGogoEngine(opt)
+// NewEngine 创建 GoGo 引擎
+func NewEngine(config *Config) *GogoEngine {
+	return NewGogoEngine(config)
 }
 
 // Init 初始化引擎（加载指纹库等）
@@ -114,9 +92,19 @@ func (e *GogoEngine) Init() error {
 
 	// 如果提供了自定义 fingers 引擎，直接使用
 	if e.fingersEngine != nil {
-		pkg.FingerEngine = e.fingersEngine
+		if _, err := e.fingersEngine.Load(context.Background()); err != nil {
+			return fmt.Errorf("load fingers engine failed: %v", err)
+		}
+		fingerImpl, err := e.fingersEngine.GetFingersEngine()
+		if err != nil {
+			return fmt.Errorf("get fingers engine failed: %v", err)
+		}
+		if fingerImpl == nil {
+			return fmt.Errorf("fingers engine is nil")
+		}
+		pkg.FingerEngine = fingerImpl
 		logs.Log.Infof("using custom fingers engine: %d http fingers, %d socket fingers",
-			len(e.fingersEngine.HTTPFingers), len(e.fingersEngine.SocketFingers))
+			len(fingerImpl.HTTPFingers), len(fingerImpl.SocketFingers))
 	} else {
 		// 否则使用默认加载方式
 		if err := pkg.LoadFinger(nil); err != nil {
@@ -124,15 +112,24 @@ func (e *GogoEngine) Init() error {
 		}
 	}
 
-	// 如果提供了自定义 neutron templates，直接使用
-	if e.neutronTemplates != nil {
-		pkg.TemplateMap = e.neutronTemplates
+	// 如果提供了自定义 neutron 引擎，直接使用
+	if e.neutronEngine != nil {
+		templates := e.neutronEngine.Get()
+		if templates == nil {
+			loadedTemplates, err := e.neutronEngine.Load(context.Background())
+			if err != nil {
+				return fmt.Errorf("load neutron templates failed: %v", err)
+			}
+			templates = loadedTemplates
+		}
+		templateMap := buildTemplateMap(templates)
+		pkg.TemplateMap = templateMap
 		templateCount := 0
-		for _, templates := range e.neutronTemplates {
-			templateCount += len(templates)
+		for _, values := range templateMap {
+			templateCount += len(values)
 		}
 		logs.Log.Infof("using custom neutron templates: %d templates in %d categories",
-			templateCount, len(e.neutronTemplates))
+			templateCount, len(templateMap))
 	} else {
 		// 否则使用默认加载方式
 		pkg.LoadNeutron("")
@@ -177,15 +174,17 @@ func (e *GogoEngine) Close() error {
 
 // Context GoGo 上下文
 type Context struct {
-	ctx    context.Context
-	config *Config
+	ctx     context.Context
+	threads int
+	opt     *pkg.RunnerOption
 }
 
 // NewContext 创建 GoGo 上下文
 func NewContext() *Context {
 	return &Context{
-		ctx:    context.Background(),
-		config: NewConfig(),
+		ctx:     context.Background(),
+		threads: 1000,
+		opt:     pkg.DefaultRunnerOption,
 	}
 }
 
@@ -193,31 +192,63 @@ func (c *Context) Context() context.Context {
 	return c.ctx
 }
 
-func (c *Context) Config() sdk.Config {
-	return c.config
-}
-
-func (c *Context) WithConfig(config sdk.Config) sdk.Context {
-	return &Context{
-		ctx:    c.ctx,
-		config: config.(*Config),
-	}
-}
-
 func (c *Context) WithTimeout(timeout time.Duration) sdk.Context {
 	ctx, _ := context.WithTimeout(c.ctx, timeout)
 	return &Context{
-		ctx:    ctx,
-		config: c.config,
+		ctx:     ctx,
+		threads: c.threads,
+		opt:     c.opt,
 	}
 }
 
 func (c *Context) WithCancel() (sdk.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(c.ctx)
 	return &Context{
-		ctx:    ctx,
-		config: c.config,
+		ctx:     ctx,
+		threads: c.threads,
+		opt:     c.opt,
 	}, cancel
+}
+
+// SetThreads 设置线程数
+func (c *Context) SetThreads(threads int) *Context {
+	if threads > 0 {
+		c.threads = threads
+	}
+	return c
+}
+
+// SetOption 设置运行选项
+func (c *Context) SetOption(opt *pkg.RunnerOption) *Context {
+	c.opt = opt
+	return c
+}
+
+// SetVersionLevel 设置指纹识别级别
+func (c *Context) SetVersionLevel(level int) *Context {
+	if c.opt == nil {
+		c.opt = pkg.DefaultRunnerOption
+	}
+	c.opt.VersionLevel = level
+	return c
+}
+
+// SetExploit 设置漏洞检测模式
+func (c *Context) SetExploit(exploit string) *Context {
+	if c.opt == nil {
+		c.opt = pkg.DefaultRunnerOption
+	}
+	c.opt.Exploit = exploit
+	return c
+}
+
+// SetDelay 设置超时时间（秒）
+func (c *Context) SetDelay(delay int) *Context {
+	if c.opt == nil {
+		c.opt = pkg.DefaultRunnerOption
+	}
+	c.opt.Delay = delay
+	return c
 }
 
 // ========================================
@@ -226,52 +257,28 @@ func (c *Context) WithCancel() (sdk.Context, context.CancelFunc) {
 
 // Config GoGo 配置
 type Config struct {
-	Threads int
-	Opt     *pkg.RunnerOption
+	FingersEngine *sdkfingers.Engine
+	NeutronEngine *neutron.Engine
 }
 
 // NewConfig 创建默认配置
 func NewConfig() *Config {
-	return &Config{
-		Threads: 1000,
-		Opt:     pkg.DefaultRunnerOption,
-	}
+	return &Config{}
 }
 
 func (c *Config) Validate() error {
-	if c.Threads <= 0 {
-		return fmt.Errorf("threads must be positive")
-	}
 	return nil
 }
 
-// SetThreads 设置线程数
-func (c *Config) SetThreads(threads int) *Config {
-	c.Threads = threads
+// WithFingersEngine 设置自定义 fingers 引擎
+func (c *Config) WithFingersEngine(engine *sdkfingers.Engine) *Config {
+	c.FingersEngine = engine
 	return c
 }
 
-// SetOption 设置运行选项
-func (c *Config) SetOption(opt *pkg.RunnerOption) *Config {
-	c.Opt = opt
-	return c
-}
-
-// SetVersionLevel 设置指纹识别级别
-func (c *Config) SetVersionLevel(level int) *Config {
-	c.Opt.VersionLevel = level
-	return c
-}
-
-// SetExploit 设置漏洞检测模式
-func (c *Config) SetExploit(exploit string) *Config {
-	c.Opt.Exploit = exploit
-	return c
-}
-
-// SetDelay 设置超时时间（秒）
-func (c *Config) SetDelay(delay int) *Config {
-	c.Opt.Delay = delay
+// WithNeutronEngine 设置自定义 neutron 引擎
+func (c *Config) WithNeutronEngine(engine *neutron.Engine) *Config {
+	c.NeutronEngine = engine
 	return c
 }
 
@@ -358,24 +365,33 @@ func (r *Result) GOGOResult() *parsers.GOGOResult {
 // ========================================
 
 func (e *GogoEngine) executeScan(ctx sdk.Context, task *ScanTask) (<-chan sdk.Result, error) {
-	config := ctx.Config().(*Config)
+	if ctx == nil {
+		ctx = NewContext()
+	}
+	runCtx := ctx.(*Context)
 
 	workflow := &pkg.Workflow{
 		IP:    task.IP,
 		Ports: task.Ports,
 	}
 
-	return e.workflowStream(ctx.Context(), workflow, config)
+	return e.workflowStream(runCtx.Context(), workflow, runCtx)
 }
 
 func (e *GogoEngine) executeWorkflow(ctx sdk.Context, task *WorkflowTask) (<-chan sdk.Result, error) {
-	config := ctx.Config().(*Config)
-	return e.workflowStream(ctx.Context(), task.Workflow, config)
+	if ctx == nil {
+		ctx = NewContext()
+	}
+	runCtx := ctx.(*Context)
+	return e.workflowStream(runCtx.Context(), task.Workflow, runCtx)
 }
 
-func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow, config *Config) (<-chan sdk.Result, error) {
+func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow, runCtx *Context) (<-chan sdk.Result, error) {
 	// 创建基础配置
-	baseConfig := pkg.NewDefaultConfig(config.Opt)
+	if runCtx.opt == nil {
+		runCtx.opt = pkg.DefaultRunnerOption
+	}
+	baseConfig := pkg.NewDefaultConfig(runCtx.opt)
 	preparedConfig := workflow.PrepareConfig(baseConfig)
 
 	// 初始化配置
@@ -385,8 +401,8 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow,
 	}
 
 	// 设置线程数
-	if config.Threads > 0 {
-		initConfig.Threads = config.Threads
+	if runCtx.threads > 0 {
+		initConfig.Threads = runCtx.threads
 	}
 
 	// 创建结果 channel
@@ -463,4 +479,151 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow,
 	}()
 
 	return resultCh, nil
+}
+
+// ========================================
+// 便捷 API（保持原有使用习惯）
+// ========================================
+
+// ScanOne 单目标扫描
+func (e *GogoEngine) ScanOne(ctx *Context, ip, port string) *parsers.GOGOResult {
+	result := pkg.NewResult(ip, port)
+	if ctx == nil {
+		ctx = NewContext()
+	}
+	runCtx := ctx
+
+	// 检查 context 是否已取消
+	select {
+	case <-runCtx.Context().Done():
+		return result.GOGOResult
+	default:
+	}
+
+	if !e.inited {
+		e.Init()
+	}
+
+	engine.Dispatch(runCtx.opt, result)
+	return result.GOGOResult
+}
+
+// Scan 批量端口扫描（同步）
+func (e *GogoEngine) Scan(ctx *Context, ip, ports string) ([]*parsers.GOGOResult, error) {
+	if !e.inited {
+		if err := e.Init(); err != nil {
+			return nil, err
+		}
+	}
+
+	if ctx == nil {
+		ctx = NewContext()
+	}
+
+	task := NewScanTask(ip, ports)
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
+	var gogoResults []*parsers.GOGOResult
+	for r := range resultCh {
+		if r.Success() {
+			gogoResults = append(gogoResults, r.(*Result).GOGOResult())
+		}
+	}
+
+	return gogoResults, nil
+}
+
+// ScanStream 批量端口扫描（流式）
+func (e *GogoEngine) ScanStream(ctx *Context, ip, ports string) (<-chan *parsers.GOGOResult, error) {
+	if !e.inited {
+		if err := e.Init(); err != nil {
+			return nil, err
+		}
+	}
+
+	if ctx == nil {
+		ctx = NewContext()
+	}
+
+	task := NewScanTask(ip, ports)
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为 GOGOResult channel
+	gogoResultCh := make(chan *parsers.GOGOResult, 100)
+	go func() {
+		defer close(gogoResultCh)
+		for result := range resultCh {
+			if result.Success() {
+				gogoResultCh <- result.(*Result).GOGOResult()
+			}
+		}
+	}()
+
+	return gogoResultCh, nil
+}
+
+// Workflow 工作流扫描（同步）
+func (e *GogoEngine) Workflow(ctx *Context, workflow *pkg.Workflow) ([]*parsers.GOGOResult, error) {
+	if !e.inited {
+		if err := e.Init(); err != nil {
+			return nil, err
+		}
+	}
+
+	if ctx == nil {
+		ctx = NewContext()
+	}
+
+	task := NewWorkflowTask(workflow)
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
+	var gogoResults []*parsers.GOGOResult
+	for r := range resultCh {
+		if r.Success() {
+			gogoResults = append(gogoResults, r.(*Result).GOGOResult())
+		}
+	}
+
+	return gogoResults, nil
+}
+
+// WorkflowStream 工作流扫描（流式）
+func (e *GogoEngine) WorkflowStream(ctx *Context, workflow *pkg.Workflow) (<-chan *parsers.GOGOResult, error) {
+	if !e.inited {
+		if err := e.Init(); err != nil {
+			return nil, err
+		}
+	}
+
+	if ctx == nil {
+		ctx = NewContext()
+	}
+
+	task := NewWorkflowTask(workflow)
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为 GOGOResult channel
+	gogoResultCh := make(chan *parsers.GOGOResult, 100)
+	go func() {
+		defer close(gogoResultCh)
+		for result := range resultCh {
+			if result.Success() {
+				gogoResultCh <- result.(*Result).GOGOResult()
+			}
+		}
+	}()
+
+	return gogoResultCh, nil
 }

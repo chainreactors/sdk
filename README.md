@@ -35,7 +35,7 @@ SDK 采用简单的四组件架构：
 所有引擎支持双重加载模式：
 
 - **本地模式**: 从嵌入数据或文件系统加载
-- **远程模式**: 从 Cyberhub API 加载，支持 source 过滤
+- **远程模式**: 从 Cyberhub API 加载，支持 sources 过滤
 
 ## 快速开始
 
@@ -48,9 +48,9 @@ import (
 )
 
 // 创建并加载引擎
-config := fingers.NewConfig().
-    SetCyberhubURL("http://127.0.0.1:8080").
-    SetAPIKey("your_key")
+config := fingers.NewConfig()
+config.SetCyberhubURL("http://127.0.0.1:8080")
+config.SetAPIKey("your_key")
 
 engine, _ := fingers.NewEngine(config)
 libEngine, _ := engine.Load(context.Background())
@@ -68,9 +68,9 @@ import (
 )
 
 // 创建并加载引擎
-config := neutron.NewConfig().
-    SetCyberhubURL("http://127.0.0.1:8080").
-    SetAPIKey("your_key")
+config := neutron.NewConfig()
+config.SetCyberhubURL("http://127.0.0.1:8080")
+config.SetAPIKey("your_key")
 
 engine, _ := neutron.NewEngine(config)
 templates, _ := engine.Load(context.Background())  // 自动编译
@@ -96,18 +96,25 @@ import (
 
 // 加载指纹库
 fingersEngine, _ := fingers.NewEngine(fingersConfig)
-libEngine, _ := fingersEngine.Load(ctx)
-fEngine := libEngine.GetEngine("fingers")
+_, _ = fingersEngine.Load(ctx)
 
 // 加载 POC
 neutronEngine, _ := neutron.NewEngine(neutronConfig)
-templates, _ := neutronEngine.Load(ctx)
+_, _ = neutronEngine.Load(ctx)
 
 // 创建集成扫描器
-gogoEngine := gogo.NewGogoEngineWithFingersAndNeutron(nil, fEngine, templates)
+gogoConfig := gogo.NewConfig().
+    WithFingersEngine(fingersEngine).
+    WithNeutronEngine(neutronEngine)
+gogoEngine := gogo.NewEngine(gogoConfig)
 gogoEngine.Init()
 
 // 执行扫描
+gogoCtx := gogo.NewContext().
+    SetThreads(1000).
+    SetVersionLevel(2).
+    SetExploit("all").
+    SetDelay(5)
 task := gogo.NewScanTask("192.168.1.0/24", "80,443,8080")
 resultCh, _ := gogoEngine.Execute(gogoCtx, task)
 
@@ -128,6 +135,9 @@ engine := spray.NewEngine(nil)
 engine.Init()
 
 urls := []string{"http://example.com", "http://target.com"}
+sprayCtx := spray.NewContext().
+    SetThreads(100).
+    SetTimeout(10)
 task := spray.NewCheckTask(urls)
 resultCh, _ := engine.Execute(sprayCtx, task)
 
@@ -142,39 +152,48 @@ for result := range resultCh {
 ### Fingers 配置
 
 ```go
-config := fingers.NewConfig().
-    SetCyberhubURL("http://127.0.0.1:8080").
-    SetAPIKey("your_key").
-    SetSource("github").        // 可选：按来源过滤
-    SetTimeout(10 * time.Second).
-    SetMaxRetries(3)
+config := fingers.NewConfig()
+config.SetCyberhubURL("http://127.0.0.1:8080")
+config.SetAPIKey("your_key")
+config.SetSources("github")       // 可选：按来源过滤
+config.WithFilename("fingers.yaml") // 可选：从导出的 YAML 加载
+config.SetTimeout(10 * time.Second)
 ```
 
 ### Neutron 配置
 
 ```go
-config := neutron.NewConfig().
-    SetCyberhubURL("http://127.0.0.1:8080").
-    SetAPIKey("your_key").
-    SetSource("github").        // 可选：按来源过滤
-    SetLocalPath("./pocs").     // 可选：本地 POC 目录
-    SetTimeout(10 * time.Second)
+config := neutron.NewConfig()
+config.SetCyberhubURL("http://127.0.0.1:8080")
+config.SetAPIKey("your_key")
+config.SetSources("github")       // 可选：按来源过滤
+config.SetLocalPath("./pocs")     // 可选：本地 POC 目录
+config.WithFilename("pocs.yaml") // 可选：从导出的 YAML 加载
+config.SetTimeout(10 * time.Second)
 ```
 
 ### GoGo 配置
 
 ```go
 config := gogo.NewConfig().
+    WithFingersEngine(fingersEngine).
+    WithNeutronEngine(neutronEngine)
+```
+
+### GoGo 运行时上下文
+
+```go
+ctx := gogo.NewContext().
     SetThreads(1000).
     SetVersionLevel(2).         // 0-3，数值越高检测越深
     SetExploit("all").          // none/all/known
     SetDelay(5)                 // 请求超时时间
 ```
 
-### Spray 配置
+### Spray 运行时上下文
 
 ```go
-config := spray.NewConfig().
+ctx := spray.NewContext().
     SetThreads(100).
     SetTimeout(10)
 ```
@@ -201,22 +220,22 @@ sdk/
 ├── fingers/              # 指纹识别引擎
 │   ├── engine.go        # 核心引擎实现
 │   ├── config.go        # 配置
-│   └── api.go          # 公共 API
+│   └── init.go         # 注册入口
 │
 ├── neutron/             # POC 扫描引擎
 │   ├── engine.go       # 核心引擎（自动编译）
 │   ├── config.go       # 配置
-│   └── api.go         # 公共 API
+│   └── init.go        # 注册入口
 │
 ├── gogo/               # 端口扫描（集成）
 │   ├── gogo.go        # 支持 Fingers/Neutron 的引擎
 │   ├── config.go      # 配置
-│   └── api.go        # 公共 API
+│   └── init.go       # 注册入口
 │
 ├── spray/              # HTTP 检测引擎
 │   ├── spray.go       # 核心引擎实现
 │   ├── config.go      # 配置
-│   └── api.go        # 公共 API
+│   └── init.go       # 注册入口
 │
 ├── pkg/
 │   ├── cyberhub/      # 统一 API 客户端
@@ -239,8 +258,7 @@ sdk/
 
 所有引擎都支持从 Cyberhub 加载数据：
 - Gzip 压缩处理
-- 自动重试（指数退避）
-- 基于 source 的过滤
+- 基于 sources 的过滤
 - API Key 认证
 
 ### POC 自动编译
@@ -275,7 +293,7 @@ go test ./spray -v
 ### 添加新引擎
 
 1. 实现 `pkg/interface.go` 中的核心接口
-2. 创建引擎包，包含 `engine.go`、`config.go`、`api.go`
+2. 创建引擎包，包含 `engine.go`、`config.go`、`init.go`
 3. 在 `engine.go` 的 init 函数中注册
 4. 在 `examples/` 中添加 CLI 工具
 

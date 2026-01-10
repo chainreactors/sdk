@@ -69,7 +69,7 @@ engine, _ := fingers.Load(config)
 
 ```go
 import (
-    fingersEngine "github.com/chainreactors/fingers/fingers"
+    "context"
     "github.com/chainreactors/sdk/fingers"
     "github.com/chainreactors/sdk/gogo"
 )
@@ -79,14 +79,12 @@ config := fingers.NewConfig()
 config.SetCyberhubURL("http://127.0.0.1:8080")
 config.SetAPIKey("your-api-key")
 
-fullEngine, _ := fingers.Load(config)
+fingersEngine, _ := fingers.NewEngine(config)
+_, _ = fingersEngine.Load(context.Background())
 
-// 2. 自己提取 FingersEngine
-impl := fullEngine.GetEngine("fingers")
-fEngine := impl.(*fingersEngine.FingersEngine)
-
-// 3. 注入到 gogo
-gogoEngine := gogo.NewGogoEngineWithFingers(nil, fEngine)
+// 2. 注入到 gogo
+gogoConfig := gogo.NewConfig().WithFingersEngine(fingersEngine)
+gogoEngine := gogo.NewEngine(gogoConfig)
 gogoEngine.Init()
 ```
 
@@ -94,6 +92,7 @@ gogoEngine.Init()
 
 ```go
 import (
+    "context"
     "github.com/chainreactors/sdk/fingers"
     "github.com/chainreactors/sdk/spray"
 )
@@ -103,10 +102,12 @@ config := fingers.NewConfig()
 config.SetCyberhubURL("http://127.0.0.1:8080")
 config.SetAPIKey("your-api-key")
 
-fullEngine, _ := fingers.Load(config)
+fingersEngine, _ := fingers.NewEngine(config)
+_, _ = fingersEngine.Load(context.Background())
 
 // 2. 直接注入到 spray（spray 需要完整 Engine）
-sprayEngine := spray.NewSprayEngineWithFingers(nil, fullEngine)
+sprayConfig := spray.NewConfig().WithFingersEngine(fingersEngine)
+sprayEngine := spray.NewEngine(sprayConfig)
 sprayEngine.Init()
 ```
 
