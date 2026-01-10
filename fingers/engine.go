@@ -109,7 +109,48 @@ func (e *Engine) loadFromLocal() (*fingersLib.Engine, error) {
 		return nil, fmt.Errorf("failed to load local engines: %w", err)
 	}
 
+	// 从 engine 中提取原始指纹数据，用于后续筛选
+	e.extractFingersFromEngine(engine)
+
 	return engine, nil
+}
+
+// extractFingersFromEngine 从 fingersLib.Engine 中提取原始指纹数据
+func (e *Engine) extractFingersFromEngine(engine *fingersLib.Engine) {
+	impl := engine.GetEngine("fingers")
+	if impl == nil {
+		return
+	}
+
+	fEngine, ok := impl.(*fingersEngine.FingersEngine)
+	if !ok || fEngine == nil {
+		return
+	}
+
+	// 合并 HTTP 和 Socket 指纹
+	e.rawFingers = append(fEngine.HTTPFingers, fEngine.SocketFingers...)
+
+	// 提取 aliases
+	if engine.Aliases != nil {
+		e.aliasIndex = make(map[string]*alias.Alias)
+		for name, a := range engine.Aliases.Aliases {
+			e.aliasIndex[name] = a
+			e.aliases = append(e.aliases, a)
+		}
+
+		// 构建 POC 索引
+		e.pocIndex = make(map[string][]string)
+		e.productIndex = make(map[string][]string)
+		for name, a := range engine.Aliases.Aliases {
+			if len(a.Pocs) > 0 {
+				e.pocIndex[name] = a.Pocs
+				if a.Vendor != "" && a.Product != "" {
+					key := a.Vendor + ":" + a.Product
+					e.productIndex[key] = append(e.productIndex[key], a.Pocs...)
+				}
+			}
+		}
+	}
 }
 
 // loadFromRemote 从 Cyberhub 加载指纹
