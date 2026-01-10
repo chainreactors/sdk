@@ -3,12 +3,10 @@ package fingers
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/chainreactors/fingers/alias"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
-	"gopkg.in/yaml.v3"
 )
 
 // NewConfig 创建默认配置
@@ -100,18 +98,11 @@ func (c *Config) Load(ctx context.Context) error {
 		return nil
 	}
 	if c.Filename != "" {
-		file, err := os.Open(c.Filename)
+		fingers, err := loadFingersFromPath(c.Filename)
 		if err != nil {
-			return fmt.Errorf("failed to open file: %w", err)
+			return err
 		}
-		defer file.Close()
-
-		var raw []*fingersEngine.Finger
-		if err := yaml.NewDecoder(file).Decode(&raw); err != nil {
-			return fmt.Errorf("failed to decode fingerprints: %w", err)
-		}
-
-		c.Fingers = fingersEngine.Fingers(raw)
+		c.Fingers = fingers
 		c.Aliases = nil
 		return nil
 	}

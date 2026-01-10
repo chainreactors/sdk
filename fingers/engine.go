@@ -7,7 +7,6 @@ import (
 	fingersLib "github.com/chainreactors/fingers"
 	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/fingers/common"
-	"github.com/chainreactors/fingers/favicon"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	sdk "github.com/chainreactors/sdk/pkg"
 )
@@ -18,10 +17,9 @@ import (
 
 // Engine 是对 fingers 库的封装，支持多种数据源加载
 type Engine struct {
-	engine     *fingersLib.Engine
-	config     *Config
-	rawFingers fingersEngine.Fingers // 原始指纹数据（用于筛选）
-	aliases    []*alias.Alias        // 原始别名数据
+	engine  *fingersLib.Engine
+	config  *Config
+	aliases []*alias.Alias // 原始别名数据
 }
 
 // NewEngine 创建一个新的 Engine 实例
@@ -31,9 +29,25 @@ func NewEngine(config *Config) (*Engine, error) {
 		config = NewConfig()
 	}
 
+	if err := config.Load(context.Background()); err != nil {
+		return nil, err
+	}
+
+	if len(config.Fingers) == 0 {
+		return nil, fmt.Errorf("fingers data is empty")
+	}
+
 	e := &Engine{
 		config: config,
 	}
+
+	engine, err := buildEngineFromFingers(config.Fingers, config.Aliases)
+	if err != nil {
+		return nil, err
+	}
+
+	e.aliases = config.Aliases
+	e.engine = engine
 
 	return e, nil
 }
@@ -41,58 +55,6 @@ func NewEngine(config *Config) (*Engine, error) {
 // ========================================
 // 统一 API - 只提供一种加载方式
 // ========================================
-
-// Load 加载并返回 fingers 库的 Engine
-// config 为 nil 时使用默认本地配置
-func Load(config *Config) (*fingersLib.Engine, error) {
-	if config == nil {
-		config = NewConfig()
-	}
-
-	engine, err := NewEngine(config)
-	if err != nil {
-		return nil, err
-	}
-
-	return engine.Load(context.Background())
-}
-
-// Load 加载指纹引擎
-func (e *Engine) Load(ctx context.Context) (*fingersLib.Engine, error) {
-	if e.engine != nil {
-		return e.engine, nil
-	}
-
-	if e.config == nil {
-		return nil, fmt.Errorf("config is nil")
-	}
-	if err := e.config.Load(ctx); err != nil {
-		return nil, err
-	}
-	if e.config == nil || len(e.config.Fingers) == 0 {
-		return nil, fmt.Errorf("fingers data is empty")
-	}
-
-	engine, err := buildEngineFromFingers(e.config.Fingers, e.config.Aliases)
-	if err != nil {
-		return nil, err
-	}
-
-	e.rawFingers = e.config.Fingers
-	e.aliases = e.config.Aliases
-	e.engine = engine
-	return engine, nil
-}
-
-func filterActiveFingers(fingers fingersEngine.Fingers) fingersEngine.Fingers {
-	var active fingersEngine.Fingers
-	for _, f := range fingers {
-		if f.Focus {
-			active = append(active, f)
-		}
-	}
-	return active
-}
 
 // Get 获取底层的 fingers.Engine
 func (e *Engine) Get() *fingersLib.Engine {
@@ -102,9 +64,7 @@ func (e *Engine) Get() *fingersLib.Engine {
 // GetFingersEngine 获取 FingersEngine（用于 gogo 集成）
 func (e *Engine) GetFingersEngine() (*fingersEngine.FingersEngine, error) {
 	if e.engine == nil {
-		if _, err := e.Load(context.Background()); err != nil {
-			return nil, err
-		}
+		return nil, fmt.Errorf("fingers engine is not initialized")
 	}
 
 	impl := e.engine.GetEngine("fingers")
@@ -117,20 +77,21 @@ func (e *Engine) GetFingersEngine() (*fingersEngine.FingersEngine, error) {
 
 // Reload 重新加载指纹
 func (e *Engine) Reload(ctx context.Context) error {
-	e.engine = nil
-	e.rawFingers = nil
-	e.aliases = nil
-	_, err := e.Load(ctx)
-	return err
-}
+	if e.config == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if err := e.config.Load(ctx); err != nil {
+		return err
+	}
 
-// ========================================
-// 筛选功能
-// ========================================
+	engine, err := buildEngineFromFingers(e.config.Fingers, e.config.Aliases)
+	if err != nil {
+		return err
+	}
 
-// GetRawFingers 获取原始指纹列表（用于外部筛选）
-func (e *Engine) GetRawFingers() fingersEngine.Fingers {
-	return e.rawFingers
+	e.aliases = e.config.Aliases
+	e.engine = engine
+	return nil
 }
 
 // buildEngineFromFingers 从指纹列表构建引擎
@@ -150,11 +111,9 @@ func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alia
 		}
 	}
 
-	fEngine := &fingersEngine.FingersEngine{
-		HTTPFingers:              httpFingers,
-		SocketFingers:            socketFingers,
-		HTTPFingersActiveFingers: filterActiveFingers(httpFingers),
-		Favicons:                 favicon.NewFavicons(),
+	fEngine, err := fingersEngine.NewEngine(httpFingers, socketFingers)
+	if err != nil {
+		return nil, err
 	}
 
 	engine.Register(fEngine)
@@ -172,7 +131,10 @@ func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alia
 
 // Count 获取指纹总数
 func (e *Engine) Count() int {
-	return len(e.rawFingers)
+	if e.config == nil {
+		return 0
+	}
+	return len(e.config.Fingers)
 }
 
 // Close 关闭引擎
@@ -187,9 +149,7 @@ func (e *Engine) Close() error {
 // Match 匹配单个 HTTP 响应原始数据（唯一的核心 API）
 func (e *Engine) Match(data []byte) (common.Frameworks, error) {
 	if e.engine == nil {
-		if _, err := e.Load(context.Background()); err != nil {
-			return nil, err
-		}
+		return nil, fmt.Errorf("fingers engine is not initialized")
 	}
 	return e.engine.DetectContent(data)
 }
@@ -207,9 +167,7 @@ func (e *Engine) Name() string {
 func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
 	// 确保引擎已初始化
 	if e.engine == nil {
-		if _, err := e.Load(context.Background()); err != nil {
-			return nil, fmt.Errorf("failed to load fingerprints: %w", err)
-		}
+		return nil, fmt.Errorf("fingers engine is not initialized")
 	}
 
 	// 验证任务

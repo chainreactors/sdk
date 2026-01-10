@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -64,8 +63,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
-
 	// 1. 加载 Fingers 和 Neutron (可选)
 	var fEngine *fingers.Engine
 	var neutronEng *neutron.Engine
@@ -78,25 +75,14 @@ func main() {
 		}
 
 		fingersConfig := fingers.NewConfig()
-		fingersConfig.WithCyberhub(*cyberhubURL, *apiKey)
-		if err := fingersConfig.Load(ctx); err != nil {
-			fmt.Printf("Error loading fingers config: %v\n", err)
-			os.Exit(1)
-		}
-
 		if *source != "" {
 			fingersConfig.SetSources(*source)
 		}
+		fingersConfig.WithCyberhub(*cyberhubURL, *apiKey)
 
 		fingersEng, err := fingers.NewEngine(fingersConfig)
 		if err != nil {
 			fmt.Printf("Error creating fingers engine: %v\n", err)
-			os.Exit(1)
-		}
-
-		_, err = fingersEng.Load(ctx)
-		if err != nil {
-			fmt.Printf("Error loading fingerprints: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -121,15 +107,10 @@ func main() {
 		}
 
 		neutronConfig := neutron.NewConfig()
-		neutronConfig.WithCyberhub(*cyberhubURL, *apiKey)
-		if err := neutronConfig.Load(ctx); err != nil {
-			fmt.Printf("Error loading neutron config: %v\n", err)
-			os.Exit(1)
-		}
-
 		if *source != "" {
 			neutronConfig.SetSources(*source)
 		}
+		neutronConfig.WithCyberhub(*cyberhubURL, *apiKey)
 
 		neutronEng, err = neutron.NewEngine(neutronConfig)
 		if err != nil {
@@ -137,12 +118,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		templates, err := neutronEng.Load(ctx)
-		if err != nil {
-			fmt.Printf("Error loading POCs: %v\n", err)
-			os.Exit(1)
-		}
-
+		templates := neutronEng.Get()
 		templatesCount = len(templates)
 		if !*jsonOut {
 			fmt.Printf("? Loaded and compiled %d POCs\n", templatesCount)

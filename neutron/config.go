@@ -3,12 +3,9 @@ package neutron
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
-	"gopkg.in/yaml.v3"
 )
 
 // NewConfig 创建默认配置
@@ -74,54 +71,10 @@ func (c *Config) Load(ctx context.Context) error {
 		return nil
 	}
 	if c.LocalPath != "" {
-		info, err := os.Stat(c.LocalPath)
+		loaded, err := loadTemplatesFromPath(c.LocalPath)
 		if err != nil {
-			return fmt.Errorf("failed to access path %s: %w", c.LocalPath, err)
+			return err
 		}
-
-		var yamlFiles []string
-		if info.IsDir() {
-			err = filepath.Walk(c.LocalPath, func(filePath string, fileInfo os.FileInfo, walkErr error) error {
-				if walkErr != nil {
-					return walkErr
-				}
-				ext := filepath.Ext(filePath)
-				if ext == ".yaml" || ext == ".yml" {
-					yamlFiles = append(yamlFiles, filePath)
-				}
-				return nil
-			})
-			if err != nil {
-				return fmt.Errorf("failed to walk directory %s: %w", c.LocalPath, err)
-			}
-		} else {
-			yamlFiles = []string{c.LocalPath}
-		}
-
-		var loaded []*templates.Template
-		for _, yamlFile := range yamlFiles {
-			content, readErr := os.ReadFile(yamlFile)
-			if readErr != nil {
-				return fmt.Errorf("read %s: %w", yamlFile, readErr)
-			}
-
-			var list []*templates.Template
-			if err := yaml.Unmarshal(content, &list); err == nil && len(list) > 0 {
-				loaded = append(loaded, list...)
-				continue
-			}
-
-			tpl := &templates.Template{}
-			if err := yaml.Unmarshal(content, tpl); err != nil {
-				return fmt.Errorf("parse %s: %w", yamlFile, err)
-			}
-			loaded = append(loaded, tpl)
-		}
-
-		if len(loaded) == 0 {
-			return fmt.Errorf("no templates loaded from %s", c.LocalPath)
-		}
-
 		c.Templates = loaded
 		return nil
 	}

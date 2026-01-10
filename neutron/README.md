@@ -16,18 +16,17 @@ Neutron SDK 为 [chainreactors/neutron](https://github.com/chainreactors/neutron
 
 ```go
 import (
-    "context"
     "github.com/chainreactors/sdk/neutron"
 )
 
 // 最简单的方式
 config := neutron.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
-_ = config.Load(context.Background())
-templates, err := neutron.Load(config)
+engine, err := neutron.NewEngine(config)
 if err != nil {
     log.Fatal(err)
 }
+templates := engine.Get()
 
 fmt.Printf("加载了 %d 个 POC\n", len(templates))
 ```
@@ -38,11 +37,11 @@ fmt.Printf("加载了 %d 个 POC\n", len(templates))
 // 加载指定目录的所有 YAML 文件
 config := neutron.NewConfig()
 config.WithLocalFile("./my_pocs")
-_ = config.Load(context.Background())
-templates, err := neutron.Load(config)
+engine, err := neutron.NewEngine(config)
 if err != nil {
     log.Fatal(err)
 }
+templates := engine.Get()
 ```
 
 ### 3. 高级配置
@@ -52,38 +51,30 @@ config := neutron.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
 config.SetTags("cve", "rce")               // 按标签过滤
 config.WithLocalFile("pocs.yaml")          // 可选：从导出的 YAML 加载
-_ = config.Load(context.Background())
 config.SetTimeout(30 * time.Second)
 
-templates, err := neutron.Load(config)
+engine, err := neutron.NewEngine(config)
+if err != nil {
+    log.Fatal(err)
+}
+templates := engine.Get()
 ```
 
 ## API 参考
 
-Neutron SDK 只提供 **3 个加载函数**：
+### `neutron.NewEngine(config *Config)`
 
-### `neutron.Load(config *Config)`
-
-通用加载函数，根据配置选择本地或远程加载：
+初始化引擎时完成加载与编译：
 
 ```go
 config := neutron.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
-_ = config.Load(context.Background())
 
-templates, err := neutron.Load(config)
-```
-
-### `neutron.Load(config *Config)`
-
-通用加载函数，根据配置选择本地或远程加载：
-
-```go
-config := neutron.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
-_ = config.Load(context.Background())
-
-templates, err := neutron.Load(config)
+engine, err := neutron.NewEngine(config)
+if err != nil {
+    log.Fatal(err)
+}
+templates := engine.Get()
 ```
 
 ## 配置选项
@@ -114,9 +105,7 @@ type Config struct {
 package main
 
 import (
-    "context"
     "fmt"
-    "github.com/chainreactors/neutron/protocols"
     "github.com/chainreactors/sdk/neutron"
 )
 
@@ -124,24 +113,12 @@ func main() {
     // 1. 加载 POC
     config := neutron.NewConfig()
     config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
-    _ = config.Load(context.Background())
-    templates, err := neutron.Load(config)
+    engine, err := neutron.NewEngine(config)
     if err != nil {
         panic(err)
     }
+    templates := engine.Get()
     fmt.Printf("✅ 加载了 %d 个 POC\n", len(templates))
-
-    // 2. 编译 POC
-    options := &protocols.ExecuterOptions{
-        Options: &protocols.Options{Timeout: 10},
-    }
-
-    for _, t := range templates {
-        if err := t.Compile(options); err != nil {
-            fmt.Printf("编译失败 %s: %v\n", t.Id, err)
-            continue
-        }
-    }
 
     // 3. 执行 POC
     targetURL := "http://example.com"
@@ -163,10 +140,8 @@ func main() {
 package main
 
 import (
-    "context"
     "fmt"
     "sync"
-    "github.com/chainreactors/neutron/protocols"
     neutronTemplates "github.com/chainreactors/neutron/templates"
     "github.com/chainreactors/sdk/neutron"
 )
@@ -175,19 +150,8 @@ func main() {
     // 1. 加载并编译 POC
     config := neutron.NewConfig()
     config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
-    _ = config.Load(context.Background())
-    templates, _ := neutron.Load(config)
-
-    options := &protocols.ExecuterOptions{
-        Options: &protocols.Options{Timeout: 10},
-    }
-
-    var compiledPOCs []*neutronTemplates.Template
-    for _, t := range templates {
-        if err := t.Compile(options); err == nil {
-            compiledPOCs = append(compiledPOCs, t)
-        }
-    }
+    engine, _ := neutron.NewEngine(config)
+    compiledPOCs := engine.Get()
 
     // 2. 用户自己组装流式扫描
     type ScanTask struct {
@@ -252,9 +216,9 @@ func main() {
 config := neutron.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
 config.WithLocalFile("./my_custom_pocs") // 同时加载本地 POC
-_ = config.Load(context.Background())
 
-templates, err := neutron.Load(config)
+engine, err := neutron.NewEngine(config)
+templates := engine.Get()
 // templates 包含来自 Cyberhub 和本地目录的所有 POC
 ```
 
@@ -290,7 +254,7 @@ Neutron SDK 和 Fingers SDK 遵循相同的设计理念：
 
 | 特性 | Fingers SDK | Neutron SDK |
 |------|-------------|-------------|
-| **加载函数** | `Load` | `Load` |
+| **加载函数** | `Load` | `NewEngine` |
 | **返回类型** | `*fingersLib.Engine` | `[]*templates.Template` |
 | **数据源** | 本地 + Cyberhub | 本地 + Cyberhub |
 | **API 数量** | 3 个 | 3 个 |
@@ -301,7 +265,7 @@ Neutron SDK 和 Fingers SDK 遵循相同的设计理念：
 ```
 neutron/
 ├── config.go       # 配置结构
-└── engine.go       # 内部加载实现（含加载 API）
+└── engine.go       # 引擎实现（初始化时加载）
 
 pkg/cyberhub/
 ├── client.go       # ExportPOCs() API
@@ -317,10 +281,15 @@ pkg/cyberhub/
 ## 注意事项
 
 1. **Cyberhub 必须运行** - 使用远程配置前确保 Cyberhub 服务可访问
-2. **编译 POC** - 执行前必须调用 `template.Compile(options)`
+2. **编译 POC** - 初始化引擎时自动完成
 3. **变量支持** - 某些 POC 需要 wordlist、BaseDNS 等变量，通过 `Execute(target, payload)` 的 payload 参数传递
 4. **错误处理** - POC 执行可能返回 `protocols.OpsecError`，表示 opsec 模式跳过
 
 ## License
 
 MIT
+
+
+
+
+

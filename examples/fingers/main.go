@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -42,8 +41,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
-
 	// 1. 加载 Fingers 引擎
 	var engine *fingers.Engine
 	var err error
@@ -56,10 +53,6 @@ func main() {
 			os.Exit(1)
 		}
 		config.WithCyberhub(*cyberhubURL, *apiKey)
-		if err := config.Load(ctx); err != nil {
-			fmt.Printf("Error loading config: %v\n", err)
-			os.Exit(1)
-		}
 		if *source != "" {
 			config.SetSources(*source)
 		}
@@ -79,9 +72,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	libEngine, err := engine.Load(ctx)
-	if err != nil {
-		fmt.Printf("Error loading fingerprints: %v\n", err)
+	libEngine := engine.Get()
+	if libEngine == nil {
+		fmt.Printf("Error getting fingers engine\n")
 		os.Exit(1)
 	}
 

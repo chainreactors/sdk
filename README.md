@@ -43,17 +43,15 @@ SDK 采用简单的四组件架构：
 
 ```go
 import (
-    "context"
     "github.com/chainreactors/sdk/fingers"
 )
 
 // 创建并加载引擎
 config := fingers.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your_key")
-_ = config.Load(context.Background())
 
 engine, _ := fingers.NewEngine(config)
-libEngine, _ := engine.Load(context.Background())
+libEngine := engine.Get()
 
 // 检测指纹
 frameworks, _ := libEngine.DetectContent(httpResponse)
@@ -63,17 +61,15 @@ frameworks, _ := libEngine.DetectContent(httpResponse)
 
 ```go
 import (
-    "context"
     "github.com/chainreactors/sdk/neutron"
 )
 
 // 创建并加载引擎
 config := neutron.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your_key")
-_ = config.Load(context.Background())
 
 engine, _ := neutron.NewEngine(config)
-templates, _ := engine.Load(context.Background())  // 自动编译
+templates := engine.Get()  // 自动编译
 
 // 执行 POC
 for _, t := range templates {
@@ -88,7 +84,6 @@ for _, t := range templates {
 
 ```go
 import (
-    "context"
     "github.com/chainreactors/sdk/gogo"
     "github.com/chainreactors/sdk/fingers"
     "github.com/chainreactors/sdk/neutron"
@@ -96,11 +91,9 @@ import (
 
 // 加载指纹库
 fingersEngine, _ := fingers.NewEngine(fingersConfig)
-_, _ = fingersEngine.Load(ctx)
 
 // 加载 POC
 neutronEngine, _ := neutron.NewEngine(neutronConfig)
-_, _ = neutronEngine.Load(ctx)
 
 // 创建集成扫描器
 gogoConfig := gogo.NewConfig().
@@ -127,7 +120,6 @@ for result := range resultCh {
 
 ```go
 import (
-    "context"
     "github.com/chainreactors/sdk/spray"
 )
 
@@ -154,10 +146,8 @@ for result := range resultCh {
 ```go
 config := fingers.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your_key")
-_ = config.Load(context.Background())
 config.SetSources("github")       // 可选：按来源过滤
 config.WithLocalFile("fingers.yaml") // 可选：从导出的 YAML 加载
-_ = config.Load(context.Background())
 config.SetTimeout(10 * time.Second)
 ```
 
@@ -166,10 +156,8 @@ config.SetTimeout(10 * time.Second)
 ```go
 config := neutron.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your_key")
-_ = config.Load(context.Background())
 config.SetSources("github")       // 可选：按来源过滤
 config.WithLocalFile("./pocs") // 可选：本地 POC 目录
-_ = config.Load(context.Background())
 config.SetTimeout(10 * time.Second)
 ```
 

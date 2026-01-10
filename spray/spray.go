@@ -97,9 +97,6 @@ func (e *SprayEngine) Init() error {
 
 	// 如果提供了自定义 fingers 引擎，直接使用
 	if e.fingersEngine != nil {
-		if _, err := e.fingersEngine.Load(context.Background()); err != nil {
-			return fmt.Errorf("load fingers engine failed: %v", err)
-		}
 		libEngine := e.fingersEngine.Get()
 		if libEngine == nil {
 			return fmt.Errorf("fingers engine is nil")

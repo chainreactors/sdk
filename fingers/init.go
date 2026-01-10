@@ -1,7 +1,6 @@
 package fingers
 
 import (
-	"context"
 	"fmt"
 
 	sdk "github.com/chainreactors/sdk/pkg"
@@ -25,11 +24,6 @@ func init() {
 		engine, err := NewEngine(cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create fingers engine: %w", err)
-		}
-
-		// 预加载指纹（确保初始化）
-		if _, err := engine.Load(context.Background()); err != nil {
-			return nil, fmt.Errorf("failed to initialize fingers engine: %w", err)
 		}
 
 		return engine, nil

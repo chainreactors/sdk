@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -52,8 +51,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
-
 	// 1. 加载 Neutron POCs
 	var engine *neutron.Engine
 	var err error
@@ -81,16 +78,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := config.Load(ctx); err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
-		os.Exit(1)
-	}
-
-	templates, err := engine.Load(ctx)
-	if err != nil {
-		fmt.Printf("Error loading POCs: %v\n", err)
-		os.Exit(1)
-	}
+	templates := engine.Get()
 
 	fmt.Printf("✅ Loaded and compiled %d POC(s)\n\n", len(templates))
 

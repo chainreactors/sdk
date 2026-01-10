@@ -113,6 +113,10 @@ github.com/chainreactors/fingers v0.0.0-20240702104653-a66e34aa41df/go.mod h1:l8
 github.com/chainreactors/fingers v1.0.2-0.20251202165109-ce668e80a672/go.mod h1:DzQq5oZXp6xSLU8NkqtrzauH4raFSHf5lhm8qZthdok=
 github.com/chainreactors/fingers v1.0.2-0.20251204155422-314b5907e607 h1:MpHfsEiBN68mAsMAtEMdNGLLa+Ulg6BAYj/Ks83VDPA=
 github.com/chainreactors/fingers v1.0.2-0.20251204155422-314b5907e607/go.mod h1:DzQq5oZXp6xSLU8NkqtrzauH4raFSHf5lhm8qZthdok=
+github.com/chainreactors/fingers v1.1.1-0.20251228170229-3b77b6cfaa90 h1:it5BT3URyJyfh6r7QUbAsvAGdAlhuBO3kcQBYzAtXmo=
+github.com/chainreactors/fingers v1.1.1-0.20251228170229-3b77b6cfaa90/go.mod h1:yQfW4ertJoAux3KZd6e8ijcSVWfIdHOocdTBcQSj9Mw=
+github.com/chainreactors/fingers v1.1.1-0.20260110164933-65840487c1eb h1:9u/2GbuFjli7cUHBCTu3nkOc3MFVdgD9dZwSP4X/BgM=
+github.com/chainreactors/fingers v1.1.1-0.20260110164933-65840487c1eb/go.mod h1:yQfW4ertJoAux3KZd6e8ijcSVWfIdHOocdTBcQSj9Mw=
 github.com/chainreactors/gogo/v2 v2.14.1-0.20251202171039-03488753f80c h1:gCazWrMrYaRSXzJTCed1NYvAeogCWDriKrPeDPWUyDQ=
 github.com/chainreactors/gogo/v2 v2.14.1-0.20251202171039-03488753f80c/go.mod h1:u76ljSxcFvVIhxeGgbSf4Ctyh/4zx3REsUAObeqYZqQ=
 github.com/chainreactors/logs v0.0.0-20240207121836-c946f072f81f/go.mod h1:6Mv6W70JrtL6VClulZhmMRZnoYpcTahcDTKLMNEjK0o=
@@ -122,6 +126,8 @@ github.com/chainreactors/logs v0.0.0-20241115105204-6132e39f5261/go.mod h1:6Mv6W
 github.com/chainreactors/neutron v0.0.0-20250113061151-32771f256b1f/go.mod h1:PomxHcP/BecBL0R+u9h/F+zjnkDQhT/eeH9eFyhPkUE=
 github.com/chainreactors/neutron v0.0.0-20251216154716-7c28cb6fdf03 h1:blvDRzJnh6HB15hDFXqze5cF6LPJVOB5OFk610ZewLY=
 github.com/chainreactors/neutron v0.0.0-20251216154716-7c28cb6fdf03/go.mod h1:CktNFh1I1sNwFI9Ml+t0X/uuEoO4eAW5Dmb/cuzV8BY=
+github.com/chainreactors/neutron v0.0.0-20251231090857-6d5f086ddf02 h1:sYsGgLJucwjZmE31gx+C9hj/H4OwxtxVLgKNqq6mLWQ=
+github.com/chainreactors/neutron v0.0.0-20251231090857-6d5f086ddf02/go.mod h1:CktNFh1I1sNwFI9Ml+t0X/uuEoO4eAW5Dmb/cuzV8BY=
 github.com/chainreactors/parsers v0.0.0-20251202162218-4b2258465d0a h1:rv5QkkR8/wgeFrqKqXYdfW3afYIzQGXeyk/DU0Cd/dQ=
 github.com/chainreactors/parsers v0.0.0-20251202162218-4b2258465d0a/go.mod h1:7rXdYz6jrdjF0WUH1ICcAXKIKKjKmJo2PU8u43V7jkA=
 github.com/chainreactors/proxyclient v1.0.1-0.20250214091837-3dc4d4a0a010/go.mod h1:51mx9hbbDv16h232xeqb9OnIAeRWMJvnEVqvls79Z4M=

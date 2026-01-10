@@ -1,7 +1,6 @@
 package gogo
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -91,9 +90,6 @@ func (e *GogoEngine) Init() error {
 
 	// 如果提供了自定义 fingers 引擎，直接使用
 	if e.fingersEngine != nil {
-		if _, err := e.fingersEngine.Load(context.Background()); err != nil {
-			return fmt.Errorf("load fingers engine failed: %v", err)
-		}
 		fingerImpl, err := e.fingersEngine.GetFingersEngine()
 		if err != nil {
 			return fmt.Errorf("get fingers engine failed: %v", err)
@@ -114,12 +110,8 @@ func (e *GogoEngine) Init() error {
 	// 如果提供了自定义 neutron 引擎，直接使用
 	if e.neutronEngine != nil {
 		templates := e.neutronEngine.Get()
-		if templates == nil {
-			loadedTemplates, err := e.neutronEngine.Load(context.Background())
-			if err != nil {
-				return fmt.Errorf("load neutron templates failed: %v", err)
-			}
-			templates = loadedTemplates
+		if len(templates) == 0 {
+			return fmt.Errorf("neutron templates are empty")
 		}
 		templateMap := buildTemplateMap(templates)
 		pkg.TemplateMap = templateMap

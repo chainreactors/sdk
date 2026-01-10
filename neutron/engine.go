@@ -6,6 +6,7 @@ import (
 
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/neutron/templates"
+	sdk "github.com/chainreactors/sdk/pkg"
 )
 
 // ========================================
@@ -29,51 +30,91 @@ func NewEngine(config *Config) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
+	if err := config.Load(context.Background()); err != nil {
+		return nil, err
+	}
+	if len(config.Templates) == 0 {
+		return nil, fmt.Errorf("templates data is empty")
+	}
 
 	e := &Engine{
 		config: config,
 	}
 
+	e.templates = e.compileTemplates(config.Templates)
+
 	return e, nil
 }
 
-// Load 加载并返回 templates 列表
-// config 为 nil 时使用默认本地配置
-func Load(config *Config) ([]*templates.Template, error) {
-	if config == nil {
-		config = NewConfig()
-	}
-
-	engine, err := NewEngine(config)
-	if err != nil {
-		return nil, err
-	}
-
-	return engine.Load(context.Background())
+// Name 返回引擎名称（实现 sdk.Engine 接口）
+func (e *Engine) Name() string {
+	return "neutron"
 }
 
-// Load 加载 POC templates 并进行编译
-func (e *Engine) Load(ctx context.Context) ([]*templates.Template, error) {
-	if e.templates != nil {
-		return e.templates, nil
+// Execute 执行任务（实现 sdk.Engine 接口）
+func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
+	if e == nil {
+		return nil, fmt.Errorf("neutron engine is nil")
 	}
-
-	if e.config == nil {
-		return nil, fmt.Errorf("config is nil")
-	}
-	if err := e.config.Load(ctx); err != nil {
+	if err := task.Validate(); err != nil {
 		return nil, err
 	}
-	if e.config == nil || len(e.config.Templates) == 0 {
-		return nil, fmt.Errorf("templates data is empty")
+
+	execTask, ok := task.(*ExecuteTask)
+	if !ok {
+		return nil, fmt.Errorf("unsupported task type: %s", task.Type())
 	}
 
-	// 编译所有加载的 templates
-	compiledTemplates := e.compileTemplates(e.config.Templates)
+	templates := execTask.Templates
+	if templates == nil {
+		templates = e.templates
+	}
+	if len(templates) == 0 {
+		return nil, fmt.Errorf("templates are empty")
+	}
 
-	e.templates = compiledTemplates
+	return e.executeTemplates(ctx, templates, execTask.Target, execTask.Payload)
+}
 
-	return compiledTemplates, nil
+func (e *Engine) executeTemplates(ctx sdk.Context, templates []*templates.Template, target string, payload map[string]interface{}) (<-chan sdk.Result, error) {
+	resultCh := make(chan sdk.Result)
+
+	go func() {
+		defer close(resultCh)
+
+		for _, t := range templates {
+			result, err := t.Execute(target, payload)
+			if err != nil {
+				if err == protocols.OpsecError {
+					continue
+				}
+				select {
+				case resultCh <- &ExecuteResult{
+					success:  false,
+					err:      err,
+					template: t,
+					result:   result,
+				}:
+				case <-ctx.Context().Done():
+					return
+				}
+				continue
+			}
+
+			select {
+			case resultCh <- &ExecuteResult{
+				success:  true,
+				err:      nil,
+				template: t,
+				result:   result,
+			}:
+			case <-ctx.Context().Done():
+				return
+			}
+		}
+	}()
+
+	return resultCh, nil
 }
 
 // Get 获取已加载的 templates
@@ -84,13 +125,6 @@ func (e *Engine) Get() []*templates.Template {
 // Count 获取已加载的 template 数量
 func (e *Engine) Count() int {
 	return len(e.templates)
-}
-
-// Reload 重新加载 templates
-func (e *Engine) Reload(ctx context.Context) error {
-	e.templates = nil
-	_, err := e.Load(ctx)
-	return err
 }
 
 // Close 关闭引擎
