@@ -2,8 +2,10 @@ package fingers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -23,10 +25,24 @@ import (
 
 // Engine 是对 fingers 库的封装，支持多种数据源加载
 type Engine struct {
-	engine *fingersLib.Engine
-	config *Config
-	client *cyberhub.Client // 仅在远程模式下使用
-	mu     sync.RWMutex
+	engine       *fingersLib.Engine
+	config       *Config
+	client       *cyberhub.Client // 仅在远程模式下使用
+	mu           sync.RWMutex
+	rawFingers   fingersEngine.Fingers          // 原始指纹数据（用于筛选）
+	aliases      []*alias.Alias                 // 原始别名数据
+	fingerprints []cyberhub.FingerprintResponse // 缓存原始响应
+	pocIndex     map[string][]string            // fingerprintName → pocNames
+	productIndex map[string][]string            // vendor:product → pocNames
+	aliasIndex   map[string]*alias.Alias        // fingerprintName → alias
+}
+
+type engineState struct {
+	rawFingers   fingersEngine.Fingers
+	aliases      []*alias.Alias
+	pocIndex     map[string][]string
+	productIndex map[string][]string
+	aliasIndex   map[string]*alias.Alias
 }
 
 // NewEngine 创建一个新的 Engine 实例
@@ -98,7 +114,7 @@ func (e *Engine) loadFromLocal() (*fingersLib.Engine, error) {
 
 // loadFromRemote 从 Cyberhub 加载指纹
 func (e *Engine) loadFromRemote(ctx context.Context) (*fingersLib.Engine, error) {
-	fingerprints, err := e.client.ExportFingerprints(ctx, true, e.config.Source)
+	fingerprints, err := e.loadFingerprints(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch fingerprints from cyberhub: %w", err)
 	}
@@ -106,8 +122,126 @@ func (e *Engine) loadFromRemote(ctx context.Context) (*fingersLib.Engine, error)
 	return e.convertToEngine(fingerprints)
 }
 
+func (e *Engine) loadFingerprints(ctx context.Context, filter *FingerprintFilter) ([]cyberhub.FingerprintResponse, error) {
+	query := e.buildFingerprintQuery(filter)
+
+	responses, err := e.client.ExportFingerprintsWithQuery(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	if filter == nil || filter.isLocalEmpty() {
+		return responses, nil
+	}
+
+	return filterFingerprintResponses(responses, filter), nil
+}
+
+func (e *Engine) buildFingerprintQuery(filter *FingerprintFilter) *cyberhub.Query {
+	query := cyberhub.NewQuery().WithFingerprint(true)
+
+	if filter != nil && len(filter.Sources) > 0 {
+		query.Filter("sources", filter.Sources...)
+	} else if e.config.Source != "" {
+		query.Filter("sources", e.config.Source)
+	}
+
+	if filter == nil {
+		return query
+	}
+
+	if filter.Keyword != "" {
+		query.Keyword(filter.Keyword)
+	}
+	if filter.Protocol != "" {
+		query.Set("protocol", filter.Protocol)
+	}
+	if len(filter.Tags) > 0 {
+		query.Tags(filter.Tags...)
+	}
+	if len(filter.Categories) > 0 {
+		query.Filter("categories", filter.Categories...)
+	}
+	if filter.Vendor != "" {
+		query.Set("vendor", filter.Vendor)
+	}
+	if filter.Product != "" {
+		query.Set("product", filter.Product)
+	}
+	if len(filter.Authors) > 0 {
+		for _, author := range filter.Authors {
+			if author != "" {
+				query.Set("author", author)
+				break
+			}
+		}
+	}
+	if len(filter.Statuses) > 0 {
+		query.Filter("statuses", filter.Statuses...)
+	} else if filter.Status != "" {
+		query.Set("status", filter.Status)
+	}
+
+	return query
+}
+
+func filterFingerprintResponses(responses []cyberhub.FingerprintResponse, filter *FingerprintFilter) []cyberhub.FingerprintResponse {
+	if filter == nil || filter.isLocalEmpty() {
+		return responses
+	}
+
+	aliasIndex := make(map[string]*alias.Alias)
+	var pocIndex map[string]bool
+	if filter.HasAssociatedPOC != nil {
+		pocIndex = make(map[string]bool)
+	}
+
+	for _, resp := range responses {
+		if resp.Finger == nil {
+			continue
+		}
+		if aliasData := resp.GetAlias(); aliasData != nil {
+			aliasIndex[resp.Finger.Name] = aliasData
+			if pocIndex != nil {
+				pocIndex[resp.Finger.Name] = len(aliasData.Pocs) > 0
+			}
+		}
+	}
+
+	filter.SetAliasIndex(aliasIndex)
+	if pocIndex != nil {
+		filter.SetPOCAssociationIndex(pocIndex)
+	}
+
+	var result []cyberhub.FingerprintResponse
+	for _, resp := range responses {
+		if resp.Finger == nil {
+			continue
+		}
+		if filter.match(resp.Finger) {
+			result = append(result, resp)
+		}
+	}
+	return result
+}
+
 // convertToEngine 将 Cyberhub 响应转换为 fingers.Engine
 func (e *Engine) convertToEngine(responses []cyberhub.FingerprintResponse) (*fingersLib.Engine, error) {
+	engine, state, err := buildEngineFromResponses(responses)
+	if err != nil {
+		return nil, err
+	}
+
+	e.fingerprints = responses
+	e.rawFingers = state.rawFingers
+	e.aliases = state.aliases
+	e.pocIndex = state.pocIndex
+	e.productIndex = state.productIndex
+	e.aliasIndex = state.aliasIndex
+	return engine, nil
+}
+
+func buildEngineFromResponses(responses []cyberhub.FingerprintResponse) (*fingersLib.Engine, *engineState, error) {
 	engine := &fingersLib.Engine{
 		EnginesImpl:  make(map[string]fingersLib.EngineImpl),
 		Enabled:      make(map[string]bool),
@@ -116,6 +250,10 @@ func (e *Engine) convertToEngine(responses []cyberhub.FingerprintResponse) (*fin
 
 	var httpFingers, socketFingers fingersEngine.Fingers
 	var aliases []*alias.Alias
+
+	pocIndex := make(map[string][]string)
+	productIndex := make(map[string][]string)
+	aliasIndex := make(map[string]*alias.Alias)
 
 	for _, resp := range responses {
 		if !resp.IsActive() {
@@ -131,9 +269,21 @@ func (e *Engine) convertToEngine(responses []cyberhub.FingerprintResponse) (*fin
 
 		if aliasData := resp.GetAlias(); aliasData != nil {
 			aliases = append(aliases, aliasData)
+
+			if len(aliasData.Pocs) > 0 {
+				pocIndex[finger.Name] = aliasData.Pocs
+
+				if aliasData.Vendor != "" && aliasData.Product != "" {
+					key := aliasData.Vendor + ":" + aliasData.Product
+					productIndex[key] = append(productIndex[key], aliasData.Pocs...)
+				}
+			}
+
+			aliasIndex[finger.Name] = aliasData
 		}
 	}
 
+	rawFingers := append(httpFingers, socketFingers...)
 	fEngine := &fingersEngine.FingersEngine{
 		HTTPFingers:              httpFingers,
 		SocketFingers:            socketFingers,
@@ -151,7 +301,13 @@ func (e *Engine) convertToEngine(responses []cyberhub.FingerprintResponse) (*fin
 	}
 
 	engine.Compile()
-	return engine, nil
+	return engine, &engineState{
+		rawFingers:   rawFingers,
+		aliases:      aliases,
+		pocIndex:     pocIndex,
+		productIndex: productIndex,
+		aliasIndex:   aliasIndex,
+	}, nil
 }
 
 func filterActiveFingers(fingers fingersEngine.Fingers) fingersEngine.Fingers {
@@ -162,6 +318,17 @@ func filterActiveFingers(fingers fingersEngine.Fingers) fingersEngine.Fingers {
 		}
 	}
 	return active
+}
+
+func (e *Engine) buildPOCHasIndex() map[string]bool {
+	if e.pocIndex == nil {
+		return nil
+	}
+	index := make(map[string]bool, len(e.pocIndex))
+	for name, pocs := range e.pocIndex {
+		index[name] = len(pocs) > 0
+	}
+	return index
 }
 
 // Get 获取底层的 fingers.Engine
@@ -190,8 +357,148 @@ func (e *Engine) Reload(ctx context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.engine = nil
+	e.rawFingers = nil
+	e.aliases = nil
 	_, err := e.Load(ctx)
 	return err
+}
+
+// ========================================
+// 筛选功能
+// ========================================
+
+// GetRawFingers 获取原始指纹列表（用于外部筛选）
+func (e *Engine) GetRawFingers() fingersEngine.Fingers {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.rawFingers
+}
+
+// Filter 使用筛选器筛选指纹
+func (e *Engine) Filter(filter *FingerprintFilter) fingersEngine.Fingers {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if filter == nil {
+		return e.rawFingers
+	}
+	e.bindFilterIndexes(filter)
+	return filter.Apply(e.rawFingers)
+}
+
+func (e *Engine) bindFilterIndexes(filter *FingerprintFilter) {
+	if filter == nil {
+		return
+	}
+	if filter.aliasIndex == nil && e.aliasIndex != nil {
+		filter.SetAliasIndex(e.aliasIndex)
+	}
+	if filter.HasAssociatedPOC != nil && filter.pocFingerIndex == nil {
+		filter.SetPOCAssociationIndex(e.buildPOCHasIndex())
+	}
+}
+
+// LoadWithFilter 加载并筛选指纹
+func (e *Engine) LoadWithFilter(ctx context.Context, filter *FingerprintFilter) (*fingersLib.Engine, error) {
+	if filter == nil {
+		return e.Load(ctx)
+	}
+
+	e.mu.RLock()
+	loaded := e.engine != nil
+	e.mu.RUnlock()
+
+	if loaded {
+		e.mu.RLock()
+		defer e.mu.RUnlock()
+		e.bindFilterIndexes(filter)
+		filteredFingers := filter.Apply(e.rawFingers)
+		aliases := filterAliasesForFingers(e.aliases, filteredFingers)
+		return buildEngineFromFingers(filteredFingers, aliases)
+	}
+
+	if e.config.IsRemoteEnabled() {
+		responses, err := e.loadFingerprints(ctx, filter)
+		if err != nil {
+			return nil, err
+		}
+		engine, _, err := buildEngineFromResponses(responses)
+		if err != nil {
+			return nil, err
+		}
+		return engine, nil
+	}
+
+	if _, err := e.Load(ctx); err != nil {
+		return nil, err
+	}
+
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	e.bindFilterIndexes(filter)
+	filteredFingers := filter.Apply(e.rawFingers)
+	aliases := filterAliasesForFingers(e.aliases, filteredFingers)
+	return buildEngineFromFingers(filteredFingers, aliases)
+}
+
+// buildEngineFromFingers 从指纹列表构建引擎
+func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alias) (*fingersLib.Engine, error) {
+	engine := &fingersLib.Engine{
+		EnginesImpl:  make(map[string]fingersLib.EngineImpl),
+		Enabled:      make(map[string]bool),
+		Capabilities: make(map[string]common.EngineCapability),
+	}
+
+	var httpFingers, socketFingers fingersEngine.Fingers
+	for _, finger := range fingers {
+		if finger.Protocol == "http" {
+			httpFingers = append(httpFingers, finger)
+		} else if finger.Protocol == "tcp" {
+			socketFingers = append(socketFingers, finger)
+		}
+	}
+
+	fEngine := &fingersEngine.FingersEngine{
+		HTTPFingers:              httpFingers,
+		SocketFingers:            socketFingers,
+		HTTPFingersActiveFingers: filterActiveFingers(httpFingers),
+		Favicons:                 favicon.NewFavicons(),
+	}
+
+	engine.Register(fEngine)
+
+	if len(aliases) > 0 {
+		aliasEngine, err := alias.NewAliases(aliases...)
+		if err == nil {
+			engine.Aliases = aliasEngine
+		}
+	}
+
+	engine.Compile()
+	return engine, nil
+}
+
+func filterAliasesForFingers(aliases []*alias.Alias, fingers fingersEngine.Fingers) []*alias.Alias {
+	if len(aliases) == 0 || len(fingers) == 0 {
+		return nil
+	}
+	nameIndex := make(map[string]struct{}, len(fingers))
+	for _, finger := range fingers {
+		nameIndex[finger.Name] = struct{}{}
+	}
+	var result []*alias.Alias
+	for _, aliasData := range aliases {
+		if _, ok := nameIndex[aliasData.Name]; ok {
+			result = append(result, aliasData)
+		}
+	}
+	return result
+}
+
+// Count 获取指纹总数
+func (e *Engine) Count() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return len(e.rawFingers)
 }
 
 // Close 关闭引擎
@@ -200,6 +507,157 @@ func (e *Engine) Close() error {
 		return e.client.Close()
 	}
 	return nil
+}
+
+// ========================================
+// 文件持久化 API
+// ========================================
+
+// SaveToFile 将已加载的指纹数据保存到文件（原子写入）
+func (e *Engine) SaveToFile(path string) error {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if len(e.fingerprints) == 0 {
+		return fmt.Errorf("no fingerprints loaded to save")
+	}
+
+	tmpPath := path + ".tmp"
+	file, err := os.Create(tmpPath)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	encoder := json.NewEncoder(file)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(e.fingerprints); err != nil {
+		_ = file.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to encode fingerprints: %w", err)
+	}
+
+	if err := file.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to rename temp file: %w", err)
+	}
+
+	return nil
+}
+
+// LoadFromFile 从文件加载指纹数据并构建引擎
+func (e *Engine) LoadFromFile(path string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	var responses []cyberhub.FingerprintResponse
+	if err := json.NewDecoder(file).Decode(&responses); err != nil {
+		return fmt.Errorf("failed to decode fingerprints: %w", err)
+	}
+
+	engine, state, err := buildEngineFromResponses(responses)
+	if err != nil {
+		return fmt.Errorf("failed to build engine: %w", err)
+	}
+
+	e.engine = engine
+	e.fingerprints = responses
+	e.rawFingers = state.rawFingers
+	e.aliases = state.aliases
+	e.pocIndex = state.pocIndex
+	e.productIndex = state.productIndex
+	e.aliasIndex = state.aliasIndex
+
+	return nil
+}
+
+// ========================================
+// POC 关联查询 API
+// ========================================
+
+// GetPOCNames 根据指纹名称获取关联的 POC 名称列表
+func (e *Engine) GetPOCNames(fingerprintName string) []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.pocIndex == nil {
+		return nil
+	}
+	return e.pocIndex[fingerprintName]
+}
+
+// GetPOCNamesByProduct 根据 vendor/product 获取关联的 POC 名称列表
+func (e *Engine) GetPOCNamesByProduct(vendor, product string) []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.productIndex == nil {
+		return nil
+	}
+	key := vendor + ":" + product
+	return e.productIndex[key]
+}
+
+// GetAlias 根据指纹名称获取 Alias
+func (e *Engine) GetAlias(fingerprintName string) *alias.Alias {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.aliasIndex == nil {
+		return nil
+	}
+	return e.aliasIndex[fingerprintName]
+}
+
+// GetAllPOCNames 获取所有关联的 POC 名称（去重）
+func (e *Engine) GetAllPOCNames() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.pocIndex == nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var result []string
+	for _, names := range e.pocIndex {
+		for _, name := range names {
+			if _, exists := seen[name]; !exists {
+				seen[name] = struct{}{}
+				result = append(result, name)
+			}
+		}
+	}
+	return result
+}
+
+// GetPOCNamesFromFrameworks 从匹配结果中获取所有关联的 POC 名称
+func (e *Engine) GetPOCNamesFromFrameworks(frameworks common.Frameworks) []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.pocIndex == nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var result []string
+	for _, fw := range frameworks {
+		if names, ok := e.pocIndex[fw.Name]; ok {
+			for _, name := range names {
+				if _, exists := seen[name]; !exists {
+					seen[name] = struct{}{}
+					result = append(result, name)
+				}
+			}
+		}
+	}
+	return result
 }
 
 // ========================================
