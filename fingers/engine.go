@@ -7,6 +7,7 @@ import (
 	fingersLib "github.com/chainreactors/fingers"
 	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/fingers/common"
+	"github.com/chainreactors/fingers/favicon"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/resources"
 	sdk "github.com/chainreactors/sdk/pkg"
@@ -119,27 +120,17 @@ func (e *Engine) Reload(ctx context.Context) error {
 
 // buildEngineFromFingers 从指纹列表构建引擎
 func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alias) (*fingersLib.Engine, error) {
-	_, err := resources.LoadPorts()
-	if err != nil {
-		return nil, err
+	engine := &fingersLib.Engine{
+		EnginesImpl:  make(map[string]fingersLib.EngineImpl),
+		Enabled:      make(map[string]bool),
+		Capabilities: make(map[string]common.EngineCapability),
 	}
-	engine, err := fingersLib.NewEngine(
-		fingersLib.FaviconEngine,
-		fingersLib.EHoleEngine,
-		fingersLib.FingerPrintEngine,
-		fingersLib.GobyEngine,
-		fingersLib.WappalyzerEngine,
-		fingersLib.NmapEngine,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if len(aliases) > 0 {
-		aliasEngine, err := alias.NewAliases(aliases...)
-		if err == nil {
-			engine.Aliases = aliasEngine
-		}
-	}
+
+	// 初始化 Favicon 引擎（Compile 需要）
+	faviconEngine := favicon.NewFavicons()
+	engine.EnginesImpl["favicon"] = faviconEngine
+	engine.Capabilities["favicon"] = faviconEngine.Capability()
+
 	var httpFingers, socketFingers fingersEngine.Fingers
 	for _, finger := range fingers {
 		if finger.Protocol == "http" {
@@ -148,7 +139,10 @@ func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alia
 			socketFingers = append(socketFingers, finger)
 		}
 	}
-
+	_, err := resources.LoadPorts()
+	if err != nil {
+		return nil, err
+	}
 	fEngine, err := fingersEngine.NewEngine(httpFingers, socketFingers)
 	if err != nil {
 		return nil, err
@@ -156,6 +150,14 @@ func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alia
 
 	engine.Register(fEngine)
 
+	if len(aliases) > 0 {
+		aliasEngine, err := alias.NewAliases(aliases...)
+		if err == nil {
+			engine.Aliases = aliasEngine
+		}
+	}
+
+	engine.Compile()
 	return engine, nil
 }
 

@@ -6,9 +6,9 @@ Neutron SDK 为 [chainreactors/neutron](https://github.com/chainreactors/neutron
 
 **SDK = Loader，用户 = Composer**
 
-- 提供 **3 个原子化 API**，用户自行组装复杂功能
+- 提供加载/编译入口，用户自行组装复杂功能
 - 不过度封装，返回原生 `*templates.Template`
-- 支持本地和远程双数据源
+- 支持本地与 Cyberhub 数据源
 
 ## 快速开始
 
@@ -50,7 +50,6 @@ templates := engine.Get()
 config := neutron.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
 config.SetTags("cve", "rce")               // 按标签过滤
-config.WithLocalFile("pocs.yaml")          // 可选：从导出的 YAML 加载
 config.SetTimeout(30 * time.Second)
 
 engine, err := neutron.NewEngine(config)
@@ -58,6 +57,14 @@ if err != nil {
     log.Fatal(err)
 }
 templates := engine.Get()
+```
+
+需要本地加载时使用 `WithLocalFile`：
+
+```go
+config := neutron.NewConfig()
+config.WithLocalFile("./my_pocs") // 目录或单个 YAML 文件
+engine, _ := neutron.NewEngine(config)
 ```
 
 ## API 参考
@@ -81,19 +88,11 @@ templates := engine.Get()
 
 ```go
 type Config struct {
-    // Cyberhub 配置
-    CyberhubURL string // Cyberhub API 地址
-    APIKey      string // API Key 认证
+    cyberhub.Config // CyberhubURL / APIKey / Timeout / ExportFilter 等
 
     // 本地配置
-    LocalPath string // 本地 POC 文件/目录路径
+    LocalPath string           // 本地 POC 文件/目录路径
     Templates neutron.Templates // 已加载的 POC
-
-    // 过滤配置
-    Tags []string // 标签过滤
-
-    // 请求配置
-    Timeout time.Duration // HTTP 请求超时时间
 }
 ```
 
@@ -215,30 +214,23 @@ func main() {
 ```go
 config := neutron.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
-config.WithLocalFile("./my_custom_pocs") // 同时加载本地 POC
 
 engine, err := neutron.NewEngine(config)
+if err != nil {
+    log.Fatal(err)
+}
+
+// 追加本地 POC
+if err := engine.AddPocsFile("./my_custom_pocs"); err != nil {
+    log.Fatal(err)
+}
+
 templates := engine.Get()
-// templates 包含来自 Cyberhub 和本地目录的所有 POC
 ```
 
 ## 完整示例
 
-SDK 提供了 3 个完整示例：
-
-1. **`examples/neutron_local_example.go`** - 从本地加载并执行
-2. **`examples/neutron_cyberhub_example.go`** - 从 Cyberhub 加载并执行
-3. **`examples/neutron_stream_example.go`** - 流式批量扫描（用户组装模式）
-
-运行示例：
-
-```bash
-# 从 Cyberhub 加载示例
-go run examples/neutron_cyberhub_example.go
-
-# 流式扫描示例
-go run examples/neutron_stream_example.go
-```
+SDK CLI 示例参考：`examples/neutron/main.go`
 
 ## 测试结果
 
@@ -254,10 +246,9 @@ Neutron SDK 和 Fingers SDK 遵循相同的设计理念：
 
 | 特性 | Fingers SDK | Neutron SDK |
 |------|-------------|-------------|
-| **加载函数** | `Load` | `NewEngine` |
-| **返回类型** | `*fingersLib.Engine` | `[]*templates.Template` |
-| **数据源** | 本地 + Cyberhub | 本地 + Cyberhub |
-| **API 数量** | 3 个 | 3 个 |
+| **加载入口** | `NewEngine` | `NewEngine` |
+| **返回类型** | `*fingers.Engine` | `*neutron.Engine` |
+| **数据源** | 本地 YAML/目录 + Cyberhub | 本地目录/文件 + Cyberhub |
 | **设计理念** | SDK = Loader | SDK = Loader |
 
 ## 架构设计
@@ -288,7 +279,6 @@ pkg/cyberhub/
 ## License
 
 MIT
-
 
 
 

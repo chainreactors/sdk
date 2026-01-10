@@ -57,7 +57,7 @@ for _, result := range results {
 engine := spray.NewEngine(nil)
 ```
 
-默认配置针对 SDK 场景优化：100 线程、GET 方法、静默模式。
+默认配置针对 SDK 场景优化：20 线程、5 秒超时、GET 方法、静默模式。
 
 ### 自定义配置
 
@@ -125,7 +125,6 @@ Spray SDK 实现了 Chainreactors 统一 SDK 接口，可以与其他 SDK 多态
 ```go
 import (
     rootsdk "github.com/chainreactors/sdk"
-    sdk "github.com/chainreactors/sdk/sdk"
     "github.com/chainreactors/sdk/spray"
 )
 
@@ -220,7 +219,10 @@ for result := range resultCh {
 engine := spray.NewEngine(nil)
 engine.Init()
 
-ctx := spray.NewContext().WithTimeout(2 * time.Minute)
+timeoutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+defer cancel()
+
+ctx := spray.NewContext().WithContext(timeoutCtx)
 
 urls := []string{"http://example.com", "http://github.com"}
 results, err := engine.Check(ctx, urls)

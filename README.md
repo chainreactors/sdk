@@ -51,10 +51,13 @@ config := fingers.NewConfig()
 config.WithCyberhub("http://127.0.0.1:8080", "your_key")
 
 engine, _ := fingers.NewEngine(config)
-libEngine := engine.Get()
 
-// 检测指纹
-frameworks, _ := libEngine.DetectContent(httpResponse)
+// 方式一：使用 Match API 直接检测
+frameworks, _ := engine.Match(httpResponseBytes)
+
+// 方式二：使用底层 Engine
+libEngine := engine.Get()
+frameworks, _ = libEngine.DetectContent(httpResponseBytes)
 ```
 
 ### Neutron - POC 扫描
@@ -209,31 +212,41 @@ sdk/
 ├── fingers/              # 指纹识别引擎
 │   ├── engine.go        # 核心引擎实现
 │   ├── config.go        # 配置
-│   └── init.go         # 注册入口
+│   ├── types.go         # 类型定义
+│   ├── additions.go     # 扩展方法 (AddFingers, AddFingersFile)
+│   ├── init.go          # 注册入口
+│   └── README.md        # 引擎文档
 │
 ├── neutron/             # POC 扫描引擎
-│   ├── engine.go       # 核心引擎（自动编译）
-│   ├── config.go       # 配置
-│   └── init.go        # 注册入口
+│   ├── engine.go        # 核心引擎（自动编译）
+│   ├── config.go        # 配置
+│   ├── types.go         # 类型定义
+│   ├── templates.go     # Templates 辅助类型 (Filter, Merge)
+│   ├── additions.go     # 扩展方法 (AddPocs, AddPocsFile)
+│   └── README.md        # 引擎文档
 │
-├── gogo/               # 端口扫描（集成）
-│   ├── gogo.go        # 支持 Fingers/Neutron 的引擎
-│   ├── config.go      # 配置
-│   └── init.go       # 注册入口
+├── gogo/                # 端口扫描（集成）
+│   ├── gogo.go          # 支持 Fingers/Neutron 的引擎
+│   ├── types.go         # 类型定义和配置
+│   ├── init.go          # 注册入口
+│   └── README.md        # 引擎文档
 │
-├── spray/              # HTTP 检测引擎
-│   ├── spray.go       # 核心引擎实现
-│   ├── config.go      # 配置
-│   └── init.go       # 注册入口
+├── spray/               # HTTP 检测引擎
+│   ├── spray.go         # 核心引擎实现
+│   ├── types.go         # 类型定义和配置
+│   ├── init.go          # 注册入口
+│   └── README.md        # 引擎文档
 │
 ├── pkg/
-│   ├── cyberhub/      # 统一 API 客户端
-│   │   ├── client.go  # HTTP 客户端（支持 gzip）
-│   │   └── types.go   # API 类型
-│   ├── interface.go   # 核心 SDK 接口
-│   └── helper.go      # 工具函数
+│   ├── cyberhub/        # 统一 API 客户端
+│   │   ├── client.go    # HTTP 客户端（支持 gzip）
+│   │   ├── config.go    # 客户端配置
+│   │   └── types.go     # API 类型
+│   ├── association/     # 关联索引
+│   │   └── index.go     # 指纹-POC 关联索引
+│   └── interface.go     # 核心 SDK 接口
 │
-└── examples/           # CLI 工具实现
+└── examples/            # CLI 工具实现
     ├── fingers/
     ├── neutron/
     ├── gogo/
@@ -265,7 +278,7 @@ GoGo 可以同时集成 Fingers 和 Neutron：
 
 ### 基于指纹筛选 POC 示例
 
-下面示例演示：Fingers 命中指纹后，基于 Alias 中的 `Product` 和 `Pocs` 从 Neutron 的模板集中筛选 POC 并执行。
+下面示例演示：Fingers 命中指纹后，使用 `neutron.Templates.Filter` 从模板集中筛选相关 POC 并执行。
 
 ```go
 package main
@@ -273,7 +286,6 @@ package main
 import (
 	"strings"
 
-	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
 	neutronTemplates "github.com/chainreactors/neutron/templates"
@@ -284,43 +296,37 @@ func main() {
 	fConfig := fingers.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
 	fEngine, _ := fingers.NewEngine(fConfig)
 
-	matchTask := fingers.NewMatchTask([]byte("raw http response"))
-	matchCh, _ := fEngine.Execute(fingers.NewContext(), matchTask)
-	matchResult := (<-matchCh).(*fingers.MatchResult)
-	frameworks := matchResult.Frameworks()
+	// 使用 Match API 直接匹配
+	frameworks, _ := fEngine.Match([]byte("raw http response"))
 
-	// 2) Alias -> Product / Pocs
-	aliases, _ := alias.NewAliases(fConfig.FullFingers.Aliases()...)
-	pocIDs := map[string]struct{}{}
-	products := map[string]struct{}{}
+	// 收集指纹名称
+	fingerNames := make(map[string]struct{})
 	for _, frame := range frameworks {
-		if a, ok := aliases.FindFramework(frame); ok && a != nil {
-			if a.Product != "" {
-				products[strings.ToLower(a.Product)] = struct{}{}
-			}
-			for _, id := range a.Pocs {
-				pocIDs[strings.ToLower(id)] = struct{}{}
-			}
-		}
+		fingerNames[strings.ToLower(frame.Name)] = struct{}{}
 	}
 
-	// 3) 加载 POC，并按 Alias 产品/POC 过滤
+	// 2) 加载 POC 并使用 Filter 筛选
 	nConfig := neutron.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
 	nEngine, _ := neutron.NewEngine(nConfig)
 
+	// 使用 Templates.Filter 按指纹/标签筛选
 	filtered := (neutron.Templates{}).Merge(nEngine.Get()).Filter(func(t *neutronTemplates.Template) bool {
-		if _, ok := pocIDs[strings.ToLower(t.Id)]; ok {
-			return true
+		// 按 Fingers 字段匹配
+		for _, finger := range t.Fingers {
+			if _, ok := fingerNames[strings.ToLower(finger)]; ok {
+				return true
+			}
 		}
+		// 按 Tags 匹配
 		for _, tag := range t.GetTags() {
-			if _, ok := products[strings.ToLower(tag)]; ok {
+			if _, ok := fingerNames[strings.ToLower(tag)]; ok {
 				return true
 			}
 		}
 		return false
 	})
 
-	// 4) 执行筛选后的 POC
+	// 3) 执行筛选后的 POC
 	task := &neutron.ExecuteTask{
 		Target:    "http://target.example",
 		Templates: filtered.Templates(),
@@ -331,7 +337,22 @@ func main() {
 	}
 }
 ```
-- 根据检测到的指纹自动匹配模板
+
+也可以使用 `pkg/association` 包中的 `FingerPOCIndex` 进行更高效的关联查询。
+
+### 动态扩展
+
+引擎支持在运行时动态添加指纹和 POC：
+
+```go
+// Fingers: 动态添加指纹
+engine.AddFingers(newFingers)           // 添加指纹切片
+engine.AddFingersFile("./custom.yaml")  // 从文件/目录加载
+
+// Neutron: 动态添加 POC
+engine.AddPocs(newTemplates)            // 添加模板切片
+engine.AddPocsFile("./custom-pocs/")    // 从文件/目录加载
+```
 
 ## 开发
 

@@ -172,7 +172,6 @@ GoGo SDK 实现了 Chainreactors 统一 SDK 接口，可以与其他 SDK 多态�
 ```go
 import (
     rootsdk "github.com/chainreactors/sdk"
-    sdk "github.com/chainreactors/sdk/sdk"
     "github.com/chainreactors/sdk/gogo"
 )
 
@@ -227,7 +226,10 @@ for result := range resultCh {
 engine := gogo.NewEngine(nil)
 engine.Init()
 
-ctx := gogo.NewContext().WithTimeout(5 * time.Minute)
+timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+defer cancel()
+
+ctx := gogo.NewContext().WithContext(timeoutCtx)
 
 results, err := engine.Scan(ctx, "192.168.1.0/24", "top1000")
 if err != nil {
@@ -251,8 +253,6 @@ opt.Exploit = "auto"      // 自动漏洞检测
 ctx := gogo.NewContext().SetOption(opt)
 engine := gogo.NewEngine(nil)
 engine.Init()
-
-ctx := gogo.NewContext()
 
 results, _ := engine.Scan(ctx, "192.168.1.0/24", "top100")
 for _, result := range results {
