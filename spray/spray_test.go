@@ -69,13 +69,15 @@ func TestContext(t *testing.T) {
 	}
 
 	// 测试 WithTimeout
-	ctx2 := ctx.WithTimeout(5 * time.Second)
+	timeoutCtx, _ := context.WithTimeout(ctx.Context(), 5*time.Second)
+	ctx2 := ctx.WithContext(timeoutCtx)
 	if ctx2 == nil {
 		t.Error("WithTimeout should not return nil")
 	}
 
 	// 测试 WithCancel
-	ctx3, cancel := ctx.WithCancel()
+	cancelCtx, cancel := context.WithCancel(ctx.Context())
+	ctx3 := ctx.WithContext(cancelCtx)
 	if ctx3 == nil {
 		t.Error("WithCancel should not return nil context")
 	}
@@ -85,8 +87,10 @@ func TestContext(t *testing.T) {
 	cancel() // 清理
 
 	// 测试链式调用
-	ctx4 := NewContext().SetThreads(300).SetTimeout(20).WithTimeout(10 * time.Second)
-	runCtx := ctx4.(*Context)
+	baseCtx := NewContext().SetThreads(300).SetTimeout(20)
+	chainCtx, _ := context.WithTimeout(baseCtx.Context(), 10*time.Second)
+	ctx4 := baseCtx.WithContext(chainCtx)
+	runCtx := ctx4
 	if runCtx.opt.Threads != 300 {
 		t.Errorf("Expected threads 300 after chain call, got %d", runCtx.opt.Threads)
 	}

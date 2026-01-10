@@ -91,10 +91,21 @@ func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, err
 		return nil, fmt.Errorf("templates are empty")
 	}
 
-	return e.executeTemplates(ctx, templates, execTask.Target, execTask.Payload)
+	var runCtx *Context
+	if ctx == nil {
+		runCtx = NewContext()
+	} else {
+		var ok bool
+		runCtx, ok = ctx.(*Context)
+		if !ok {
+			return nil, fmt.Errorf("unsupported context type: %T", ctx)
+		}
+	}
+
+	return e.executeTemplates(runCtx, templates, execTask.Target, execTask.Payload)
 }
 
-func (e *Engine) executeTemplates(ctx sdk.Context, templates []*templates.Template, target string, payload map[string]interface{}) (<-chan sdk.Result, error) {
+func (e *Engine) executeTemplates(ctx *Context, templates []*templates.Template, target string, payload map[string]interface{}) (<-chan sdk.Result, error) {
 	resultCh := make(chan sdk.Result)
 
 	go func() {

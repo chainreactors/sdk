@@ -1,6 +1,7 @@
 package gogo
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -145,11 +146,22 @@ func (e *GogoEngine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result,
 		return nil, err
 	}
 
+	var runCtx *Context
+	if ctx == nil {
+		runCtx = NewContext()
+	} else {
+		var ok bool
+		runCtx, ok = ctx.(*Context)
+		if !ok {
+			return nil, fmt.Errorf("unsupported context type: %T", ctx)
+		}
+	}
+
 	switch t := task.(type) {
 	case *ScanTask:
-		return e.executeScan(ctx, t)
+		return e.executeScan(runCtx, t)
 	case *WorkflowTask:
-		return e.executeWorkflow(ctx, t)
+		return e.executeWorkflow(runCtx, t)
 	default:
 		return nil, fmt.Errorf("unsupported task type: %s", task.Type())
 	}
@@ -191,11 +203,11 @@ func (r *Result) GOGOResult() *parsers.GOGOResult {
 // 内部实现
 // ========================================
 
-func (e *GogoEngine) executeScan(ctx sdk.Context, task *ScanTask) (<-chan sdk.Result, error) {
+func (e *GogoEngine) executeScan(ctx *Context, task *ScanTask) (<-chan sdk.Result, error) {
 	if ctx == nil {
 		ctx = NewContext()
 	}
-	runCtx := ctx.(*Context)
+	runCtx := ctx
 
 	workflow := &pkg.Workflow{
 		IP:    task.IP,
@@ -205,11 +217,11 @@ func (e *GogoEngine) executeScan(ctx sdk.Context, task *ScanTask) (<-chan sdk.Re
 	return e.workflowStream(runCtx.Context(), workflow, runCtx)
 }
 
-func (e *GogoEngine) executeWorkflow(ctx sdk.Context, task *WorkflowTask) (<-chan sdk.Result, error) {
+func (e *GogoEngine) executeWorkflow(ctx *Context, task *WorkflowTask) (<-chan sdk.Result, error) {
 	if ctx == nil {
 		ctx = NewContext()
 	}
-	runCtx := ctx.(*Context)
+	runCtx := ctx
 	return e.workflowStream(runCtx.Context(), task.Workflow, runCtx)
 }
 

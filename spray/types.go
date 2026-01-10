@@ -3,7 +3,6 @@ package spray
 import (
 	"context"
 	"fmt"
-	"time"
 
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	sdk "github.com/chainreactors/sdk/pkg"
@@ -20,6 +19,8 @@ type Context struct {
 	opt *core.Option
 }
 
+var _ sdk.Context = (*Context)(nil)
+
 // NewContext 创建 Spray 上下文
 func NewContext() *Context {
 	return &Context{
@@ -28,24 +29,16 @@ func NewContext() *Context {
 	}
 }
 
-func (c *Context) Context() context.Context {
-	return c.ctx
-}
-
-func (c *Context) WithTimeout(timeout time.Duration) sdk.Context {
-	ctx, _ := context.WithTimeout(c.ctx, timeout)
+// WithContext 基于给定的 context.Context 复制 Context
+func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
 		ctx: ctx,
 		opt: c.opt,
 	}
 }
 
-func (c *Context) WithCancel() (sdk.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(c.ctx)
-	return &Context{
-		ctx: ctx,
-		opt: c.opt,
-	}, cancel
+func (c *Context) Context() context.Context {
+	return c.ctx
 }
 
 // SetThreads 设置线程数

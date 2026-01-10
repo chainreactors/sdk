@@ -4,7 +4,6 @@ package sdk
 import (
 	"context"
 	"io"
-	"time"
 )
 
 // ========================================
@@ -59,12 +58,6 @@ type Engine interface {
 type Context interface {
 	// Context 返回标准 context.Context（用于超时和取消）
 	Context() context.Context
-
-	// WithTimeout 返回新的 Context（包含超时）
-	WithTimeout(timeout time.Duration) Context
-
-	// WithCancel 返回新的 Context（可取消）
-	WithCancel() (Context, context.CancelFunc)
 }
 
 // Config 配置接口（最小化）

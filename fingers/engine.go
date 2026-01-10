@@ -8,6 +8,7 @@ import (
 	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/fingers/common"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
+	"github.com/chainreactors/fingers/resources"
 	sdk "github.com/chainreactors/sdk/pkg"
 )
 
@@ -132,7 +133,10 @@ func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alia
 			socketFingers = append(socketFingers, finger)
 		}
 	}
-
+	_, err := resources.LoadPorts()
+	if err != nil {
+		return nil, err
+	}
 	fEngine, err := fingersEngine.NewEngine(httpFingers, socketFingers)
 	if err != nil {
 		return nil, err
@@ -203,11 +207,22 @@ func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, err
 		return nil, fmt.Errorf("unsupported task type: %s", task.Type())
 	}
 
-	return e.executeMatch(ctx, matchTask)
+	var runCtx *Context
+	if ctx == nil {
+		runCtx = NewContext()
+	} else {
+		var ok bool
+		runCtx, ok = ctx.(*Context)
+		if !ok {
+			return nil, fmt.Errorf("unsupported context type: %T", ctx)
+		}
+	}
+
+	return e.executeMatch(runCtx, matchTask)
 }
 
 // executeMatch 执行单个指纹匹配任务
-func (e *Engine) executeMatch(ctx sdk.Context, task *MatchTask) (<-chan sdk.Result, error) {
+func (e *Engine) executeMatch(ctx *Context, task *MatchTask) (<-chan sdk.Result, error) {
 	resultCh := make(chan sdk.Result, 1)
 
 	go func() {

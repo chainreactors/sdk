@@ -112,7 +112,7 @@ func main() {
 		}
 		neutronConfig.WithCyberhub(*cyberhubURL, *apiKey)
 
-		neutronEng, err = neutron.NewEngine(neutronConfig)
+		neutronEng, err := neutron.NewEngine(neutronConfig)
 		if err != nil {
 			fmt.Printf("Error creating neutron engine: %v\n", err)
 			os.Exit(1)

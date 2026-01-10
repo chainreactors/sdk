@@ -40,14 +40,14 @@ func (t Templates) Append(item *templates.Template) Templates {
 }
 
 // Merge appends templates into Templates.
-func (t Templates) Merge(templates []*templates.Template) Templates {
-	if len(templates) == 0 {
+func (t Templates) Merge(other []*templates.Template) Templates {
+	if len(other) == 0 {
 		return t
 	}
 	if t.Items == nil {
 		t.Items = make(map[string]*templates.Template)
 	}
-	for _, item := range templates {
+	for _, item := range other {
 		t = t.Append(item)
 	}
 	return t

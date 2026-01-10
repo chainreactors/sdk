@@ -1,9 +1,7 @@
 package spray
 
 import (
-	"context"
 	"fmt"
-	"time"
 
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/parsers"
@@ -113,14 +111,6 @@ func (e *SprayEngine) Init() error {
 			}
 		}
 
-		// FingerPrintHub 可能为 nil
-		if hub := libEngine.FingerPrintHub(); hub != nil {
-			for _, f := range hub.FingerPrints {
-				if f.Path != "/" {
-					pkg.ActivePath = append(pkg.ActivePath, f.Path)
-				}
-			}
-		}
 	} else {
 		// 否则使用默认加载方式
 		if err := pkg.LoadFingers(); err != nil {
@@ -147,11 +137,22 @@ func (e *SprayEngine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result
 		return nil, err
 	}
 
+	var runCtx *Context
+	if ctx == nil {
+		runCtx = NewContext()
+	} else {
+		var ok bool
+		runCtx, ok = ctx.(*Context)
+		if !ok {
+			return nil, fmt.Errorf("unsupported context type: %T", ctx)
+		}
+	}
+
 	switch t := task.(type) {
 	case *CheckTask:
-		return e.executeCheck(ctx, t)
+		return e.executeCheck(runCtx, t)
 	case *BruteTask:
-		return e.executeBrute(ctx, t)
+		return e.executeBrute(runCtx, t)
 	default:
 		return nil, fmt.Errorf("unsupported task type: %s", task.Type())
 	}
@@ -193,11 +194,11 @@ func (r *Result) SprayResult() *parsers.SprayResult {
 // 内部实现
 // ========================================
 
-func (e *SprayEngine) executeCheck(ctx sdk.Context, task *CheckTask) (<-chan sdk.Result, error) {
+func (e *SprayEngine) executeCheck(ctx *Context, task *CheckTask) (<-chan sdk.Result, error) {
 	if ctx == nil {
 		ctx = NewContext()
 	}
-	runCtx := ctx.(*Context)
+	runCtx := ctx
 	if runCtx.opt == nil {
 		runCtx.opt = DefaultConfig()
 	}
@@ -251,11 +252,11 @@ func (e *SprayEngine) executeCheck(ctx sdk.Context, task *CheckTask) (<-chan sdk
 	return resultCh, nil
 }
 
-func (e *SprayEngine) executeBrute(ctx sdk.Context, task *BruteTask) (<-chan sdk.Result, error) {
+func (e *SprayEngine) executeBrute(ctx *Context, task *BruteTask) (<-chan sdk.Result, error) {
 	if ctx == nil {
 		ctx = NewContext()
 	}
-	runCtx := ctx.(*Context)
+	runCtx := ctx
 	if runCtx.opt == nil {
 		runCtx.opt = DefaultConfig()
 	}

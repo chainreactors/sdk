@@ -70,13 +70,15 @@ func TestContext(t *testing.T) {
 	}
 
 	// 测试 WithTimeout
-	ctx2 := ctx.WithTimeout(5 * time.Second)
+	timeoutCtx, _ := context.WithTimeout(ctx.Context(), 5*time.Second)
+	ctx2 := ctx.WithContext(timeoutCtx)
 	if ctx2 == nil {
 		t.Error("WithTimeout should not return nil")
 	}
 
 	// 测试 WithCancel
-	ctx3, cancel := ctx.WithCancel()
+	cancelCtx, cancel := context.WithCancel(ctx.Context())
+	ctx3 := ctx.WithContext(cancelCtx)
 	if ctx3 == nil {
 		t.Error("WithCancel should not return nil context")
 	}
@@ -86,8 +88,10 @@ func TestContext(t *testing.T) {
 	cancel() // 清理
 
 	// 测试链式调用
-	ctx4 := NewContext().SetThreads(500).SetVersionLevel(3).WithTimeout(10 * time.Second)
-	runCtx := ctx4.(*Context)
+	baseCtx := NewContext().SetThreads(500).SetVersionLevel(3)
+	chainCtx, _ := context.WithTimeout(baseCtx.Context(), 10*time.Second)
+	ctx4 := baseCtx.WithContext(chainCtx)
+	runCtx := ctx4
 	if runCtx.threads != 500 {
 		t.Errorf("Expected threads 500 after chain call, got %d", runCtx.threads)
 	}
@@ -217,7 +221,9 @@ func TestScanIntegration(t *testing.T) {
 	}
 
 	ctx := NewContext().SetThreads(50)
-	ctx = ctx.WithTimeout(30 * time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx.Context(), 30*time.Second)
+	defer cancel()
+	ctx = ctx.WithContext(timeoutCtx)
 
 	// 使用用户提供的IP段和top2端口
 	results, err := engine.Scan(ctx, "81.68.175.32/28", "top2")
