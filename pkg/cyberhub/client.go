@@ -12,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/chainreactors/fingers/alias"
+	"github.com/chainreactors/fingers/fingers"
 )
 
 // ========================================
@@ -66,6 +69,29 @@ func (c *Client) ExportFingerprints(ctx context.Context, withFingerprint bool, s
 	}
 
 	return response.Fingerprints, nil
+}
+
+// ExportFingers 导出指纹与别名（仅保留 fingers.Finger 与 alias.Alias）
+// source: 指纹来源过滤（可选，如 "github", "local" 等）
+// filters: 筛选条件（可选，传 nil 表示不筛选）
+func (c *Client) ExportFingers(ctx context.Context, source string, filters ...*ExportFilter) (fingers.Fingers, []*alias.Alias, error) {
+	responses, err := c.ExportFingerprints(ctx, true, source, filters...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var allFingers fingers.Fingers
+	var allAliases []*alias.Alias
+	for _, resp := range responses {
+		if resp.Finger != nil {
+			allFingers = append(allFingers, resp.Finger)
+		}
+		if resp.Alias != nil {
+			allAliases = append(allAliases, resp.Alias)
+		}
+	}
+
+	return allFingers, allAliases, nil
 }
 
 // ExportPOCs 导出所有 POC（使用 export API）
