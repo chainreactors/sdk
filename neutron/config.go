@@ -14,7 +14,7 @@ func NewConfig() *Config {
 	return &Config{
 		Config:    *base,
 		LocalPath: "",
-		Templates: nil,
+		Templates: Templates{},
 	}
 }
 
@@ -38,7 +38,7 @@ func (c *Config) IsRemoteEnabled() bool {
 
 // WithTemplates 设置已加载的模板
 func (c *Config) WithTemplates(tpls []*templates.Template) *Config {
-	c.Templates = tpls
+	c.Templates = (Templates{}).Merge(tpls)
 	return c
 }
 
@@ -47,7 +47,7 @@ func (c *Config) WithCyberhub(url, apiKey string) *Config {
 	c.CyberhubURL = url
 	c.APIKey = apiKey
 	c.LocalPath = ""
-	c.Templates = nil
+	c.Templates = Templates{}
 	c.Filename = ""
 	return c
 }
@@ -57,8 +57,17 @@ func (c *Config) WithLocalFile(path string) *Config {
 	c.LocalPath = path
 	c.CyberhubURL = ""
 	c.APIKey = ""
-	c.Templates = nil
+	c.Templates = Templates{}
 	c.Filename = ""
+	return c
+}
+
+// WithFilter filters current Templates using predicate.
+func (c *Config) WithFilter(predicate func(*templates.Template) bool) *Config {
+	if c == nil {
+		return c
+	}
+	c.Templates = c.Templates.Filter(predicate)
 	return c
 }
 
@@ -67,7 +76,7 @@ func (c *Config) Load(ctx context.Context) error {
 	if c == nil {
 		return fmt.Errorf("config is nil")
 	}
-	if len(c.Templates) > 0 {
+	if c.Templates.Len() > 0 {
 		return nil
 	}
 	if c.LocalPath != "" {
@@ -75,7 +84,7 @@ func (c *Config) Load(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		c.Templates = loaded
+		c.Templates = (Templates{}).Merge(loaded)
 		return nil
 	}
 	if c.IsRemoteEnabled() {
@@ -89,7 +98,7 @@ func (c *Config) Load(ctx context.Context) error {
 		for _, resp := range responses {
 			loaded = append(loaded, resp.GetTemplate())
 		}
-		c.Templates = loaded
+		c.Templates = (Templates{}).Merge(loaded)
 		return nil
 	}
 	return fmt.Errorf("no data source configured")

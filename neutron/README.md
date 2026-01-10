@@ -87,7 +87,7 @@ type Config struct {
 
     // 本地配置
     LocalPath string // 本地 POC 文件/目录路径
-    Templates []*templates.Template // 已加载的 POC
+    Templates neutron.Templates // 已加载的 POC
 
     // 过滤配置
     Tags []string // 标签过滤

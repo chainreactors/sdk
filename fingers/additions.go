@@ -19,11 +19,11 @@ func (e *Engine) AddFingers(fingers fingersEngine.Fingers) error {
 	}
 
 	if e.engine == nil {
-		engine, err := buildEngineFromFingers(e.config.Fingers, e.config.Aliases)
+		engine, err := buildEngineFromFingers(e.config.FullFingers.Fingers(), e.config.FullFingers.Aliases())
 		if err != nil {
 			return err
 		}
-		e.aliases = e.config.Aliases
+		e.aliases = e.config.FullFingers.Aliases()
 		e.engine = engine
 	}
 
@@ -38,7 +38,7 @@ func (e *Engine) AddFingers(fingers fingersEngine.Fingers) error {
 	if err := fingersEngineImpl.Append(fingers); err != nil {
 		return err
 	}
-	e.config.Fingers = append(e.config.Fingers, fingers...)
+	e.config.FullFingers = e.config.FullFingers.Merge(fingers, nil)
 	return nil
 }
 

@@ -33,7 +33,8 @@ func NewEngine(config *Config) (*Engine, error) {
 		return nil, err
 	}
 
-	if len(config.Fingers) == 0 {
+	fingers := config.FullFingers.Fingers()
+	if len(fingers) == 0 {
 		return nil, fmt.Errorf("fingers data is empty")
 	}
 
@@ -41,15 +42,36 @@ func NewEngine(config *Config) (*Engine, error) {
 		config: config,
 	}
 
-	engine, err := buildEngineFromFingers(config.Fingers, config.Aliases)
+	engine, err := buildEngineFromFingers(fingers, config.FullFingers.Aliases())
 	if err != nil {
 		return nil, err
 	}
 
-	e.aliases = config.Aliases
+	e.aliases = config.FullFingers.Aliases()
 	e.engine = engine
 
 	return e, nil
+}
+
+// NewEngineWithFingers creates an Engine using FullFingers directly.
+func NewEngineWithFingers(fingers FullFingers) (*Engine, error) {
+	if fingers.Len() == 0 {
+		return nil, fmt.Errorf("fingers data is empty")
+	}
+
+	config := NewConfig()
+	config.FullFingers = fingers
+
+	engine, err := buildEngineFromFingers(fingers.Fingers(), fingers.Aliases())
+	if err != nil {
+		return nil, err
+	}
+
+	return &Engine{
+		engine:  engine,
+		config:  config,
+		aliases: fingers.Aliases(),
+	}, nil
 }
 
 // ========================================
@@ -84,12 +106,12 @@ func (e *Engine) Reload(ctx context.Context) error {
 		return err
 	}
 
-	engine, err := buildEngineFromFingers(e.config.Fingers, e.config.Aliases)
+	engine, err := buildEngineFromFingers(e.config.FullFingers.Fingers(), e.config.FullFingers.Aliases())
 	if err != nil {
 		return err
 	}
 
-	e.aliases = e.config.Aliases
+	e.aliases = e.config.FullFingers.Aliases()
 	e.engine = engine
 	return nil
 }
@@ -134,7 +156,7 @@ func (e *Engine) Count() int {
 	if e.config == nil {
 		return 0
 	}
-	return len(e.config.Fingers)
+	return len(e.config.FullFingers.Fingers())
 }
 
 // Close 关闭引擎

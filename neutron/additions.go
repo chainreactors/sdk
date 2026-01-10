@@ -18,8 +18,8 @@ func (e *Engine) AddPocs(pocs []*templates.Template) error {
 		e.config = NewConfig()
 	}
 
-	if e.templates == nil && len(e.config.Templates) > 0 {
-		e.templates = e.compileTemplates(e.config.Templates)
+	if e.templates == nil && e.config.Templates.Len() > 0 {
+		e.templates = e.compileTemplates(e.config.Templates.Templates())
 	}
 
 	compiled := e.compileTemplates(pocs)
@@ -28,7 +28,7 @@ func (e *Engine) AddPocs(pocs []*templates.Template) error {
 	}
 
 	e.templates = append(e.templates, compiled...)
-	e.config.Templates = append(e.config.Templates, pocs...)
+	e.config.Templates = e.config.Templates.Merge(pocs)
 	return nil
 }
 

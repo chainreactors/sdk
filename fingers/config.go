@@ -15,8 +15,7 @@ func NewConfig() *Config {
 	return &Config{
 		Config:        *base,
 		EnableEngines: nil,
-		Fingers:       nil,
-		Aliases:       nil,
+		FullFingers:   FullFingers{},
 	}
 }
 
@@ -30,8 +29,7 @@ type Config struct {
 
 	// 引擎配置
 	EnableEngines []string
-	Fingers       fingersEngine.Fingers
-	Aliases       []*alias.Alias
+	FullFingers   FullFingers
 }
 
 // Validate 验证配置
@@ -62,8 +60,7 @@ func (c *Config) WithCyberhub(url, apiKey string) *Config {
 	c.CyberhubURL = url
 	c.APIKey = apiKey
 	c.Filename = ""
-	c.Fingers = nil
-	c.Aliases = nil
+	c.FullFingers = FullFingers{}
 	return c
 }
 
@@ -72,20 +69,30 @@ func (c *Config) WithLocalFile(filename string) *Config {
 	c.Filename = filename
 	c.CyberhubURL = ""
 	c.APIKey = ""
-	c.Fingers = nil
-	c.Aliases = nil
+	c.FullFingers = FullFingers{}
 	return c
 }
 
 // WithFingers 设置指纹数据
 func (c *Config) WithFingers(fingers fingersEngine.Fingers) *Config {
-	c.Fingers = fingers
+	aliases := c.FullFingers.Aliases()
+	c.FullFingers = (FullFingers{}).Merge(fingers, aliases)
 	return c
 }
 
 // WithAliases 设置别名数据
 func (c *Config) WithAliases(aliases []*alias.Alias) *Config {
-	c.Aliases = aliases
+	fingers := c.FullFingers.Fingers()
+	c.FullFingers = (FullFingers{}).Merge(fingers, aliases)
+	return c
+}
+
+// WithFilter filters current FullFingers using predicate.
+func (c *Config) WithFilter(predicate func(*FullFinger) bool) *Config {
+	if c == nil {
+		return c
+	}
+	c.FullFingers = c.FullFingers.Filter(predicate)
 	return c
 }
 
@@ -94,7 +101,7 @@ func (c *Config) Load(ctx context.Context) error {
 	if c == nil {
 		return fmt.Errorf("config is nil")
 	}
-	if len(c.Fingers) > 0 {
+	if c.FullFingers.Len() > 0 {
 		return nil
 	}
 	if c.Filename != "" {
@@ -102,8 +109,7 @@ func (c *Config) Load(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		c.Fingers = fingers
-		c.Aliases = nil
+		c.FullFingers = (FullFingers{}).Merge(fingers, nil)
 		return nil
 	}
 	if c.IsRemoteEnabled() {
@@ -112,9 +118,105 @@ func (c *Config) Load(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		c.Fingers = fingersData
-		c.Aliases = aliases
+		c.FullFingers = (FullFingers{}).Merge(fingersData, aliases)
 		return nil
 	}
 	return fmt.Errorf("no data source configured")
+}
+
+type FullFinger struct {
+	Finger *fingersEngine.Finger
+	Alias  *alias.Alias
+}
+
+type FullFingers struct {
+	Items map[string]*FullFinger
+}
+
+// Fingers returns finger list from FullFingers.
+func (f FullFingers) Fingers() fingersEngine.Fingers {
+	if len(f.Items) == 0 {
+		return nil
+	}
+	fingers := make(fingersEngine.Fingers, 0, len(f.Items))
+	for _, item := range f.Items {
+		if item == nil || item.Finger == nil {
+			continue
+		}
+		fingers = append(fingers, item.Finger)
+	}
+	return fingers
+}
+
+// Aliases returns alias list from FullFingers.
+func (f FullFingers) Aliases() []*alias.Alias {
+	if len(f.Items) == 0 {
+		return nil
+	}
+	aliases := make([]*alias.Alias, 0, len(f.Items))
+	for _, item := range f.Items {
+		if item == nil || item.Alias == nil {
+			continue
+		}
+		aliases = append(aliases, item.Alias)
+	}
+	return aliases
+}
+
+// Len returns item count.
+func (f FullFingers) Len() int {
+	return len(f.Items)
+}
+
+// Append adds a single FullFinger.
+func (f FullFingers) Append(item *FullFinger) FullFingers {
+	if item == nil {
+		return f
+	}
+	if f.Items == nil {
+		f.Items = make(map[string]*FullFinger)
+	}
+	if item.Finger != nil && item.Finger.Name != "" {
+		f.Items[item.Finger.Name] = item
+		return f
+	}
+	return f
+}
+
+// Merge appends fingers and aliases into FullFingers.
+func (f FullFingers) Merge(fingers fingersEngine.Fingers, aliases []*alias.Alias) FullFingers {
+	if len(fingers) == 0 && len(aliases) == 0 {
+		return f
+	}
+	if f.Items == nil {
+		f.Items = make(map[string]*FullFinger)
+	}
+	for _, finger := range fingers {
+		f = f.Append(&FullFinger{Finger: finger})
+	}
+	for _, aliasItem := range aliases {
+		if aliasItem == nil || aliasItem.Name == "" {
+			continue
+		}
+		if item, ok := f.Items[aliasItem.Name]; ok && item != nil {
+			item.Alias = aliasItem
+		}
+	}
+	return f
+}
+
+// Filter returns a filtered copy of FullFingers using predicate.
+func (f FullFingers) Filter(predicate func(*FullFinger) bool) FullFingers {
+	if predicate == nil || len(f.Items) == 0 {
+		return f
+	}
+	filtered := FullFingers{
+		Items: make(map[string]*FullFinger),
+	}
+	for key, item := range f.Items {
+		if predicate(item) {
+			filtered.Items[key] = item
+		}
+	}
+	return filtered
 }

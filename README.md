@@ -262,6 +262,75 @@ Neutron 引擎在加载时自动编译 POC：
 GoGo 可以同时集成 Fingers 和 Neutron：
 - 模板按指纹、ID、标签建立索引
 - 9,444 个 POC 生成 61,267 条索引（多重索引）
+
+### 基于指纹筛选 POC 示例
+
+下面示例演示：Fingers 命中指纹后，基于 Alias 中的 `Product` 和 `Pocs` 从 Neutron 的模板集中筛选 POC 并执行。
+
+```go
+package main
+
+import (
+	"strings"
+
+	"github.com/chainreactors/fingers/alias"
+	"github.com/chainreactors/sdk/fingers"
+	"github.com/chainreactors/sdk/neutron"
+	neutronTemplates "github.com/chainreactors/neutron/templates"
+)
+
+func main() {
+	// 1) 指纹识别
+	fConfig := fingers.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
+	fEngine, _ := fingers.NewEngine(fConfig)
+
+	matchTask := fingers.NewMatchTask([]byte("raw http response"))
+	matchCh, _ := fEngine.Execute(fingers.NewContext(), matchTask)
+	matchResult := (<-matchCh).(*fingers.MatchResult)
+	frameworks := matchResult.Frameworks()
+
+	// 2) Alias -> Product / Pocs
+	aliases, _ := alias.NewAliases(fConfig.FullFingers.Aliases()...)
+	pocIDs := map[string]struct{}{}
+	products := map[string]struct{}{}
+	for _, frame := range frameworks {
+		if a, ok := aliases.FindFramework(frame); ok && a != nil {
+			if a.Product != "" {
+				products[strings.ToLower(a.Product)] = struct{}{}
+			}
+			for _, id := range a.Pocs {
+				pocIDs[strings.ToLower(id)] = struct{}{}
+			}
+		}
+	}
+
+	// 3) 加载 POC，并按 Alias 产品/POC 过滤
+	nConfig := neutron.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
+	nEngine, _ := neutron.NewEngine(nConfig)
+
+	filtered := (neutron.Templates{}).Merge(nEngine.Get()).Filter(func(t *neutronTemplates.Template) bool {
+		if _, ok := pocIDs[strings.ToLower(t.Id)]; ok {
+			return true
+		}
+		for _, tag := range t.GetTags() {
+			if _, ok := products[strings.ToLower(tag)]; ok {
+				return true
+			}
+		}
+		return false
+	})
+
+	// 4) 执行筛选后的 POC
+	task := &neutron.ExecuteTask{
+		Target:    "http://target.example",
+		Templates: filtered.Templates(),
+	}
+	resultCh, _ := nEngine.Execute(neutron.NewContext(), task)
+	for range resultCh {
+		// consume results
+	}
+}
+```
 - 根据检测到的指纹自动匹配模板
 
 ## 开发

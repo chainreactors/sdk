@@ -33,7 +33,8 @@ func NewEngine(config *Config) (*Engine, error) {
 	if err := config.Load(context.Background()); err != nil {
 		return nil, err
 	}
-	if len(config.Templates) == 0 {
+	templates := config.Templates.Templates()
+	if len(templates) == 0 {
 		return nil, fmt.Errorf("templates data is empty")
 	}
 
@@ -41,8 +42,25 @@ func NewEngine(config *Config) (*Engine, error) {
 		config: config,
 	}
 
-	e.templates = e.compileTemplates(config.Templates)
+	e.templates = e.compileTemplates(templates)
 
+	return e, nil
+}
+
+// NewEngineWithTemplates creates an Engine using Templates directly.
+func NewEngineWithTemplates(templates Templates) (*Engine, error) {
+	if templates.Len() == 0 {
+		return nil, fmt.Errorf("templates data is empty")
+	}
+
+	config := NewConfig()
+	config.Templates = templates
+
+	e := &Engine{
+		config: config,
+	}
+
+	e.templates = e.compileTemplates(templates.Templates())
 	return e, nil
 }
 
