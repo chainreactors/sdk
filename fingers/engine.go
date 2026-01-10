@@ -119,12 +119,27 @@ func (e *Engine) Reload(ctx context.Context) error {
 
 // buildEngineFromFingers 从指纹列表构建引擎
 func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alias) (*fingersLib.Engine, error) {
-	engine := &fingersLib.Engine{
-		EnginesImpl:  make(map[string]fingersLib.EngineImpl),
-		Enabled:      make(map[string]bool),
-		Capabilities: make(map[string]common.EngineCapability),
+	_, err := resources.LoadPorts()
+	if err != nil {
+		return nil, err
 	}
-
+	engine, err := fingersLib.NewEngine(
+		fingersLib.FaviconEngine,
+		fingersLib.EHoleEngine,
+		fingersLib.FingerPrintEngine,
+		fingersLib.GobyEngine,
+		fingersLib.WappalyzerEngine,
+		fingersLib.NmapEngine,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if len(aliases) > 0 {
+		aliasEngine, err := alias.NewAliases(aliases...)
+		if err == nil {
+			engine.Aliases = aliasEngine
+		}
+	}
 	var httpFingers, socketFingers fingersEngine.Fingers
 	for _, finger := range fingers {
 		if finger.Protocol == "http" {
@@ -133,10 +148,7 @@ func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alia
 			socketFingers = append(socketFingers, finger)
 		}
 	}
-	_, err := resources.LoadPorts()
-	if err != nil {
-		return nil, err
-	}
+
 	fEngine, err := fingersEngine.NewEngine(httpFingers, socketFingers)
 	if err != nil {
 		return nil, err
@@ -144,14 +156,6 @@ func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alia
 
 	engine.Register(fEngine)
 
-	if len(aliases) > 0 {
-		aliasEngine, err := alias.NewAliases(aliases...)
-		if err == nil {
-			engine.Aliases = aliasEngine
-		}
-	}
-
-	engine.Compile()
 	return engine, nil
 }
 
