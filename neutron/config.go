@@ -45,89 +45,99 @@ func (c *Config) WithTemplates(tpls []*templates.Template) *Config {
 	return c
 }
 
-// WithRemote 设置远程加载配置并拉取数据
-func (c *Config) WithRemote(url, apiKey string) (*Config, error) {
+// WithCyberhub 设置远程加载配置（不立即拉取）
+func (c *Config) WithCyberhub(url, apiKey string) *Config {
 	c.CyberhubURL = url
 	c.APIKey = apiKey
 	c.LocalPath = ""
 	c.Templates = nil
 	c.Filename = ""
-
-	if !c.IsRemoteEnabled() {
-		return nil, fmt.Errorf("remote config is incomplete")
-	}
-
-	client := cyberhub.NewClient(c.CyberhubURL, c.APIKey, c.Timeout)
-	responses, err := client.ExportPOCs(context.Background(), nil, nil, "", "", c.ExportFilter)
-	if err != nil {
-		return nil, err
-	}
-
-	loaded := make([]*templates.Template, 0, len(responses))
-	for _, resp := range responses {
-		loaded = append(loaded, resp.GetTemplate())
-	}
-
-	c.Templates = loaded
-	return c, nil
+	return c
 }
 
-// WithLocal 设置本地加载并读取数据
-func (c *Config) WithLocal(path string) (*Config, error) {
+// WithLocalFile 设置本地加载配置（不立即读取）
+func (c *Config) WithLocalFile(path string) *Config {
 	c.LocalPath = path
 	c.CyberhubURL = ""
 	c.APIKey = ""
 	c.Templates = nil
 	c.Filename = ""
+	return c
+}
 
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to access path %s: %w", path, err)
+// Load 执行数据加载
+func (c *Config) Load(ctx context.Context) error {
+	if c == nil {
+		return fmt.Errorf("config is nil")
 	}
-
-	var yamlFiles []string
-	if info.IsDir() {
-		err = filepath.Walk(path, func(filePath string, fileInfo os.FileInfo, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			ext := filepath.Ext(filePath)
-			if ext == ".yaml" || ext == ".yml" {
-				yamlFiles = append(yamlFiles, filePath)
-			}
-			return nil
-		})
+	if len(c.Templates) > 0 {
+		return nil
+	}
+	if c.LocalPath != "" {
+		info, err := os.Stat(c.LocalPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to walk directory %s: %w", path, err)
+			return fmt.Errorf("failed to access path %s: %w", c.LocalPath, err)
 		}
-	} else {
-		yamlFiles = []string{path}
+
+		var yamlFiles []string
+		if info.IsDir() {
+			err = filepath.Walk(c.LocalPath, func(filePath string, fileInfo os.FileInfo, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				ext := filepath.Ext(filePath)
+				if ext == ".yaml" || ext == ".yml" {
+					yamlFiles = append(yamlFiles, filePath)
+				}
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("failed to walk directory %s: %w", c.LocalPath, err)
+			}
+		} else {
+			yamlFiles = []string{c.LocalPath}
+		}
+
+		var loaded []*templates.Template
+		for _, yamlFile := range yamlFiles {
+			content, readErr := os.ReadFile(yamlFile)
+			if readErr != nil {
+				return fmt.Errorf("read %s: %w", yamlFile, readErr)
+			}
+
+			var list []*templates.Template
+			if err := yaml.Unmarshal(content, &list); err == nil && len(list) > 0 {
+				loaded = append(loaded, list...)
+				continue
+			}
+
+			tpl := &templates.Template{}
+			if err := yaml.Unmarshal(content, tpl); err != nil {
+				return fmt.Errorf("parse %s: %w", yamlFile, err)
+			}
+			loaded = append(loaded, tpl)
+		}
+
+		if len(loaded) == 0 {
+			return fmt.Errorf("no templates loaded from %s", c.LocalPath)
+		}
+
+		c.Templates = loaded
+		return nil
 	}
-
-	var loaded []*templates.Template
-	for _, yamlFile := range yamlFiles {
-		content, readErr := os.ReadFile(yamlFile)
-		if readErr != nil {
-			return nil, fmt.Errorf("read %s: %w", yamlFile, readErr)
+	if c.IsRemoteEnabled() {
+		client := cyberhub.NewClient(c.CyberhubURL, c.APIKey, c.Timeout)
+		responses, err := client.ExportPOCs(ctx, nil, nil, "", "", c.ExportFilter)
+		if err != nil {
+			return err
 		}
 
-		var list []*templates.Template
-		if err := yaml.Unmarshal(content, &list); err == nil && len(list) > 0 {
-			loaded = append(loaded, list...)
-			continue
+		loaded := make([]*templates.Template, 0, len(responses))
+		for _, resp := range responses {
+			loaded = append(loaded, resp.GetTemplate())
 		}
-
-		tpl := &templates.Template{}
-		if err := yaml.Unmarshal(content, tpl); err != nil {
-			return nil, fmt.Errorf("parse %s: %w", yamlFile, err)
-		}
-		loaded = append(loaded, tpl)
+		c.Templates = loaded
+		return nil
 	}
-
-	if len(loaded) == 0 {
-		return nil, fmt.Errorf("no templates loaded from %s", path)
-	}
-
-	c.Templates = loaded
-	return c, nil
+	return fmt.Errorf("no data source configured")
 }

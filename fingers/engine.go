@@ -63,6 +63,12 @@ func (e *Engine) Load(ctx context.Context) (*fingersLib.Engine, error) {
 		return e.engine, nil
 	}
 
+	if e.config == nil {
+		return nil, fmt.Errorf("config is nil")
+	}
+	if err := e.config.Load(ctx); err != nil {
+		return nil, err
+	}
 	if e.config == nil || len(e.config.Fingers) == 0 {
 		return nil, fmt.Errorf("fingers data is empty")
 	}

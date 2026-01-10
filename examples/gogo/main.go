@@ -78,8 +78,11 @@ func main() {
 		}
 
 		fingersConfig := fingers.NewConfig()
-		fingersConfig.SetCyberhubURL(*cyberhubURL)
-		fingersConfig.SetAPIKey(*apiKey)
+		fingersConfig.WithCyberhub(*cyberhubURL, *apiKey)
+		if err := fingersConfig.Load(ctx); err != nil {
+			fmt.Printf("Error loading fingers config: %v\n", err)
+			os.Exit(1)
+		}
 
 		if *source != "" {
 			fingersConfig.SetSources(*source)
@@ -118,8 +121,11 @@ func main() {
 		}
 
 		neutronConfig := neutron.NewConfig()
-		neutronConfig.SetCyberhubURL(*cyberhubURL)
-		neutronConfig.SetAPIKey(*apiKey)
+		neutronConfig.WithCyberhub(*cyberhubURL, *apiKey)
+		if err := neutronConfig.Load(ctx); err != nil {
+			fmt.Printf("Error loading neutron config: %v\n", err)
+			os.Exit(1)
+		}
 
 		if *source != "" {
 			neutronConfig.SetSources(*source)

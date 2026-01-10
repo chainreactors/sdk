@@ -55,8 +55,11 @@ func main() {
 			fmt.Println("Error: -key is required when using -url")
 			os.Exit(1)
 		}
-		config.SetCyberhubURL(*cyberhubURL)
-		config.SetAPIKey(*apiKey)
+		config.WithCyberhub(*cyberhubURL, *apiKey)
+		if err := config.Load(ctx); err != nil {
+			fmt.Printf("Error loading config: %v\n", err)
+			os.Exit(1)
+		}
 		if *source != "" {
 			config.SetSources(*source)
 		}

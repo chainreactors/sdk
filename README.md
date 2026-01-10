@@ -49,8 +49,8 @@ import (
 
 // 创建并加载引擎
 config := fingers.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your_key")
+config.WithCyberhub("http://127.0.0.1:8080", "your_key")
+_ = config.Load(context.Background())
 
 engine, _ := fingers.NewEngine(config)
 libEngine, _ := engine.Load(context.Background())
@@ -69,8 +69,8 @@ import (
 
 // 创建并加载引擎
 config := neutron.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your_key")
+config.WithCyberhub("http://127.0.0.1:8080", "your_key")
+_ = config.Load(context.Background())
 
 engine, _ := neutron.NewEngine(config)
 templates, _ := engine.Load(context.Background())  // 自动编译
@@ -153,10 +153,11 @@ for result := range resultCh {
 
 ```go
 config := fingers.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your_key")
+config.WithCyberhub("http://127.0.0.1:8080", "your_key")
+_ = config.Load(context.Background())
 config.SetSources("github")       // 可选：按来源过滤
-config.WithFilename("fingers.yaml") // 可选：从导出的 YAML 加载
+config.WithLocalFile("fingers.yaml") // 可选：从导出的 YAML 加载
+_ = config.Load(context.Background())
 config.SetTimeout(10 * time.Second)
 ```
 
@@ -164,11 +165,11 @@ config.SetTimeout(10 * time.Second)
 
 ```go
 config := neutron.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your_key")
+config.WithCyberhub("http://127.0.0.1:8080", "your_key")
+_ = config.Load(context.Background())
 config.SetSources("github")       // 可选：按来源过滤
-config.SetLocalPath("./pocs")     // 可选：本地 POC 目录
-config.WithFilename("pocs.yaml") // 可选：从导出的 YAML 加载
+config.WithLocalFile("./pocs") // 可选：本地 POC 目录
+_ = config.Load(context.Background())
 config.SetTimeout(10 * time.Second)
 ```
 

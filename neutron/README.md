@@ -15,12 +15,15 @@ Neutron SDK 为 [chainreactors/neutron](https://github.com/chainreactors/neutron
 ### 1. 从 Cyberhub 加载 POC
 
 ```go
-import "github.com/chainreactors/sdk/neutron"
+import (
+    "context"
+    "github.com/chainreactors/sdk/neutron"
+)
 
 // 最简单的方式
 config := neutron.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your-api-key")
+config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+_ = config.Load(context.Background())
 templates, err := neutron.Load(config)
 if err != nil {
     log.Fatal(err)
@@ -34,7 +37,8 @@ fmt.Printf("加载了 %d 个 POC\n", len(templates))
 ```go
 // 加载指定目录的所有 YAML 文件
 config := neutron.NewConfig()
-config.SetLocalPath("./my_pocs")
+config.WithLocalFile("./my_pocs")
+_ = config.Load(context.Background())
 templates, err := neutron.Load(config)
 if err != nil {
     log.Fatal(err)
@@ -45,10 +49,10 @@ if err != nil {
 
 ```go
 config := neutron.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your-api-key")
+config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
 config.SetTags("cve", "rce")               // 按标签过滤
-config.WithFilename("pocs.yaml")           // 可选：从导出的 YAML 加载
+config.WithLocalFile("pocs.yaml")          // 可选：从导出的 YAML 加载
+_ = config.Load(context.Background())
 config.SetTimeout(30 * time.Second)
 
 templates, err := neutron.Load(config)
@@ -64,8 +68,8 @@ Neutron SDK 只提供 **3 个加载函数**：
 
 ```go
 config := neutron.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your-api-key")
+config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+_ = config.Load(context.Background())
 
 templates, err := neutron.Load(config)
 ```
@@ -76,8 +80,8 @@ templates, err := neutron.Load(config)
 
 ```go
 config := neutron.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your-api-key")
+config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+_ = config.Load(context.Background())
 
 templates, err := neutron.Load(config)
 ```
@@ -92,10 +96,10 @@ type Config struct {
 
     // 本地配置
     LocalPath string // 本地 POC 文件/目录路径
+    Templates []*templates.Template // 已加载的 POC
 
     // 过滤配置
     Tags []string // 标签过滤
-    Filename string // 从导出的 YAML 加载
 
     // 请求配置
     Timeout time.Duration // HTTP 请求超时时间
@@ -110,6 +114,7 @@ type Config struct {
 package main
 
 import (
+    "context"
     "fmt"
     "github.com/chainreactors/neutron/protocols"
     "github.com/chainreactors/sdk/neutron"
@@ -118,8 +123,8 @@ import (
 func main() {
     // 1. 加载 POC
     config := neutron.NewConfig()
-    config.SetCyberhubURL("http://127.0.0.1:8080")
-    config.SetAPIKey("your-api-key")
+    config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+    _ = config.Load(context.Background())
     templates, err := neutron.Load(config)
     if err != nil {
         panic(err)
@@ -169,8 +174,8 @@ import (
 func main() {
     // 1. 加载并编译 POC
     config := neutron.NewConfig()
-    config.SetCyberhubURL("http://127.0.0.1:8080")
-    config.SetAPIKey("your-api-key")
+    config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+    _ = config.Load(context.Background())
     templates, _ := neutron.Load(config)
 
     options := &protocols.ExecuterOptions{
@@ -245,9 +250,9 @@ func main() {
 
 ```go
 config := neutron.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your-api-key")
-config.SetLocalPath("./my_custom_pocs") // 同时加载本地 POC
+config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+config.WithLocalFile("./my_custom_pocs") // 同时加载本地 POC
+_ = config.Load(context.Background())
 
 templates, err := neutron.Load(config)
 // templates 包含来自 Cyberhub 和本地目录的所有 POC

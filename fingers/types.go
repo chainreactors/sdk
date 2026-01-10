@@ -113,34 +113,3 @@ func (t *MatchTask) Validate() error {
 	}
 	return nil
 }
-
-// ========================================
-// Task 实现（SDK Engine 可选）
-// ========================================
-
-// MatchTask 指纹匹配任务
-type MatchTask struct {
-	Data []byte // HTTP 响应原始数据
-}
-
-// NewMatchTask 创建匹配任务
-func NewMatchTask(data []byte) *MatchTask {
-	return &MatchTask{Data: data}
-}
-
-// NewMatchTaskFromResponse 从 HTTP Response 创建任务
-func NewMatchTaskFromResponse(resp *http.Response) *MatchTask {
-	data := httputils.ReadRaw(resp)
-	return &MatchTask{Data: data}
-}
-
-func (t *MatchTask) Type() string {
-	return "match"
-}
-
-func (t *MatchTask) Validate() error {
-	if len(t.Data) == 0 {
-		return fmt.Errorf("data cannot be empty")
-	}
-	return nil
-}

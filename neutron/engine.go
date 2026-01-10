@@ -58,6 +58,12 @@ func (e *Engine) Load(ctx context.Context) ([]*templates.Template, error) {
 		return e.templates, nil
 	}
 
+	if e.config == nil {
+		return nil, fmt.Errorf("config is nil")
+	}
+	if err := e.config.Load(ctx); err != nil {
+		return nil, err
+	}
 	if e.config == nil || len(e.config.Templates) == 0 {
 		return nil, fmt.Errorf("templates data is empty")
 	}

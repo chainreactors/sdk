@@ -35,19 +35,21 @@ fingers.Load(config)
 
 ```go
 import (
+    "context"
     "github.com/chainreactors/sdk/fingers"
 )
 
 // 从 Cyberhub 加载
 config := fingers.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your-api-key")
+config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+_ = config.Load(context.Background())
 
 engine, _ := fingers.Load(config)
 
 // 或从本地加载（指定引擎列表）
 localConfig := fingers.NewConfig()
 localConfig.SetEnableEngines([]string{"fingers"})
+_ = localConfig.Load(context.Background())
 engine, _ := fingers.Load(localConfig)
 
 // 使用 fingers 库的原生 API
@@ -58,9 +60,9 @@ frameworks, _ := engine.DetectResponse(resp)
 
 ```go
 config := fingers.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your-api-key")
+config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
 config.SetTimeout(30 * time.Second)
+_ = config.Load(context.Background())
 
 engine, _ := fingers.Load(config)
 ```
@@ -76,8 +78,8 @@ import (
 
 // 1. 加载完整引擎
 config := fingers.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your-api-key")
+config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+_ = config.Load(context.Background())
 
 fingersEngine, _ := fingers.NewEngine(config)
 _, _ = fingersEngine.Load(context.Background())
@@ -99,8 +101,8 @@ import (
 
 // 1. 加载完整引擎
 config := fingers.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your-api-key")
+config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+_ = config.Load(context.Background())
 
 fingersEngine, _ := fingers.NewEngine(config)
 _, _ = fingersEngine.Load(context.Background())
@@ -221,9 +223,10 @@ $ go run test/test_sdk_engine.go
 
 ```go
 config := fingers.NewConfig()
-config.SetCyberhubURL("http://127.0.0.1:8080")
-config.SetAPIKey("your-api-key")
-config.WithFilename("fingers.yaml") // 可选：从导出的 YAML 加载
+config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+_ = config.Load(context.Background())
+config.WithLocalFile("fingers.yaml") // 可选：从导出的 YAML 加载
+_ = config.Load(context.Background())
 config.SetTimeout(30 * time.Second)
 config.SetEnableEngines([]string{"fingers", "wappalyzer"})
 
