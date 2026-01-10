@@ -9,7 +9,7 @@
 - **完美匹配**: 客户端结构 = 后端 `ExportFinger` 结构
 - **功能完整**: 2876 个指纹 + 2823 个 Aliases 全量管理
 - **统一抽象**: 无 Loader 抽象，local/remote 统一在 Engine 内部处理
-- **极简 API**: 仅 3 个函数 - `Load` / `LoadRemote` / `LoadLocal`
+- **极简 API**: 仅 1 个函数 - `Load`
 - **无侵入集成**: gogo/spray 自己组装，SDK 只负责加载
 
 ## 📦 安装
@@ -25,10 +25,8 @@ go get github.com/chainreactors/sdk/fingers
 Fingers SDK 本质上是对 fingers 库的二次封装，只提供**加载功能**：
 
 ```go
-// 三个函数，仅此而已
-fingers.Load(config)            // 通用加载
-fingers.LoadRemote(url, key)    // 远程加载
-fingers.LoadLocal(engines...)   // 本地加载
+// 统一入口，仅此而已
+fingers.Load(config)
 ```
 
 返回的是 `*fingersLib.Engine`，用户自己决定如何使用。
@@ -41,11 +39,16 @@ import (
 )
 
 // 从 Cyberhub 加载
-engine, _ := fingers.LoadRemote("http://127.0.0.1:8080", "your-api-key")
+config := fingers.NewConfig()
+config.SetCyberhubURL("http://127.0.0.1:8080")
+config.SetAPIKey("your-api-key")
 
-// 或从本地加载
-engine, _ := fingers.LoadLocal() // 所有引擎
-engine, _ := fingers.LoadLocal("fingers") // 只加载 fingers
+engine, _ := fingers.Load(config)
+
+// 或从本地加载（指定引擎列表）
+localConfig := fingers.NewConfig()
+localConfig.SetEnableEngines([]string{"fingers"})
+engine, _ := fingers.Load(localConfig)
 
 // 使用 fingers 库的原生 API
 frameworks, _ := engine.DetectResponse(resp)
@@ -54,10 +57,10 @@ frameworks, _ := engine.DetectResponse(resp)
 ### 示例 2：自定义配置
 
 ```go
-config := fingers.NewConfig().
-    SetCyberhubURL("http://127.0.0.1:8080").
-    SetAPIKey("your-api-key").
-    SetTimeout(30 * time.Second)
+config := fingers.NewConfig()
+config.SetCyberhubURL("http://127.0.0.1:8080")
+config.SetAPIKey("your-api-key")
+config.SetTimeout(30 * time.Second)
 
 engine, _ := fingers.Load(config)
 ```
@@ -72,7 +75,11 @@ import (
 )
 
 // 1. 加载完整引擎
-fullEngine, _ := fingers.LoadRemote("http://127.0.0.1:8080", "your-api-key")
+config := fingers.NewConfig()
+config.SetCyberhubURL("http://127.0.0.1:8080")
+config.SetAPIKey("your-api-key")
+
+fullEngine, _ := fingers.Load(config)
 
 // 2. 自己提取 FingersEngine
 impl := fullEngine.GetEngine("fingers")
@@ -92,7 +99,11 @@ import (
 )
 
 // 1. 加载完整引擎
-fullEngine, _ := fingers.LoadRemote("http://127.0.0.1:8080", "your-api-key")
+config := fingers.NewConfig()
+config.SetCyberhubURL("http://127.0.0.1:8080")
+config.SetAPIKey("your-api-key")
+
+fullEngine, _ := fingers.Load(config)
 
 // 2. 直接注入到 spray（spray 需要完整 Engine）
 sprayEngine := spray.NewSprayEngineWithFingers(nil, fullEngine)
@@ -158,9 +169,8 @@ type FingerprintResponse struct {
 ```
 sdk/
 ├── fingers/           # 核心包（41+97+388+37 = 563 行）
-│   ├── api.go        # 极简 API（41 行）- 仅 3 个函数
 │   ├── config.go     # 配置管理（97 行）
-│   ├── engine.go     # 统一 Engine + SDK 接口（388 行）
+│   ├── engine.go     # 统一 Engine + SDK 接口（含极简 API）
 │   └── init.go       # 全局注册（37 行）
 ├── pkg/cyberhub/     # Cyberhub 客户端（145+51 = 196 行）
 │   ├── client.go     # HTTP 客户端（145 行）
@@ -175,8 +185,6 @@ sdk/
 2. **用户自己组装**: gogo/spray 等集成由用户自己从 Engine 提取需要的部分
 3. **极简 API**:
    - `Load(config)` - 通用加载
-   - `LoadRemote(url, key)` - 远程快捷方式
-   - `LoadLocal(engines...)` - 本地快捷方式
 4. **无侵入**: 不强制用户使用 SDK Engine，可以直接用 fingers 库
 
 ## 🎯 API 演进历史
@@ -185,7 +193,7 @@ sdk/
 |------|---------|------|------|
 | v1.0 | 6+ 个 `New*` 函数 | 命名混淆，不知道用哪个 | ❌ |
 | v2.0 | 三层 API（New*/Load*/LoadForGogo*） | 层次清晰但过度设计 | 🤔 |
-| v3.0 | **3 个函数**（Load/LoadRemote/LoadLocal） | 极简，用户自己组装 | ✅ |
+| v3.0 | **1 个函数**（Load） | 极简，用户自己组装 | ✅ |
 
 ## ✅ 测试结果
 
@@ -211,13 +219,12 @@ $ go run test/test_sdk_engine.go
 ## 🔧 配置选项
 
 ```go
-config := fingers.NewConfig().
-    SetCyberhubURL("http://127.0.0.1:8080").
-    SetAPIKey("your-api-key").
-    SetCacheEnabled(true).
-    SetTimeout(30 * time.Second).
-    SetMaxRetries(3).
-    SetEnableEngines([]string{"fingers", "wappalyzer"})
+config := fingers.NewConfig()
+config.SetCyberhubURL("http://127.0.0.1:8080")
+config.SetAPIKey("your-api-key")
+config.WithFilename("fingers.yaml") // 可选：从导出的 YAML 加载
+config.SetTimeout(30 * time.Second)
+config.SetEnableEngines([]string{"fingers", "wappalyzer"})
 
 engine, _ := fingers.Load(config)
 ```
@@ -228,13 +235,11 @@ engine, _ := fingers.Load(config)
 - [x] 一次性加载全量指纹（2876 条）
 - [x] Alias 管理（2823 个）
 - [x] 本地/远程自动切换
-- [x] 极简 API（仅 3 个函数）
+- [x] 极简 API（仅 1 个函数）
 - [x] 用户自己组装集成
 - [x] SDK Engine 接口（可选）
 - [x] 支持 `[]byte` 和 `http.Response` 匹配
 - [x] 无 Loader 抽象
-- [x] 内存缓存
-- [x] 自动重试（最多 3 次）
 - [x] 超时控制（默认 30s）
 
 ## 📖 文档

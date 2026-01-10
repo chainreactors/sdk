@@ -2,7 +2,6 @@ package fingers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -17,6 +16,7 @@ import (
 	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/utils/httputils"
+	"gopkg.in/yaml.v3"
 )
 
 // ========================================
@@ -29,12 +29,11 @@ type Engine struct {
 	config       *Config
 	client       *cyberhub.Client // 仅在远程模式下使用
 	mu           sync.RWMutex
-	rawFingers   fingersEngine.Fingers          // 原始指纹数据（用于筛选）
-	aliases      []*alias.Alias                 // 原始别名数据
-	fingerprints []cyberhub.FingerprintResponse // 缓存原始响应
-	pocIndex     map[string][]string            // fingerprintName → pocNames
-	productIndex map[string][]string            // vendor:product → pocNames
-	aliasIndex   map[string]*alias.Alias        // fingerprintName → alias
+	rawFingers   fingersEngine.Fingers   // 原始指纹数据（用于筛选）
+	aliases      []*alias.Alias          // 原始别名数据
+	pocIndex     map[string][]string     // fingerprintName → pocNames
+	productIndex map[string][]string     // vendor:product → pocNames
+	aliasIndex   map[string]*alias.Alias // fingerprintName → alias
 }
 
 type engineState struct {
@@ -62,11 +61,29 @@ func NewEngine(config *Config) (*Engine, error) {
 			config.CyberhubURL,
 			config.APIKey,
 			config.Timeout,
-			config.MaxRetries,
 		)
 	}
 
 	return e, nil
+}
+
+// ========================================
+// 统一 API - 只提供一种加载方式
+// ========================================
+
+// Load 加载并返回 fingers 库的 Engine
+// config 为 nil 时使用默认本地配置
+func Load(config *Config) (*fingersLib.Engine, error) {
+	if config == nil {
+		config = NewConfig()
+	}
+
+	engine, err := NewEngine(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return engine.Load(context.Background())
 }
 
 // Load 加载指纹引擎
@@ -82,7 +99,9 @@ func (e *Engine) Load(ctx context.Context) (*fingersLib.Engine, error) {
 	var err error
 
 	// 根据配置选择加载方式
-	if e.config.IsRemoteEnabled() {
+	if e.config.Filename != "" {
+		engine, err = e.loadFromFile(e.config.Filename)
+	} else if e.config.IsRemoteEnabled() {
 		engine, err = e.loadFromRemote(ctx)
 	} else {
 		engine, err = e.loadFromLocal()
@@ -155,7 +174,7 @@ func (e *Engine) extractFingersFromEngine(engine *fingersLib.Engine) {
 
 // loadFromRemote 从 Cyberhub 加载指纹
 func (e *Engine) loadFromRemote(ctx context.Context) (*fingersLib.Engine, error) {
-	fingerprints, err := e.loadFingerprints(ctx, nil)
+	fingerprints, err := e.loadFingerprints(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch fingerprints from cyberhub: %w", err)
 	}
@@ -163,107 +182,43 @@ func (e *Engine) loadFromRemote(ctx context.Context) (*fingersLib.Engine, error)
 	return e.convertToEngine(fingerprints)
 }
 
-func (e *Engine) loadFingerprints(ctx context.Context, filter *FingerprintFilter) ([]cyberhub.FingerprintResponse, error) {
-	query := e.buildFingerprintQuery(filter)
+func (e *Engine) loadFromFile(path string) (*fingersLib.Engine, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
 
-	responses, err := e.client.ExportFingerprintsWithQuery(ctx, query)
+	var raw []*fingersEngine.Finger
+	if err := yaml.NewDecoder(file).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("failed to decode fingerprints: %w", err)
+	}
+
+	engine, err := buildEngineFromFingers(fingersEngine.Fingers(raw), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if filter == nil || filter.isLocalEmpty() {
-		return responses, nil
-	}
-
-	return filterFingerprintResponses(responses, filter), nil
+	e.rawFingers = fingersEngine.Fingers(raw)
+	e.aliases = nil
+	e.pocIndex = nil
+	e.productIndex = nil
+	e.aliasIndex = nil
+	return engine, nil
 }
 
-func (e *Engine) buildFingerprintQuery(filter *FingerprintFilter) *cyberhub.Query {
-	query := cyberhub.NewQuery().WithFingerprint(true)
-
-	if filter != nil && len(filter.Sources) > 0 {
-		query.Filter("sources", filter.Sources...)
-	} else if e.config.Source != "" {
-		query.Filter("sources", e.config.Source)
+func (e *Engine) loadFingerprints(ctx context.Context) ([]cyberhub.FingerprintResponse, error) {
+	var filter *cyberhub.ExportFilter
+	if e.config != nil {
+		filter = e.config.ExportFilter
 	}
 
-	if filter == nil {
-		return query
+	responses, err := e.client.ExportFingerprints(ctx, true, "", filter)
+	if err != nil {
+		return nil, err
 	}
 
-	if filter.Keyword != "" {
-		query.Keyword(filter.Keyword)
-	}
-	if filter.Protocol != "" {
-		query.Set("protocol", filter.Protocol)
-	}
-	if len(filter.Tags) > 0 {
-		query.Tags(filter.Tags...)
-	}
-	if len(filter.Categories) > 0 {
-		query.Filter("categories", filter.Categories...)
-	}
-	if filter.Vendor != "" {
-		query.Set("vendor", filter.Vendor)
-	}
-	if filter.Product != "" {
-		query.Set("product", filter.Product)
-	}
-	if len(filter.Authors) > 0 {
-		for _, author := range filter.Authors {
-			if author != "" {
-				query.Set("author", author)
-				break
-			}
-		}
-	}
-	if len(filter.Statuses) > 0 {
-		query.Filter("statuses", filter.Statuses...)
-	} else if filter.Status != "" {
-		query.Set("status", filter.Status)
-	}
-
-	return query
-}
-
-func filterFingerprintResponses(responses []cyberhub.FingerprintResponse, filter *FingerprintFilter) []cyberhub.FingerprintResponse {
-	if filter == nil || filter.isLocalEmpty() {
-		return responses
-	}
-
-	aliasIndex := make(map[string]*alias.Alias)
-	var pocIndex map[string]bool
-	if filter.HasAssociatedPOC != nil {
-		pocIndex = make(map[string]bool)
-	}
-
-	for _, resp := range responses {
-		if resp.Finger == nil {
-			continue
-		}
-		if aliasData := resp.GetAlias(); aliasData != nil {
-			aliasIndex[resp.Finger.Name] = aliasData
-			if pocIndex != nil {
-				pocIndex[resp.Finger.Name] = len(aliasData.Pocs) > 0
-			}
-		}
-	}
-
-	filter.SetAliasIndex(aliasIndex)
-	if pocIndex != nil {
-		filter.SetPOCAssociationIndex(pocIndex)
-	}
-
-	var result []cyberhub.FingerprintResponse
-	for _, resp := range responses {
-		if resp.Finger == nil {
-			continue
-		}
-		if filter.match(resp.Finger) {
-			result = append(result, resp)
-		}
-	}
-	return result
+	return responses, nil
 }
 
 // convertToEngine 将 Cyberhub 响应转换为 fingers.Engine
@@ -273,7 +228,6 @@ func (e *Engine) convertToEngine(responses []cyberhub.FingerprintResponse) (*fin
 		return nil, err
 	}
 
-	e.fingerprints = responses
 	e.rawFingers = state.rawFingers
 	e.aliases = state.aliases
 	e.pocIndex = state.pocIndex
@@ -415,72 +369,6 @@ func (e *Engine) GetRawFingers() fingersEngine.Fingers {
 	return e.rawFingers
 }
 
-// Filter 使用筛选器筛选指纹
-func (e *Engine) Filter(filter *FingerprintFilter) fingersEngine.Fingers {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if filter == nil {
-		return e.rawFingers
-	}
-	e.bindFilterIndexes(filter)
-	return filter.Apply(e.rawFingers)
-}
-
-func (e *Engine) bindFilterIndexes(filter *FingerprintFilter) {
-	if filter == nil {
-		return
-	}
-	if filter.aliasIndex == nil && e.aliasIndex != nil {
-		filter.SetAliasIndex(e.aliasIndex)
-	}
-	if filter.HasAssociatedPOC != nil && filter.pocFingerIndex == nil {
-		filter.SetPOCAssociationIndex(e.buildPOCHasIndex())
-	}
-}
-
-// LoadWithFilter 加载并筛选指纹
-func (e *Engine) LoadWithFilter(ctx context.Context, filter *FingerprintFilter) (*fingersLib.Engine, error) {
-	if filter == nil {
-		return e.Load(ctx)
-	}
-
-	e.mu.RLock()
-	loaded := e.engine != nil
-	e.mu.RUnlock()
-
-	if loaded {
-		e.mu.RLock()
-		defer e.mu.RUnlock()
-		e.bindFilterIndexes(filter)
-		filteredFingers := filter.Apply(e.rawFingers)
-		aliases := filterAliasesForFingers(e.aliases, filteredFingers)
-		return buildEngineFromFingers(filteredFingers, aliases)
-	}
-
-	if e.config.IsRemoteEnabled() {
-		responses, err := e.loadFingerprints(ctx, filter)
-		if err != nil {
-			return nil, err
-		}
-		engine, _, err := buildEngineFromResponses(responses)
-		if err != nil {
-			return nil, err
-		}
-		return engine, nil
-	}
-
-	if _, err := e.Load(ctx); err != nil {
-		return nil, err
-	}
-
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	e.bindFilterIndexes(filter)
-	filteredFingers := filter.Apply(e.rawFingers)
-	aliases := filterAliasesForFingers(e.aliases, filteredFingers)
-	return buildEngineFromFingers(filteredFingers, aliases)
-}
-
 // buildEngineFromFingers 从指纹列表构建引擎
 func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alias) (*fingersLib.Engine, error) {
 	engine := &fingersLib.Engine{
@@ -547,78 +435,6 @@ func (e *Engine) Close() error {
 	if e.client != nil {
 		return e.client.Close()
 	}
-	return nil
-}
-
-// ========================================
-// 文件持久化 API
-// ========================================
-
-// SaveToFile 将已加载的指纹数据保存到文件（原子写入）
-func (e *Engine) SaveToFile(path string) error {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	if len(e.fingerprints) == 0 {
-		return fmt.Errorf("no fingerprints loaded to save")
-	}
-
-	tmpPath := path + ".tmp"
-	file, err := os.Create(tmpPath)
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-
-	encoder := json.NewEncoder(file)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(e.fingerprints); err != nil {
-		_ = file.Close()
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to encode fingerprints: %w", err)
-	}
-
-	if err := file.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to close temp file: %w", err)
-	}
-
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to rename temp file: %w", err)
-	}
-
-	return nil
-}
-
-// LoadFromFile 从文件加载指纹数据并构建引擎
-func (e *Engine) LoadFromFile(path string) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	file, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
-
-	var responses []cyberhub.FingerprintResponse
-	if err := json.NewDecoder(file).Decode(&responses); err != nil {
-		return fmt.Errorf("failed to decode fingerprints: %w", err)
-	}
-
-	engine, state, err := buildEngineFromResponses(responses)
-	if err != nil {
-		return fmt.Errorf("failed to build engine: %w", err)
-	}
-
-	e.engine = engine
-	e.fingerprints = responses
-	e.rawFingers = state.rawFingers
-	e.aliases = state.aliases
-	e.pocIndex = state.pocIndex
-	e.productIndex = state.productIndex
-	e.aliasIndex = state.aliasIndex
-
 	return nil
 }
 

@@ -2,11 +2,9 @@ package neutron
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 
 	"github.com/chainreactors/neutron/protocols"
@@ -21,11 +19,10 @@ import (
 
 // Engine Neutron 加载引擎，支持本地和远程数据源
 type Engine struct {
-	templates     []*templates.Template
-	templateIndex map[string]*templates.Template // ID → template 索引
-	config        *Config
-	client        *cyberhub.Client // 仅在远程模式下使用
-	mu            sync.RWMutex
+	templates []*templates.Template
+	config    *Config
+	client    *cyberhub.Client // 仅在远程模式下使用
+	mu        sync.RWMutex
 }
 
 // NewEngine 创建一个新的 Engine 实例
@@ -50,11 +47,25 @@ func NewEngine(config *Config) (*Engine, error) {
 			config.CyberhubURL,
 			config.APIKey,
 			config.Timeout,
-			config.MaxRetries,
 		)
 	}
 
 	return e, nil
+}
+
+// Load 加载并返回 templates 列表
+// config 为 nil 时使用默认本地配置
+func Load(config *Config) ([]*templates.Template, error) {
+	if config == nil {
+		config = NewConfig()
+	}
+
+	engine, err := NewEngine(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return engine.Load(context.Background())
 }
 
 // Load 加载 POC templates 并进行编译
@@ -70,7 +81,14 @@ func (e *Engine) Load(ctx context.Context) ([]*templates.Template, error) {
 	var err error
 
 	// 根据配置选择加载方式
-	if e.config.IsRemoteEnabled() {
+	if e.config.Filename != "" {
+		allTemplates, err = e.loadFromFile(e.config.Filename)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if allTemplates == nil && e.config.IsRemoteEnabled() {
 		// 从远程加载
 		allTemplates, err = e.loadFromRemote(ctx)
 		if err != nil {
@@ -97,14 +115,6 @@ func (e *Engine) Load(ctx context.Context) ([]*templates.Template, error) {
 	compiledTemplates := e.compileTemplates(allTemplates)
 
 	e.templates = compiledTemplates
-
-	// 构建索引
-	e.templateIndex = make(map[string]*templates.Template)
-	for _, t := range compiledTemplates {
-		if t.Id != "" {
-			e.templateIndex[t.Id] = t
-		}
-	}
 
 	return compiledTemplates, nil
 }
@@ -175,15 +185,37 @@ func (e *Engine) loadFromLocal() ([]*templates.Template, error) {
 	return loadedTemplates, nil
 }
 
-// loadFromRemote 从 Cyberhub 加载 POC
-func (e *Engine) loadFromRemote(ctx context.Context) ([]*templates.Template, error) {
-	return e.loadRemoteTemplates(ctx, nil)
+func (e *Engine) loadFromFile(path string) ([]*templates.Template, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	var rawTemplates []*templates.Template
+	if err := yaml.NewDecoder(file).Decode(&rawTemplates); err != nil {
+		return nil, fmt.Errorf("failed to decode templates: %w", err)
+	}
+
+	if len(rawTemplates) == 0 {
+		return nil, fmt.Errorf("no templates loaded from %s", path)
+	}
+
+	return rawTemplates, nil
 }
 
-func (e *Engine) loadRemoteTemplates(ctx context.Context, filter *POCFilter) ([]*templates.Template, error) {
-	query := e.buildPOCQuery(filter)
+// loadFromRemote 从 Cyberhub 加载 POC
+func (e *Engine) loadFromRemote(ctx context.Context) ([]*templates.Template, error) {
+	return e.loadRemoteTemplates(ctx)
+}
 
-	responses, err := e.client.ExportPOCsWithQuery(ctx, query)
+func (e *Engine) loadRemoteTemplates(ctx context.Context) ([]*templates.Template, error) {
+	var filter *cyberhub.ExportFilter
+	if e.config != nil {
+		filter = e.config.ExportFilter
+	}
+
+	responses, err := e.client.ExportPOCs(ctx, nil, nil, "", "", filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch POCs from cyberhub: %w", err)
 	}
@@ -193,55 +225,7 @@ func (e *Engine) loadRemoteTemplates(ctx context.Context, filter *POCFilter) ([]
 		loadedTemplates = append(loadedTemplates, resp.GetTemplate())
 	}
 
-	if filter == nil || filter.isLocalEmpty() {
-		return loadedTemplates, nil
-	}
-
-	return filter.Apply(loadedTemplates), nil
-}
-
-func (e *Engine) buildPOCQuery(filter *POCFilter) *cyberhub.Query {
-	query := cyberhub.NewQuery()
-
-	if filter != nil && len(filter.Sources) > 0 {
-		query.Filter("source_names", filter.Sources...)
-	} else if e.config.Source != "" {
-		query.Set("source", e.config.Source)
-	}
-
-	if filter == nil {
-		return query
-	}
-
-	if filter.Keyword != "" {
-		query.Keyword(filter.Keyword)
-	}
-	if len(filter.Tags) > 0 {
-		query.Tags(filter.Tags...)
-	}
-	if len(filter.Severities) > 0 {
-		query.Severities(filter.Severities...)
-	}
-	if filter.Type != "" {
-		query.Type(filter.Type)
-	}
-	if len(filter.SourceIDs) > 0 {
-		for _, id := range filter.SourceIDs {
-			query.Filter("source_ids", strconv.FormatUint(uint64(id), 10))
-		}
-	}
-	if len(filter.Statuses) > 0 {
-		query.Filter("statuses", filter.Statuses...)
-	} else if filter.Status != "" {
-		query.Status(filter.Status)
-	}
-	if len(filter.AdvancedFilters) > 0 {
-		if data, err := json.Marshal(filter.AdvancedFilters); err == nil {
-			query.Set("advanced_filters", string(data))
-		}
-	}
-
-	return query
+	return loadedTemplates, nil
 }
 
 // Get 获取已加载的 templates
@@ -267,139 +251,11 @@ func (e *Engine) Reload(ctx context.Context) error {
 	return err
 }
 
-// ========================================
-// 筛选功能
-// ========================================
-
-// Filter 使用筛选器筛选POC
-func (e *Engine) Filter(filter *POCFilter) []*templates.Template {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if filter == nil {
-		return e.templates
-	}
-	return filter.Apply(e.templates)
-}
-
-// LoadWithFilter 加载并筛选POC
-func (e *Engine) LoadWithFilter(ctx context.Context, filter *POCFilter) ([]*templates.Template, error) {
-	if filter == nil {
-		return e.Load(ctx)
-	}
-
-	e.mu.RLock()
-	loaded := e.templates != nil
-	e.mu.RUnlock()
-
-	if loaded {
-		e.mu.RLock()
-		defer e.mu.RUnlock()
-		return filter.Apply(e.templates), nil
-	}
-
-	var allTemplates []*templates.Template
-	if e.config.IsRemoteEnabled() {
-		remoteTemplates, err := e.loadRemoteTemplates(ctx, filter)
-		if err != nil {
-			return nil, err
-		}
-		allTemplates = append(allTemplates, remoteTemplates...)
-	}
-
-	if e.config.IsLocalEnabled() {
-		localTemplates, err := e.loadFromLocal()
-		if err != nil {
-			if len(allTemplates) > 0 {
-				fmt.Printf("Warning: failed to load local templates: %v\n", err)
-			} else {
-				return nil, err
-			}
-		} else {
-			allTemplates = append(allTemplates, filter.Apply(localTemplates)...)
-		}
-	}
-
-	compiledTemplates := e.compileTemplates(allTemplates)
-	return compiledTemplates, nil
-}
-
 // Close 关闭引擎
 func (e *Engine) Close() error {
 	if e.client != nil {
 		return e.client.Close()
 	}
-	return nil
-}
-
-// ========================================
-// 文件持久化 API
-// ========================================
-
-// SaveToFile 将已加载的 templates 保存到文件（原子写入）
-func (e *Engine) SaveToFile(path string) error {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-
-	if len(e.templates) == 0 {
-		return fmt.Errorf("no templates loaded to save")
-	}
-
-	tmpPath := path + ".tmp"
-	file, err := os.Create(tmpPath)
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-
-	encoder := json.NewEncoder(file)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(e.templates); err != nil {
-		_ = file.Close()
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to encode templates: %w", err)
-	}
-
-	if err := file.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to close temp file: %w", err)
-	}
-
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("failed to rename temp file: %w", err)
-	}
-
-	return nil
-}
-
-// LoadFromFile 从文件加载 templates 并编译
-func (e *Engine) LoadFromFile(path string) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	file, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
-
-	var rawTemplates []*templates.Template
-	if err := json.NewDecoder(file).Decode(&rawTemplates); err != nil {
-		return fmt.Errorf("failed to decode templates: %w", err)
-	}
-
-	// 编译加载的 templates
-	compiledTemplates := e.compileTemplates(rawTemplates)
-
-	e.templates = compiledTemplates
-
-	// 构建索引
-	e.templateIndex = make(map[string]*templates.Template)
-	for _, t := range compiledTemplates {
-		if t.Id != "" {
-			e.templateIndex[t.Id] = t
-		}
-	}
-
 	return nil
 }
 
@@ -427,107 +283,4 @@ func (e *Engine) compileTemplates(allTemplates []*templates.Template) []*templat
 		compiledTemplates = append(compiledTemplates, t)
 	}
 	return compiledTemplates
-}
-
-// LoadByNames 按名称加载并编译 POC
-// 会先检查缓存，缓存未命中则从远程加载
-func (e *Engine) LoadByNames(ctx context.Context, names []string) ([]*templates.Template, error) {
-	if len(names) == 0 {
-		return nil, nil
-	}
-
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	// 初始化索引（如果为空）
-	if e.templateIndex == nil {
-		e.templateIndex = make(map[string]*templates.Template)
-	}
-
-	var result []*templates.Template
-	var missing []string
-
-	// 检查缓存
-	for _, name := range names {
-		if t, ok := e.templateIndex[name]; ok {
-			result = append(result, t)
-		} else {
-			missing = append(missing, name)
-		}
-	}
-
-	// 如果全部命中缓存，直接返回
-	if len(missing) == 0 {
-		return result, nil
-	}
-
-	// 从远程加载缺失的 POC
-	if e.client == nil {
-		return result, fmt.Errorf("remote client not configured, cannot load POCs: %v", missing)
-	}
-
-	responses, err := e.client.ExportPOCsByNames(ctx, missing)
-	if err != nil {
-		return result, fmt.Errorf("failed to fetch POCs by names: %w", err)
-	}
-
-	// 编译并添加到缓存
-	options := e.compileOptions()
-	for _, resp := range responses {
-		t := resp.GetTemplate()
-		if err := t.Compile(options); err != nil {
-			continue
-		}
-		result = append(result, t)
-
-		// 添加到缓存
-		e.templates = append(e.templates, t)
-		if t.Id != "" {
-			e.templateIndex[t.Id] = t
-		}
-	}
-
-	return result, nil
-}
-
-// GetByName 从缓存获取或远程加载单个 POC
-func (e *Engine) GetByName(ctx context.Context, name string) (*templates.Template, error) {
-	e.mu.RLock()
-	if t, ok := e.templateIndex[name]; ok {
-		e.mu.RUnlock()
-		return t, nil
-	}
-	e.mu.RUnlock()
-
-	// 缓存未命中，远程加载
-	loaded, err := e.LoadByNames(ctx, []string{name})
-	if err != nil {
-		return nil, err
-	}
-	if len(loaded) == 0 {
-		return nil, fmt.Errorf("POC not found: %s", name)
-	}
-
-	return loaded[0], nil
-}
-
-// GetFromCache 从缓存获取 POC（不触发远程加载）
-func (e *Engine) GetFromCache(name string) *templates.Template {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if e.templateIndex == nil {
-		return nil
-	}
-	return e.templateIndex[name]
-}
-
-// HasInCache 检查 POC 是否在缓存中
-func (e *Engine) HasInCache(name string) bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	if e.templateIndex == nil {
-		return false
-	}
-	_, ok := e.templateIndex[name]
-	return ok
 }

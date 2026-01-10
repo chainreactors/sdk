@@ -14,11 +14,11 @@ import (
 
 // ExportFilter 通用导出筛选选项
 type ExportFilter struct {
-	// 名称/关键词筛选（模糊匹配）
-	Keyword string
-
 	// 标签筛选（多个标签为 OR 关系）
 	Tags []string
+
+	// 来源筛选（多个来源为 OR 关系）
+	Sources []string
 
 	// 时间范围筛选
 	CreatedAfter  *time.Time // 创建时间起始
@@ -26,10 +26,8 @@ type ExportFilter struct {
 	UpdatedAfter  *time.Time // 更新时间起始
 	UpdatedBefore *time.Time // 更新时间截止
 
-	// 分页
-	Page     int // 页码（从1开始）
-	PageSize int // 每页数量
-	Limit    int // 最大返回数量（不分页时使用）
+	// 数量限制
+	Limit int // 最大返回数量（映射为 page=1&page_size=limit）
 }
 
 // NewExportFilter 创建空的筛选器
@@ -37,15 +35,15 @@ func NewExportFilter() *ExportFilter {
 	return &ExportFilter{}
 }
 
-// WithKeyword 设置关键词筛选
-func (f *ExportFilter) WithKeyword(keyword string) *ExportFilter {
-	f.Keyword = keyword
-	return f
-}
-
 // WithTags 设置标签筛选
 func (f *ExportFilter) WithTags(tags ...string) *ExportFilter {
 	f.Tags = tags
+	return f
+}
+
+// WithSources 设置来源筛选
+func (f *ExportFilter) WithSources(sources ...string) *ExportFilter {
+	f.Sources = sources
 	return f
 }
 
@@ -73,13 +71,6 @@ func (f *ExportFilter) WithUpdatedBefore(t time.Time) *ExportFilter {
 	return f
 }
 
-// WithPagination 设置分页
-func (f *ExportFilter) WithPagination(page, pageSize int) *ExportFilter {
-	f.Page = page
-	f.PageSize = pageSize
-	return f
-}
-
 // WithLimit 设置数量限制
 func (f *ExportFilter) WithLimit(limit int) *ExportFilter {
 	f.Limit = limit
@@ -93,8 +84,8 @@ func (f *ExportFilter) WithLimit(limit int) *ExportFilter {
 // FingerprintResponse Cyberhub Export API 返回的指纹数据
 // 直接嵌入 fingers.Finger，完全匹配后端的 ExportFinger 结构
 type FingerprintResponse struct {
-	*fingers.Finger `json:",inline"` // 嵌入所有 Finger 字段
-	Alias           *alias.Alias `json:"alias,omitempty"` // Alias 数据
+	*fingers.Finger `json:",inline" yaml:",inline"` // 嵌入所有 Finger 字段
+	Alias           *alias.Alias     `json:"alias,omitempty" yaml:"alias,omitempty"` // Alias 数据
 }
 
 // FingerprintListResponse Cyberhub Export API 列表响应

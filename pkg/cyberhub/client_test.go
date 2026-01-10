@@ -37,24 +37,26 @@ func TestApplyFilterParams_DedupTags(t *testing.T) {
 	}
 }
 
-func TestApplyFilterParams_PaginationOverridesLimit(t *testing.T) {
+func TestApplyFilterParams_DedupSources(t *testing.T) {
 	params := url.Values{}
+	params.Add("sources", "alpha")
 	filter := &ExportFilter{
-		Page:     2,
-		PageSize: 50,
-		Limit:    10,
+		Sources: []string{"alpha", "beta", ""},
 	}
 
 	applyFilterParams(params, filter)
 
-	if params.Get("page") != "2" {
-		t.Fatalf("expected page=2, got %q", params.Get("page"))
+	got := params["sources"]
+	if len(got) != 2 {
+		t.Fatalf("expected 2 sources, got %d: %v", len(got), got)
 	}
-	if params.Get("page_size") != "50" {
-		t.Fatalf("expected page_size=50, got %q", params.Get("page_size"))
+
+	seen := map[string]int{}
+	for _, source := range got {
+		seen[source]++
 	}
-	if params.Get("limit") != "" {
-		t.Fatalf("expected limit to be empty when pagination is set, got %q", params.Get("limit"))
+	if seen["alpha"] != 1 || seen["beta"] != 1 {
+		t.Fatalf("unexpected sources after dedup: %v", got)
 	}
 }
 
@@ -66,7 +68,10 @@ func TestApplyFilterParams_LimitOnly(t *testing.T) {
 
 	applyFilterParams(params, filter)
 
-	if params.Get("limit") != "10" {
-		t.Fatalf("expected limit=10, got %q", params.Get("limit"))
+	if params.Get("page") != "1" {
+		t.Fatalf("expected page=1, got %q", params.Get("page"))
+	}
+	if params.Get("page_size") != "10" {
+		t.Fatalf("expected page_size=10, got %q", params.Get("page_size"))
 	}
 }
