@@ -23,9 +23,9 @@ var (
 	userAgent  = flag.String("ua", "", "Custom User-Agent")
 
 	// HTTP 选项
-	method     = flag.String("method", "GET", "HTTP method (GET/POST/HEAD)")
-	headers    = flag.String("headers", "", "Custom headers (format: 'Key1:Value1,Key2:Value2')")
-	proxy      = flag.String("proxy", "", "Proxy URL (e.g., http://127.0.0.1:8080)")
+	method      = flag.String("method", "GET", "HTTP method (GET/POST/HEAD)")
+	headers     = flag.String("headers", "", "Custom headers (format: 'Key1:Value1,Key2:Value2')")
+	proxy       = flag.String("proxy", "", "Proxy URL (e.g., http://127.0.0.1:8080)")
 	followRedir = flag.Bool("follow", true, "Follow redirects")
 
 	// 过滤选项
@@ -95,11 +95,13 @@ func main() {
 	}
 
 	// 3. 配置扫描参数
-	config := spray.NewConfig().
+	sprayCtx := spray.NewContext().
 		SetThreads(*threads).
-		SetTimeout(*timeout)
-
-	sprayCtx := spray.NewContext().WithConfig(config)
+		SetTimeout(*timeout).
+		SetMethod(*method)
+	if *headers != "" {
+		sprayCtx.SetHeaders(strings.Split(*headers, ","))
+	}
 
 	// 4. 执行扫描
 	if !*quiet && !*jsonOut {

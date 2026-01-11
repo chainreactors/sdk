@@ -1,9 +1,23 @@
 package fingers
 
 import (
+	"context"
 	"fmt"
-	"time"
+
+	"github.com/chainreactors/fingers/alias"
+	fingersEngine "github.com/chainreactors/fingers/fingers"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
 )
+
+// NewConfig 创建默认配置
+func NewConfig() *Config {
+	base := cyberhub.NewConfig()
+	return &Config{
+		Config:        *base,
+		EnableEngines: nil,
+		FullFingers:   FullFingers{},
+	}
+}
 
 // ========================================
 // Config 配置
@@ -11,31 +25,11 @@ import (
 
 // Config Fingers SDK 配置
 type Config struct {
-	// Cyberhub 配置（可选）
-	CyberhubURL string // Cyberhub API 地址，为空则仅使用本地指纹
-	APIKey      string // API Key 认证
+	cyberhub.Config
 
 	// 引擎配置
-	EnableEngines []string // 启用的引擎列表，nil 表示使用默认引擎
-
-	// 过滤配置
-	Source string // 指纹来源过滤（如 "github", "local" 等）
-
-	// 请求配置
-	Timeout    time.Duration // HTTP 请求超时时间
-	MaxRetries int           // 最大重试次数
-}
-
-// NewConfig 创建默认配置
-func NewConfig() *Config {
-	return &Config{
-		CyberhubURL:   "",
-		APIKey:        "",
-		EnableEngines: nil, // 使用默认引擎
-		Source:        "",  // 不过滤来源
-		Timeout:       10 * time.Second,
-		MaxRetries:    3,
-	}
+	EnableEngines []string
+	FullFingers   FullFingers
 }
 
 // Validate 验证配置
@@ -43,6 +37,9 @@ func (c *Config) Validate() error {
 	// 如果配置了 Cyberhub URL，必须提供 API Key
 	if c.CyberhubURL != "" && c.APIKey == "" {
 		return fmt.Errorf("api_key is required when cyberhub_url is set")
+	}
+	if err := c.Config.Validate(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -52,44 +49,174 @@ func (c *Config) IsRemoteEnabled() bool {
 	return c.CyberhubURL != "" && c.APIKey != ""
 }
 
-// IsLocalEnabled 是否启用本地加载
-func (c *Config) IsLocalEnabled() bool {
-	// 本地加载始终可用
-	return true
-}
-
-// SetCyberhubURL 设置 Cyberhub URL
-func (c *Config) SetCyberhubURL(url string) *Config {
-	c.CyberhubURL = url
-	return c
-}
-
-// SetAPIKey 设置 API Key
-func (c *Config) SetAPIKey(key string) *Config {
-	c.APIKey = key
-	return c
-}
-
 // SetEnableEngines 设置启用的引擎列表
 func (c *Config) SetEnableEngines(engines []string) *Config {
 	c.EnableEngines = engines
 	return c
 }
 
-// SetSource 设置指纹来源过滤
-func (c *Config) SetSource(source string) *Config {
-	c.Source = source
+// WithCyberhub 设置远程加载配置（不立即拉取）
+func (c *Config) WithCyberhub(url, apiKey string) *Config {
+	c.CyberhubURL = url
+	c.APIKey = apiKey
+	c.Filename = ""
+	c.FullFingers = FullFingers{}
 	return c
 }
 
-// SetTimeout 设置请求超时时间
-func (c *Config) SetTimeout(timeout time.Duration) *Config {
-	c.Timeout = timeout
+// WithLocalFile 设置本地文件加载（不立即读取）
+func (c *Config) WithLocalFile(filename string) *Config {
+	c.Filename = filename
+	c.CyberhubURL = ""
+	c.APIKey = ""
+	c.FullFingers = FullFingers{}
 	return c
 }
 
-// SetMaxRetries 设置最大重试次数
-func (c *Config) SetMaxRetries(maxRetries int) *Config {
-	c.MaxRetries = maxRetries
+// WithFingers 设置指纹数据
+func (c *Config) WithFingers(fingers fingersEngine.Fingers) *Config {
+	aliases := c.FullFingers.Aliases()
+	c.FullFingers = (FullFingers{}).Merge(fingers, aliases)
 	return c
+}
+
+// WithAliases 设置别名数据
+func (c *Config) WithAliases(aliases []*alias.Alias) *Config {
+	fingers := c.FullFingers.Fingers()
+	c.FullFingers = (FullFingers{}).Merge(fingers, aliases)
+	return c
+}
+
+// WithFilter filters current FullFingers using predicate.
+func (c *Config) WithFilter(predicate func(*FullFinger) bool) *Config {
+	if c == nil {
+		return c
+	}
+	c.FullFingers = c.FullFingers.Filter(predicate)
+	return c
+}
+
+// Load 执行数据加载
+func (c *Config) Load(ctx context.Context) error {
+	if c == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if c.FullFingers.Len() > 0 {
+		return nil
+	}
+	if c.Filename != "" {
+		fingers, err := loadFingersFromPath(c.Filename)
+		if err != nil {
+			return err
+		}
+		c.FullFingers = (FullFingers{}).Merge(fingers, nil)
+		return nil
+	}
+	if c.IsRemoteEnabled() {
+		client := cyberhub.NewClient(c.CyberhubURL, c.APIKey, c.Timeout)
+		fingersData, aliases, err := client.ExportFingers(ctx, "", c.ExportFilter)
+		if err != nil {
+			return err
+		}
+		c.FullFingers = (FullFingers{}).Merge(fingersData, aliases)
+		return nil
+	}
+	return fmt.Errorf("no data source configured")
+}
+
+type FullFinger struct {
+	Finger *fingersEngine.Finger
+	Alias  *alias.Alias
+}
+
+type FullFingers struct {
+	Items map[string]*FullFinger
+}
+
+// Fingers returns finger list from FullFingers.
+func (f FullFingers) Fingers() fingersEngine.Fingers {
+	if len(f.Items) == 0 {
+		return nil
+	}
+	fingers := make(fingersEngine.Fingers, 0, len(f.Items))
+	for _, item := range f.Items {
+		if item == nil || item.Finger == nil {
+			continue
+		}
+		fingers = append(fingers, item.Finger)
+	}
+	return fingers
+}
+
+// Aliases returns alias list from FullFingers.
+func (f FullFingers) Aliases() []*alias.Alias {
+	if len(f.Items) == 0 {
+		return nil
+	}
+	aliases := make([]*alias.Alias, 0, len(f.Items))
+	for _, item := range f.Items {
+		if item == nil || item.Alias == nil {
+			continue
+		}
+		aliases = append(aliases, item.Alias)
+	}
+	return aliases
+}
+
+// Len returns item count.
+func (f FullFingers) Len() int {
+	return len(f.Items)
+}
+
+// Append adds a single FullFinger.
+func (f FullFingers) Append(item *FullFinger) FullFingers {
+	if item == nil {
+		return f
+	}
+	if f.Items == nil {
+		f.Items = make(map[string]*FullFinger)
+	}
+	if item.Finger != nil && item.Finger.Name != "" {
+		f.Items[item.Finger.Name] = item
+		return f
+	}
+	return f
+}
+
+// Merge appends fingers and aliases into FullFingers.
+func (f FullFingers) Merge(fingers fingersEngine.Fingers, aliases []*alias.Alias) FullFingers {
+	if len(fingers) == 0 && len(aliases) == 0 {
+		return f
+	}
+	if f.Items == nil {
+		f.Items = make(map[string]*FullFinger)
+	}
+	for _, finger := range fingers {
+		f = f.Append(&FullFinger{Finger: finger})
+	}
+	for _, aliasItem := range aliases {
+		if aliasItem == nil || aliasItem.Name == "" {
+			continue
+		}
+		if item, ok := f.Items[aliasItem.Name]; ok && item != nil {
+			item.Alias = aliasItem
+		}
+	}
+	return f
+}
+
+// Filter returns a filtered copy of FullFingers using predicate.
+func (f FullFingers) Filter(predicate func(*FullFinger) bool) FullFingers {
+	if predicate == nil || len(f.Items) == 0 {
+		return f
+	}
+	filtered := FullFingers{
+		Items: make(map[string]*FullFinger),
+	}
+	for key, item := range f.Items {
+		if predicate(item) {
+			filtered.Items[key] = item
+		}
+	}
+	return filtered
 }

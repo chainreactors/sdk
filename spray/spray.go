@@ -1,13 +1,11 @@
 package spray
 
 import (
-	"context"
 	"fmt"
-	"time"
 
-	fingersLib "github.com/chainreactors/fingers"
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/parsers"
+	sdkfingers "github.com/chainreactors/sdk/fingers"
 	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/spray/core"
 	"github.com/chainreactors/spray/pkg"
@@ -19,32 +17,25 @@ import (
 
 // SprayEngine Spray 引擎实现
 type SprayEngine struct {
-	opt           *core.Option
 	inited        bool
-	fingersEngine *fingersLib.Engine // 可选的自定义 fingers 引擎
+	fingersEngine *sdkfingers.Engine // 可选的自定义 fingers 引擎
 }
 
 // NewSprayEngine 创建 Spray 引擎
-func NewSprayEngine(opt *core.Option) *SprayEngine {
-	if opt == nil {
-		opt = DefaultConfig()
+func NewSprayEngine(config *Config) *SprayEngine {
+	if config == nil {
+		config = NewConfig()
 	}
+
 	return &SprayEngine{
-		opt:    opt,
-		inited: false,
+		inited:        false,
+		fingersEngine: config.FingersEngine,
 	}
 }
 
-// NewSprayEngineWithFingers 创建 Spray 引擎并设置自定义 fingers 引擎
-func NewSprayEngineWithFingers(opt *core.Option, fingersEngine *fingersLib.Engine) *SprayEngine {
-	engine := NewSprayEngine(opt)
-	engine.fingersEngine = fingersEngine
-	return engine
-}
-
-// NewEngine 创建 Spray 引擎 (兼容旧 API)
-func NewEngine(opt *core.Option) *SprayEngine {
-	return NewSprayEngine(opt)
+// NewEngine 创建 Spray 引擎
+func NewEngine(config *Config) *SprayEngine {
+	return NewSprayEngine(config)
 }
 
 // DefaultConfig 返回默认配置
@@ -104,11 +95,15 @@ func (e *SprayEngine) Init() error {
 
 	// 如果提供了自定义 fingers 引擎，直接使用
 	if e.fingersEngine != nil {
-		pkg.FingerEngine = e.fingersEngine
-		logs.Log.Infof("using custom fingers engine: %s", e.fingersEngine.String())
+		libEngine := e.fingersEngine.Get()
+		if libEngine == nil {
+			return fmt.Errorf("fingers engine is nil")
+		}
+		pkg.FingerEngine = libEngine
+		logs.Log.Infof("using custom fingers engine: %s", libEngine.String())
 
 		// 提取 ActivePath (spray 需要)
-		for _, f := range e.fingersEngine.Fingers().HTTPFingers {
+		for _, f := range libEngine.Fingers().HTTPFingers {
 			for _, rule := range f.Rules {
 				if rule.SendDataStr != "" {
 					pkg.ActivePath = append(pkg.ActivePath, rule.SendDataStr)
@@ -116,14 +111,6 @@ func (e *SprayEngine) Init() error {
 			}
 		}
 
-		// FingerPrintHub 可能为 nil
-		if hub := e.fingersEngine.FingerPrintHub(); hub != nil {
-			for _, f := range hub.FingerPrints {
-				if f.Path != "/" {
-					pkg.ActivePath = append(pkg.ActivePath, f.Path)
-				}
-			}
-		}
 	} else {
 		// 否则使用默认加载方式
 		if err := pkg.LoadFingers(); err != nil {
@@ -150,178 +137,28 @@ func (e *SprayEngine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result
 		return nil, err
 	}
 
+	var runCtx *Context
+	if ctx == nil {
+		runCtx = NewContext()
+	} else {
+		var ok bool
+		runCtx, ok = ctx.(*Context)
+		if !ok {
+			return nil, fmt.Errorf("unsupported context type: %T", ctx)
+		}
+	}
+
 	switch t := task.(type) {
 	case *CheckTask:
-		return e.executeCheck(ctx, t)
+		return e.executeCheck(runCtx, t)
 	case *BruteTask:
-		return e.executeBrute(ctx, t)
+		return e.executeBrute(runCtx, t)
 	default:
 		return nil, fmt.Errorf("unsupported task type: %s", task.Type())
 	}
 }
 
 func (e *SprayEngine) Close() error {
-	return nil
-}
-
-// ========================================
-// Context 实现
-// ========================================
-
-// Context Spray 上下文
-type Context struct {
-	ctx    context.Context
-	config *Config
-}
-
-// NewContext 创建 Spray 上下文
-func NewContext() *Context {
-	return &Context{
-		ctx:    context.Background(),
-		config: NewConfig(),
-	}
-}
-
-func (c *Context) Context() context.Context {
-	return c.ctx
-}
-
-func (c *Context) Config() sdk.Config {
-	return c.config
-}
-
-func (c *Context) WithConfig(config sdk.Config) sdk.Context {
-	return &Context{
-		ctx:    c.ctx,
-		config: config.(*Config),
-	}
-}
-
-func (c *Context) WithTimeout(timeout time.Duration) sdk.Context {
-	ctx, _ := context.WithTimeout(c.ctx, timeout)
-	return &Context{
-		ctx:    ctx,
-		config: c.config,
-	}
-}
-
-func (c *Context) WithCancel() (sdk.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(c.ctx)
-	return &Context{
-		ctx:    ctx,
-		config: c.config,
-	}, cancel
-}
-
-// ========================================
-// Config 实现
-// ========================================
-
-// Config Spray 配置
-type Config struct {
-	Opt *core.Option
-}
-
-// NewConfig 创建默认配置
-func NewConfig() *Config {
-	return &Config{
-		Opt: DefaultConfig(),
-	}
-}
-
-func (c *Config) Validate() error {
-	if c.Opt.Threads <= 0 {
-		return fmt.Errorf("threads must be positive")
-	}
-	return nil
-}
-
-// SetThreads 设置线程数
-func (c *Config) SetThreads(threads int) *Config {
-	c.Opt.Threads = threads
-	return c
-}
-
-// SetTimeout 设置超时时间（秒）
-func (c *Config) SetTimeout(timeout int) *Config {
-	c.Opt.Timeout = timeout
-	return c
-}
-
-// SetMethod 设置 HTTP 方法
-func (c *Config) SetMethod(method string) *Config {
-	c.Opt.Method = method
-	return c
-}
-
-// SetHeaders 设置自定义请求头
-func (c *Config) SetHeaders(headers []string) *Config {
-	c.Opt.Headers = headers
-	return c
-}
-
-// SetFilter 设置过滤规则
-func (c *Config) SetFilter(filter string) *Config {
-	c.Opt.Filter = filter
-	return c
-}
-
-// SetMatch 设置匹配规则
-func (c *Config) SetMatch(match string) *Config {
-	c.Opt.Match = match
-	return c
-}
-
-// ========================================
-// Task 实现
-// ========================================
-
-// CheckTask URL 检测任务
-type CheckTask struct {
-	URLs []string
-}
-
-// NewCheckTask 创建 URL 检测任务
-func NewCheckTask(urls []string) *CheckTask {
-	return &CheckTask{URLs: urls}
-}
-
-func (t *CheckTask) Type() string {
-	return "check"
-}
-
-func (t *CheckTask) Validate() error {
-	if len(t.URLs) == 0 {
-		return fmt.Errorf("URLs cannot be empty")
-	}
-	return nil
-}
-
-// BruteTask 暴力破解任务
-type BruteTask struct {
-	BaseURL  string
-	Wordlist []string
-}
-
-// NewBruteTask 创建暴力破解任务
-func NewBruteTask(baseURL string, wordlist []string) *BruteTask {
-	return &BruteTask{
-		BaseURL:  baseURL,
-		Wordlist: wordlist,
-	}
-}
-
-func (t *BruteTask) Type() string {
-	return "brute"
-}
-
-func (t *BruteTask) Validate() error {
-	if t.BaseURL == "" {
-		return fmt.Errorf("BaseURL cannot be empty")
-	}
-	if len(t.Wordlist) == 0 {
-		return fmt.Errorf("Wordlist cannot be empty")
-	}
 	return nil
 }
 
@@ -357,11 +194,17 @@ func (r *Result) SprayResult() *parsers.SprayResult {
 // 内部实现
 // ========================================
 
-func (e *SprayEngine) executeCheck(ctx sdk.Context, task *CheckTask) (<-chan sdk.Result, error) {
-	config := ctx.Config().(*Config)
+func (e *SprayEngine) executeCheck(ctx *Context, task *CheckTask) (<-chan sdk.Result, error) {
+	if ctx == nil {
+		ctx = NewContext()
+	}
+	runCtx := ctx
+	if runCtx.opt == nil {
+		runCtx.opt = DefaultConfig()
+	}
 
 	// 克隆配置
-	opt := *config.Opt
+	opt := *runCtx.opt
 	opt.URL = task.URLs
 
 	// 准备配置
@@ -409,11 +252,17 @@ func (e *SprayEngine) executeCheck(ctx sdk.Context, task *CheckTask) (<-chan sdk
 	return resultCh, nil
 }
 
-func (e *SprayEngine) executeBrute(ctx sdk.Context, task *BruteTask) (<-chan sdk.Result, error) {
-	config := ctx.Config().(*Config)
+func (e *SprayEngine) executeBrute(ctx *Context, task *BruteTask) (<-chan sdk.Result, error) {
+	if ctx == nil {
+		ctx = NewContext()
+	}
+	runCtx := ctx
+	if runCtx.opt == nil {
+		runCtx.opt = DefaultConfig()
+	}
 
 	// 克隆配置
-	opt := *config.Opt
+	opt := *runCtx.opt
 	opt.URL = []string{task.BaseURL}
 
 	// 准备配置
@@ -461,6 +310,130 @@ func (e *SprayEngine) executeBrute(ctx sdk.Context, task *BruteTask) (<-chan sdk
 	}()
 
 	return resultCh, nil
+}
+
+// ========================================
+// 便捷 API（保持原有使用习惯）
+// ========================================
+
+// Check URL 批量检测（同步）
+func (e *SprayEngine) Check(ctx *Context, urls []string) ([]*parsers.SprayResult, error) {
+	if !e.inited {
+		if err := e.Init(); err != nil {
+			return nil, err
+		}
+	}
+
+	if ctx == nil {
+		ctx = NewContext()
+	}
+
+	task := NewCheckTask(urls)
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
+	var sprayResults []*parsers.SprayResult
+	for r := range resultCh {
+		if r.Success() {
+			sprayResults = append(sprayResults, r.(*Result).SprayResult())
+		}
+	}
+
+	return sprayResults, nil
+}
+
+// CheckStream URL 批量检测（流式）
+func (e *SprayEngine) CheckStream(ctx *Context, urls []string) (<-chan *parsers.SprayResult, error) {
+	if !e.inited {
+		if err := e.Init(); err != nil {
+			return nil, err
+		}
+	}
+
+	if ctx == nil {
+		ctx = NewContext()
+	}
+
+	task := NewCheckTask(urls)
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为 SprayResult channel
+	sprayResultCh := make(chan *parsers.SprayResult, 100)
+	go func() {
+		defer close(sprayResultCh)
+		for result := range resultCh {
+			if result.Success() {
+				sprayResultCh <- result.(*Result).SprayResult()
+			}
+		}
+	}()
+
+	return sprayResultCh, nil
+}
+
+// Brute 暴力破解（同步）
+func (e *SprayEngine) Brute(ctx *Context, baseURL string, wordlist []string) ([]*parsers.SprayResult, error) {
+	if !e.inited {
+		if err := e.Init(); err != nil {
+			return nil, err
+		}
+	}
+
+	if ctx == nil {
+		ctx = NewContext()
+	}
+
+	task := NewBruteTask(baseURL, wordlist)
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
+	var sprayResults []*parsers.SprayResult
+	for r := range resultCh {
+		if r.Success() {
+			sprayResults = append(sprayResults, r.(*Result).SprayResult())
+		}
+	}
+
+	return sprayResults, nil
+}
+
+// BruteStream 暴力破解（流式）
+func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []string) (<-chan *parsers.SprayResult, error) {
+	if !e.inited {
+		if err := e.Init(); err != nil {
+			return nil, err
+		}
+	}
+
+	if ctx == nil {
+		ctx = NewContext()
+	}
+
+	task := NewBruteTask(baseURL, wordlist)
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为 SprayResult channel
+	sprayResultCh := make(chan *parsers.SprayResult, 100)
+	go func() {
+		defer close(sprayResultCh)
+		for result := range resultCh {
+			if result.Success() {
+				sprayResultCh <- result.(*Result).SprayResult()
+			}
+		}
+	}()
+
+	return sprayResultCh, nil
 }
 
 func (e *SprayEngine) closeRunner(runner *core.Runner) {

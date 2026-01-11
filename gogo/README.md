@@ -19,13 +19,13 @@ SDK 由两部分组成:
 import "github.com/chainreactors/sdk/gogo"
 
 // 1. 创建 GogoEngine
-engine := gogo.NewGogoEngine(nil)
+engine := gogo.NewEngine(nil)
 
 // 2. 初始化（加载指纹库等）
 engine.Init()
 
 // 3. 使用
-ctx := context.Background()
+ctx := gogo.NewContext()
 
 // 单目标扫描
 result := engine.ScanOne(ctx, "192.168.1.1", "80")
@@ -49,12 +49,12 @@ for _, result := range results {
 ### 使用默认配置
 
 ```go
-engine := gogo.NewGogoEngine(nil)
+engine := gogo.NewEngine(nil)
 ```
 
 默认配置针对 SDK 场景优化：1000 线程。
 
-### 自定义配置
+### 运行时配置
 
 ```go
 import "github.com/chainreactors/gogo/v2/pkg"
@@ -64,13 +64,14 @@ opt.VersionLevel = 2      // 深度指纹识别
 opt.Exploit = "auto"      // 启用漏洞检测
 opt.Delay = 5             // 超时时间（秒）
 
-engine := gogo.NewGogoEngine(opt)
+ctx := gogo.NewContext().SetOption(opt)
+engine := gogo.NewEngine(nil)
 ```
 
 ### 运行时修改
 
 ```go
-engine.SetThreads(500)  // 设置线程数
+ctx.SetThreads(500)  // 设置线程数
 ```
 
 ## API 参考
@@ -79,16 +80,13 @@ engine.SetThreads(500)  // 设置线程数
 
 ```go
 // 创建实例
-engine := gogo.NewGogoEngine(opt)  // opt 为 nil 时使用默认配置
-
-// 兼容旧 API
-engine := gogo.NewEngine(opt)
+engine := gogo.NewEngine(nil)  // nil 时使用默认配置
 
 // 初始化（必须调用）
 engine.Init()
 
 // 设置参数
-engine.SetThreads(threads)
+ctx.SetThreads(threads)
 ```
 
 ### 核心 API
@@ -174,7 +172,6 @@ GoGo SDK 实现了 Chainreactors 统一 SDK 接口，可以与其他 SDK 多态�
 ```go
 import (
     rootsdk "github.com/chainreactors/sdk"
-    sdk "github.com/chainreactors/sdk/sdk"
     "github.com/chainreactors/sdk/gogo"
 )
 
@@ -198,11 +195,10 @@ for result := range resultCh {
 ### 基础扫描
 
 ```go
-engine := gogo.NewGogoEngine(nil)
+engine := gogo.NewEngine(nil)
 engine.Init()
-engine.SetThreads(500)
 
-ctx := context.Background()
+ctx := gogo.NewContext().SetThreads(500)
 
 // 扫描单个目标
 result := engine.ScanOne(ctx, "192.168.1.1", "80")
@@ -212,10 +208,10 @@ fmt.Printf("%s:%s - %s\n", result.Ip, result.Port, result.Status)
 ### 流式扫描（推荐大规模扫描）
 
 ```go
-engine := gogo.NewGogoEngine(nil)
+engine := gogo.NewEngine(nil)
 engine.Init()
 
-ctx := context.Background()
+ctx := gogo.NewContext()
 
 resultCh, _ := engine.ScanStream(ctx, "192.168.1.0/24", "top100")
 for result := range resultCh {
@@ -227,11 +223,13 @@ for result := range resultCh {
 ### 带超时的扫描
 
 ```go
-engine := gogo.NewGogoEngine(nil)
+engine := gogo.NewEngine(nil)
 engine.Init()
 
-ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 defer cancel()
+
+ctx := gogo.NewContext().WithContext(timeoutCtx)
 
 results, err := engine.Scan(ctx, "192.168.1.0/24", "top1000")
 if err != nil {
@@ -252,10 +250,9 @@ opt := pkg.DefaultRunnerOption
 opt.VersionLevel = 3      // 最深度的指纹识别
 opt.Exploit = "auto"      // 自动漏洞检测
 
-engine := gogo.NewGogoEngine(opt)
+ctx := gogo.NewContext().SetOption(opt)
+engine := gogo.NewEngine(nil)
 engine.Init()
-
-ctx := context.Background()
 
 results, _ := engine.Scan(ctx, "192.168.1.0/24", "top100")
 for _, result := range results {
@@ -295,7 +292,7 @@ type GOGOResult struct {
 ## 常见问题
 
 ### Q: 如何加快扫描速度？
-A: 增加线程数 `engine.SetThreads(2000)`，但注意网络带宽限制
+A: 增加线程数 `ctx.SetThreads(2000)`，但注意网络带宽限制
 
 ### Q: 如何减少误报？
 A: 提高指纹识别级别 `opt.VersionLevel = 2` 或 `3`

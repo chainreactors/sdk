@@ -1,0 +1,179 @@
+package spray
+
+import (
+	"context"
+	"fmt"
+
+	sdkfingers "github.com/chainreactors/sdk/fingers"
+	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/spray/core"
+)
+
+// ========================================
+// Context 实现
+// ========================================
+
+// Context Spray 上下文
+type Context struct {
+	ctx context.Context
+	opt *core.Option
+}
+
+var _ sdk.Context = (*Context)(nil)
+
+// NewContext 创建 Spray 上下文
+func NewContext() *Context {
+	return &Context{
+		ctx: context.Background(),
+		opt: DefaultConfig(),
+	}
+}
+
+// WithContext 基于给定的 context.Context 复制 Context
+func (c *Context) WithContext(ctx context.Context) *Context {
+	return &Context{
+		ctx: ctx,
+		opt: c.opt,
+	}
+}
+
+func (c *Context) Context() context.Context {
+	return c.ctx
+}
+
+// SetThreads 设置线程数
+func (c *Context) SetThreads(threads int) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.Threads = threads
+	return c
+}
+
+// SetTimeout 设置超时时间（秒）
+func (c *Context) SetTimeout(timeout int) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.Timeout = timeout
+	return c
+}
+
+// SetMethod 设置 HTTP 方法
+func (c *Context) SetMethod(method string) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.Method = method
+	return c
+}
+
+// SetHeaders 设置自定义请求头
+func (c *Context) SetHeaders(headers []string) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.Headers = headers
+	return c
+}
+
+// SetFilter 设置过滤规则
+func (c *Context) SetFilter(filter string) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.Filter = filter
+	return c
+}
+
+// SetMatch 设置匹配规则
+func (c *Context) SetMatch(match string) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.Match = match
+	return c
+}
+
+// SetOption 设置完整选项
+func (c *Context) SetOption(opt *core.Option) *Context {
+	c.opt = opt
+	return c
+}
+
+// ========================================
+// Config 实现
+// ========================================
+
+// Config Spray 配置
+type Config struct {
+	FingersEngine *sdkfingers.Engine
+}
+
+// NewConfig 创建默认配置
+func NewConfig() *Config {
+	return &Config{}
+}
+
+func (c *Config) Validate() error {
+	return nil
+}
+
+// WithFingersEngine 设置自定义 fingers 引擎
+func (c *Config) WithFingersEngine(engine *sdkfingers.Engine) *Config {
+	c.FingersEngine = engine
+	return c
+}
+
+// ========================================
+// Task 实现
+// ========================================
+
+// CheckTask URL 检测任务
+type CheckTask struct {
+	URLs []string
+}
+
+// NewCheckTask 创建 URL 检测任务
+func NewCheckTask(urls []string) *CheckTask {
+	return &CheckTask{URLs: urls}
+}
+
+func (t *CheckTask) Type() string {
+	return "check"
+}
+
+func (t *CheckTask) Validate() error {
+	if len(t.URLs) == 0 {
+		return fmt.Errorf("URLs cannot be empty")
+	}
+	return nil
+}
+
+// BruteTask 暴力破解任务
+type BruteTask struct {
+	BaseURL  string
+	Wordlist []string
+}
+
+// NewBruteTask 创建暴力破解任务
+func NewBruteTask(baseURL string, wordlist []string) *BruteTask {
+	return &BruteTask{
+		BaseURL:  baseURL,
+		Wordlist: wordlist,
+	}
+}
+
+func (t *BruteTask) Type() string {
+	return "brute"
+}
+
+func (t *BruteTask) Validate() error {
+	if t.BaseURL == "" {
+		return fmt.Errorf("BaseURL cannot be empty")
+	}
+	if len(t.Wordlist) == 0 {
+		return fmt.Errorf("Wordlist cannot be empty")
+	}
+	return nil
+}

@@ -1,40 +1,20 @@
 package neutron
 
 import (
+	"context"
 	"fmt"
-	"time"
+
+	"github.com/chainreactors/neutron/templates"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
 )
-
-// ========================================
-// Config 配置
-// ========================================
-
-// Config Neutron SDK 配置
-type Config struct {
-	// Cyberhub 配置（可选）
-	CyberhubURL string // Cyberhub API 地址，为空则仅使用本地POC
-	APIKey      string // API Key 认证
-
-	// 本地配置
-	LocalPath string // 本地 POC 文件/目录路径
-
-	// 过滤配置
-	Source string // POC 来源过滤（如 "github", "local" 等）
-
-	// 请求配置
-	Timeout    time.Duration // HTTP 请求超时时间
-	MaxRetries int           // 最大重试次数
-}
 
 // NewConfig 创建默认配置
 func NewConfig() *Config {
+	base := cyberhub.NewConfig()
 	return &Config{
-		CyberhubURL: "",
-		APIKey:      "",
-		LocalPath:   "", // 空表示当前目录
-		Source:      "", // 不过滤来源
-		Timeout:     10 * time.Second,
-		MaxRetries:  3,
+		Config:    *base,
+		LocalPath: "",
+		Templates: Templates{},
 	}
 }
 
@@ -45,12 +25,9 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("api_key is required when cyberhub_url is set")
 	}
 
-	// 至少需要配置一种数据源
-	if c.CyberhubURL == "" && c.LocalPath == "" {
-		// 允许两者都为空，使用默认本地路径
-		c.LocalPath = "."
+	if err := c.Config.Validate(); err != nil {
+		return err
 	}
-
 	return nil
 }
 
@@ -59,43 +36,70 @@ func (c *Config) IsRemoteEnabled() bool {
 	return c.CyberhubURL != "" && c.APIKey != ""
 }
 
-// IsLocalEnabled 是否启用本地加载
-func (c *Config) IsLocalEnabled() bool {
-	return c.LocalPath != ""
+// WithTemplates 设置已加载的模板
+func (c *Config) WithTemplates(tpls []*templates.Template) *Config {
+	c.Templates = (Templates{}).Merge(tpls)
+	return c
 }
 
-// SetCyberhubURL 设置 Cyberhub URL
-func (c *Config) SetCyberhubURL(url string) *Config {
+// WithCyberhub 设置远程加载配置（不立即拉取）
+func (c *Config) WithCyberhub(url, apiKey string) *Config {
 	c.CyberhubURL = url
+	c.APIKey = apiKey
+	c.LocalPath = ""
+	c.Templates = Templates{}
+	c.Filename = ""
 	return c
 }
 
-// SetAPIKey 设置 API Key
-func (c *Config) SetAPIKey(key string) *Config {
-	c.APIKey = key
-	return c
-}
-
-// SetLocalPath 设置本地路径
-func (c *Config) SetLocalPath(path string) *Config {
+// WithLocalFile 设置本地加载配置（不立即读取）
+func (c *Config) WithLocalFile(path string) *Config {
 	c.LocalPath = path
+	c.CyberhubURL = ""
+	c.APIKey = ""
+	c.Templates = Templates{}
+	c.Filename = ""
 	return c
 }
 
-// SetSource 设置 POC 来源过滤
-func (c *Config) SetSource(source string) *Config {
-	c.Source = source
+// WithFilter filters current Templates using predicate.
+func (c *Config) WithFilter(predicate func(*templates.Template) bool) *Config {
+	if c == nil {
+		return c
+	}
+	c.Templates = c.Templates.Filter(predicate)
 	return c
 }
 
-// SetTimeout 设置请求超时时间
-func (c *Config) SetTimeout(timeout time.Duration) *Config {
-	c.Timeout = timeout
-	return c
-}
+// Load 执行数据加载
+func (c *Config) Load(ctx context.Context) error {
+	if c == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if c.Templates.Len() > 0 {
+		return nil
+	}
+	if c.LocalPath != "" {
+		loaded, err := loadTemplatesFromPath(c.LocalPath)
+		if err != nil {
+			return err
+		}
+		c.Templates = (Templates{}).Merge(loaded)
+		return nil
+	}
+	if c.IsRemoteEnabled() {
+		client := cyberhub.NewClient(c.CyberhubURL, c.APIKey, c.Timeout)
+		responses, err := client.ExportPOCs(ctx, nil, nil, "", "", c.ExportFilter)
+		if err != nil {
+			return err
+		}
 
-// SetMaxRetries 设置最大重试次数
-func (c *Config) SetMaxRetries(maxRetries int) *Config {
-	c.MaxRetries = maxRetries
-	return c
+		loaded := make([]*templates.Template, 0, len(responses))
+		for _, resp := range responses {
+			loaded = append(loaded, resp.GetTemplate())
+		}
+		c.Templates = (Templates{}).Merge(loaded)
+		return nil
+	}
+	return fmt.Errorf("no data source configured")
 }

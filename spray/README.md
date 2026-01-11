@@ -19,13 +19,13 @@ SDK 由两部分组成:
 import "github.com/chainreactors/sdk/spray"
 
 // 1. 创建 SprayEngine
-engine := spray.NewSprayEngine(nil)
+engine := spray.NewEngine(nil)
 
 // 2. 初始化（加载指纹库等）
 engine.Init()
 
 // 3. 使用
-ctx := context.Background()
+ctx := spray.NewContext()
 
 // URL 检测
 urls := []string{"http://example.com", "http://httpbin.org"}
@@ -54,10 +54,10 @@ for _, result := range results {
 ### 使用默认配置
 
 ```go
-engine := spray.NewSprayEngine(nil)
+engine := spray.NewEngine(nil)
 ```
 
-默认配置针对 SDK 场景优化：100 线程、GET 方法、静默模式。
+默认配置针对 SDK 场景优化：20 线程、5 秒超时、GET 方法、静默模式。
 
 ### 自定义配置
 
@@ -70,14 +70,16 @@ opt.RandomUserAgent = true
 opt.Headers = []string{"Authorization: Bearer token"}
 opt.Filter = "current.Status == 404"  // 过滤 404
 
-engine := spray.NewSprayEngine(opt)
+ctx := spray.NewContext().SetOption(opt)
+engine := spray.NewEngine(nil)
 ```
 
 ### 运行时修改
 
 ```go
-engine.SetThreads(150)   // 设置线程数
-engine.SetTimeout(15)    // 设置超时时间
+ctx := spray.NewContext().
+    SetThreads(150).
+    SetTimeout(15)
 ```
 
 ## API 参考
@@ -86,17 +88,14 @@ engine.SetTimeout(15)    // 设置超时时间
 
 ```go
 // 创建实例
-engine := spray.NewSprayEngine(opt)  // opt 为 nil 时使用默认配置
-
-// 兼容旧 API
-engine := spray.NewEngine(opt)
+engine := spray.NewEngine(nil) // nil 时使用默认配置
 
 // 初始化（必须调用）
 engine.Init()
 
 // 设置参数
-engine.SetThreads(threads)
-engine.SetTimeout(timeout)
+ctx.SetThreads(threads)
+ctx.SetTimeout(timeout)
 ```
 
 ### 核心 API
@@ -126,7 +125,6 @@ Spray SDK 实现了 Chainreactors 统一 SDK 接口，可以与其他 SDK 多态
 ```go
 import (
     rootsdk "github.com/chainreactors/sdk"
-    sdk "github.com/chainreactors/sdk/sdk"
     "github.com/chainreactors/sdk/spray"
 )
 
@@ -150,11 +148,10 @@ for result := range resultCh {
 ### 基础 URL 检测
 
 ```go
-engine := spray.NewSprayEngine(nil)
+engine := spray.NewEngine(nil)
 engine.Init()
-engine.SetThreads(100)
 
-ctx := context.Background()
+ctx := spray.NewContext().SetThreads(100)
 
 urls := []string{
     "http://example.com",
@@ -176,10 +173,10 @@ for _, result := range results {
 ### 流式 URL 检测（推荐大批量）
 
 ```go
-engine := spray.NewSprayEngine(nil)
+engine := spray.NewEngine(nil)
 engine.Init()
 
-ctx := context.Background()
+ctx := spray.NewContext()
 
 // 从文件读取 URL 列表
 urls := readURLsFromFile("urls.txt")
@@ -195,10 +192,10 @@ for result := range resultCh {
 ### 路径暴力破解
 
 ```go
-engine := spray.NewSprayEngine(nil)
+engine := spray.NewEngine(nil)
 engine.Init()
 
-ctx := context.Background()
+ctx := spray.NewContext()
 
 wordlist := []string{
     "admin",
@@ -219,11 +216,13 @@ for result := range resultCh {
 ### 带超时和取消的检测
 
 ```go
-engine := spray.NewSprayEngine(nil)
+engine := spray.NewEngine(nil)
 engine.Init()
 
-ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+timeoutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 defer cancel()
+
+ctx := spray.NewContext().WithContext(timeoutCtx)
 
 urls := []string{"http://example.com", "http://github.com"}
 results, err := engine.Check(ctx, urls)
@@ -247,10 +246,9 @@ opt.Headers = []string{
 }
 opt.RandomUserAgent = true  // 随机 User-Agent
 
-engine := spray.NewSprayEngine(opt)
+ctx := spray.NewContext().SetOption(opt)
+engine := spray.NewEngine(nil)
 engine.Init()
-
-ctx := context.Background()
 results, _ := engine.Check(ctx, urls)
 ```
 
@@ -260,10 +258,9 @@ results, _ := engine.Check(ctx, urls)
 opt := spray.DefaultConfig()
 opt.Filter = "current.Status != 404"  // 过滤掉 404
 
-engine := spray.NewSprayEngine(opt)
+ctx := spray.NewContext().SetOption(opt)
+engine := spray.NewEngine(nil)
 engine.Init()
-
-ctx := context.Background()
 results, _ := engine.Check(ctx, urls)
 // 结果中不会包含 404 状态码的响应
 ```
@@ -296,7 +293,7 @@ type SprayResult struct {
 ## 常见问题
 
 ### Q: 如何加快检测速度？
-A: 增加线程数 `engine.SetThreads(200)`，但注意目标服务器的承受能力
+A: 增加线程数 `ctx.SetThreads(200)`，但注意目标服务器的承受能力
 
 ### Q: 如何避免被 WAF 拦截？
 A:

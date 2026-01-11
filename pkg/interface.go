@@ -4,7 +4,6 @@ package sdk
 import (
 	"context"
 	"io"
-	"time"
 )
 
 // ========================================
@@ -54,23 +53,11 @@ type Engine interface {
 // 核心概念 2: Context - 上下文
 // ========================================
 
-// Context 执行上下文，包含配置和控制信息
-// 职责：配置管理、超时控制、取消信号
+// Context 执行上下文，包含运行时控制信息
+// 职责：超时控制、取消信号
 type Context interface {
 	// Context 返回标准 context.Context（用于超时和取消）
 	Context() context.Context
-
-	// Config 返回配置（每个引擎有自己的配置实现）
-	Config() Config
-
-	// WithConfig 返回新的 Context（包含新配置）
-	WithConfig(config Config) Context
-
-	// WithTimeout 返回新的 Context（包含超时）
-	WithTimeout(timeout time.Duration) Context
-
-	// WithCancel 返回新的 Context（可取消）
-	WithCancel() (Context, context.CancelFunc)
 }
 
 // Config 配置接口（最小化）

@@ -3,26 +3,25 @@ package gogo
 import (
 	"fmt"
 
-	"github.com/chainreactors/gogo/v2/pkg"
 	sdk "github.com/chainreactors/sdk/pkg"
 )
 
 func init() {
 	// 注册 gogo 引擎到全局注册表
 	sdk.Register("gogo", func(config interface{}) (sdk.Engine, error) {
-		var opt *pkg.RunnerOption
+		var cfg *Config
 
 		if config == nil {
-			opt = nil // NewGogoEngine 会使用默认配置
+			cfg = nil // NewGogoEngine 会使用默认配置
 		} else {
 			var ok bool
-			opt, ok = config.(*pkg.RunnerOption)
+			cfg, ok = config.(*Config)
 			if !ok {
-				return nil, fmt.Errorf("invalid config type for gogo engine, expected *pkg.RunnerOption, got %T", config)
+				return nil, fmt.Errorf("invalid config type for gogo engine, expected *gogo.Config, got %T", config)
 			}
 		}
 
-		engine := NewGogoEngine(opt)
+		engine := NewGogoEngine(cfg)
 		if err := engine.Init(); err != nil {
 			return nil, fmt.Errorf("failed to initialize gogo engine: %w", err)
 		}

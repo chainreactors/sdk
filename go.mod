@@ -1,17 +1,15 @@
 module github.com/chainreactors/sdk
 
-go 1.21
-
-toolchain go1.23.1
+go 1.20
 
 require (
-	github.com/chainreactors/fingers v1.0.2-0.20251204155422-314b5907e607
-	github.com/chainreactors/gogo/v2 v2.14.1-0.20251202171039-03488753f80c
+	github.com/chainreactors/fingers v1.1.1-0.20260110164933-65840487c1eb
+	github.com/chainreactors/gogo/v2 v2.14.2-0.20260110190827-a2c3000f54be
 	github.com/chainreactors/logs v0.0.0-20241115105204-6132e39f5261
-	github.com/chainreactors/neutron v0.0.0-20251216154716-7c28cb6fdf03
+	github.com/chainreactors/neutron v0.0.0-20251231090857-6d5f086ddf02
 	github.com/chainreactors/parsers v0.0.0-20251202162218-4b2258465d0a
 	github.com/chainreactors/spray v1.2.4-0.20251205170859-986158c72a49
-	github.com/chainreactors/utils v0.0.0-20250831165528-f06246b0f311
+	github.com/chainreactors/utils v0.0.0-20251216161625-70054cf04e88
 	github.com/panjf2000/ants/v2 v2.9.1
 	gopkg.in/yaml.v3 v3.0.1
 )

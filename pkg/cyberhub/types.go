@@ -1,10 +1,81 @@
 package cyberhub
 
 import (
+	"time"
+
 	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/neutron/templates"
 )
+
+// ========================================
+// 导出筛选器
+// ========================================
+
+// ExportFilter 通用导出筛选选项
+type ExportFilter struct {
+	// 标签筛选（多个标签为 OR 关系）
+	Tags []string
+
+	// 来源筛选（多个来源为 OR 关系）
+	Sources []string
+
+	// 时间范围筛选
+	CreatedAfter  *time.Time // 创建时间起始
+	CreatedBefore *time.Time // 创建时间截止
+	UpdatedAfter  *time.Time // 更新时间起始
+	UpdatedBefore *time.Time // 更新时间截止
+
+	// 数量限制
+	Limit int // 最大返回数量（映射为 page=1&page_size=limit）
+}
+
+// NewExportFilter 创建空的筛选器
+func NewExportFilter() *ExportFilter {
+	return &ExportFilter{}
+}
+
+// WithTags 设置标签筛选
+func (f *ExportFilter) WithTags(tags ...string) *ExportFilter {
+	f.Tags = tags
+	return f
+}
+
+// WithSources 设置来源筛选
+func (f *ExportFilter) WithSources(sources ...string) *ExportFilter {
+	f.Sources = sources
+	return f
+}
+
+// WithCreatedAfter 设置创建时间起始
+func (f *ExportFilter) WithCreatedAfter(t time.Time) *ExportFilter {
+	f.CreatedAfter = &t
+	return f
+}
+
+// WithCreatedBefore 设置创建时间截止
+func (f *ExportFilter) WithCreatedBefore(t time.Time) *ExportFilter {
+	f.CreatedBefore = &t
+	return f
+}
+
+// WithUpdatedAfter 设置更新时间起始
+func (f *ExportFilter) WithUpdatedAfter(t time.Time) *ExportFilter {
+	f.UpdatedAfter = &t
+	return f
+}
+
+// WithUpdatedBefore 设置更新时间截止
+func (f *ExportFilter) WithUpdatedBefore(t time.Time) *ExportFilter {
+	f.UpdatedBefore = &t
+	return f
+}
+
+// WithLimit 设置数量限制
+func (f *ExportFilter) WithLimit(limit int) *ExportFilter {
+	f.Limit = limit
+	return f
+}
 
 // ========================================
 // Cyberhub API 响应（简化版 - 匹配后端 ExportFinger）
@@ -13,8 +84,8 @@ import (
 // FingerprintResponse Cyberhub Export API 返回的指纹数据
 // 直接嵌入 fingers.Finger，完全匹配后端的 ExportFinger 结构
 type FingerprintResponse struct {
-	*fingers.Finger `json:",inline"` // 嵌入所有 Finger 字段
-	Alias           *alias.Alias `json:"alias,omitempty"` // Alias 数据
+	*fingers.Finger `json:",inline" yaml:",inline"` // 嵌入所有 Finger 字段
+	Alias           *alias.Alias     `json:"alias,omitempty" yaml:"alias,omitempty"` // Alias 数据
 }
 
 // FingerprintListResponse Cyberhub Export API 列表响应

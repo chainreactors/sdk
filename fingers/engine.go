@@ -3,18 +3,14 @@ package fingers
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"sync"
-	"time"
 
 	fingersLib "github.com/chainreactors/fingers"
 	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/fingers/common"
 	"github.com/chainreactors/fingers/favicon"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
+	"github.com/chainreactors/fingers/resources"
 	sdk "github.com/chainreactors/sdk/pkg"
-	"github.com/chainreactors/sdk/pkg/cyberhub"
-	"github.com/chainreactors/utils/httputils"
 )
 
 // ========================================
@@ -23,10 +19,9 @@ import (
 
 // Engine 是对 fingers 库的封装，支持多种数据源加载
 type Engine struct {
-	engine *fingersLib.Engine
-	config *Config
-	client *cyberhub.Client // 仅在远程模式下使用
-	mu     sync.RWMutex
+	engine  *fingersLib.Engine
+	config  *Config
+	aliases []*alias.Alias // 原始别名数据
 }
 
 // NewEngine 创建一个新的 Engine 实例
@@ -36,109 +31,121 @@ func NewEngine(config *Config) (*Engine, error) {
 		config = NewConfig()
 	}
 
+	if err := config.Load(context.Background()); err != nil {
+		return nil, err
+	}
+
+	fingers := config.FullFingers.Fingers()
+	if len(fingers) == 0 {
+		return nil, fmt.Errorf("fingers data is empty")
+	}
+
 	e := &Engine{
 		config: config,
 	}
 
-	// 如果配置了远程，创建 client
-	if config.IsRemoteEnabled() {
-		e.client = cyberhub.NewClient(
-			config.CyberhubURL,
-			config.APIKey,
-			config.Timeout,
-			config.MaxRetries,
-		)
-	}
-
-	return e, nil
-}
-
-// Load 加载指纹引擎
-func (e *Engine) Load(ctx context.Context) (*fingersLib.Engine, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	if e.engine != nil {
-		return e.engine, nil
-	}
-
-	var engine *fingersLib.Engine
-	var err error
-
-	// 根据配置选择加载方式
-	if e.config.IsRemoteEnabled() {
-		engine, err = e.loadFromRemote(ctx)
-	} else {
-		engine, err = e.loadFromLocal()
-	}
-
+	engine, err := buildEngineFromFingers(fingers, config.FullFingers.Aliases())
 	if err != nil {
 		return nil, err
 	}
 
+	e.aliases = config.FullFingers.Aliases()
 	e.engine = engine
-	return engine, nil
+
+	return e, nil
 }
 
-// loadFromLocal 从本地加载指纹
-func (e *Engine) loadFromLocal() (*fingersLib.Engine, error) {
-	engines := e.config.EnableEngines
-	// 如果为空，传 nil 给 NewEngine 让其使用默认引擎
-	if len(engines) == 0 {
-		engines = nil
+// NewEngineWithFingers creates an Engine using FullFingers directly.
+func NewEngineWithFingers(fingers FullFingers) (*Engine, error) {
+	if fingers.Len() == 0 {
+		return nil, fmt.Errorf("fingers data is empty")
 	}
 
-	engine, err := fingersLib.NewEngine(engines...)
+	config := NewConfig()
+	config.FullFingers = fingers
+
+	engine, err := buildEngineFromFingers(fingers.Fingers(), fingers.Aliases())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load local engines: %w", err)
+		return nil, err
 	}
 
-	return engine, nil
+	return &Engine{
+		engine:  engine,
+		config:  config,
+		aliases: fingers.Aliases(),
+	}, nil
 }
 
-// loadFromRemote 从 Cyberhub 加载指纹
-func (e *Engine) loadFromRemote(ctx context.Context) (*fingersLib.Engine, error) {
-	fingerprints, err := e.client.ExportFingerprints(ctx, true, e.config.Source)
+// ========================================
+// 统一 API - 只提供一种加载方式
+// ========================================
+
+// Get 获取底层的 fingers.Engine
+func (e *Engine) Get() *fingersLib.Engine {
+	return e.engine
+}
+
+// GetFingersEngine 获取 FingersEngine（用于 gogo 集成）
+func (e *Engine) GetFingersEngine() (*fingersEngine.FingersEngine, error) {
+	if e.engine == nil {
+		return nil, fmt.Errorf("fingers engine is not initialized")
+	}
+
+	impl := e.engine.GetEngine("fingers")
+	if impl == nil {
+		return nil, nil
+	}
+
+	return impl.(*fingersEngine.FingersEngine), nil
+}
+
+// Reload 重新加载指纹
+func (e *Engine) Reload(ctx context.Context) error {
+	if e.config == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if err := e.config.Load(ctx); err != nil {
+		return err
+	}
+
+	engine, err := buildEngineFromFingers(e.config.FullFingers.Fingers(), e.config.FullFingers.Aliases())
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch fingerprints from cyberhub: %w", err)
+		return err
 	}
 
-	return e.convertToEngine(fingerprints)
+	e.aliases = e.config.FullFingers.Aliases()
+	e.engine = engine
+	return nil
 }
 
-// convertToEngine 将 Cyberhub 响应转换为 fingers.Engine
-func (e *Engine) convertToEngine(responses []cyberhub.FingerprintResponse) (*fingersLib.Engine, error) {
+// buildEngineFromFingers 从指纹列表构建引擎
+func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alias) (*fingersLib.Engine, error) {
 	engine := &fingersLib.Engine{
 		EnginesImpl:  make(map[string]fingersLib.EngineImpl),
 		Enabled:      make(map[string]bool),
 		Capabilities: make(map[string]common.EngineCapability),
 	}
 
+	// 初始化 Favicon 引擎（Compile 需要）
+	faviconEngine := favicon.NewFavicons()
+	engine.EnginesImpl["favicon"] = faviconEngine
+	engine.Capabilities["favicon"] = faviconEngine.Capability()
+
 	var httpFingers, socketFingers fingersEngine.Fingers
-	var aliases []*alias.Alias
-
-	for _, resp := range responses {
-		if !resp.IsActive() {
-			continue
-		}
-
-		finger := resp.GetFinger()
+	for _, finger := range fingers {
 		if finger.Protocol == "http" {
 			httpFingers = append(httpFingers, finger)
 		} else if finger.Protocol == "tcp" {
 			socketFingers = append(socketFingers, finger)
 		}
-
-		if aliasData := resp.GetAlias(); aliasData != nil {
-			aliases = append(aliases, aliasData)
-		}
 	}
-
-	fEngine := &fingersEngine.FingersEngine{
-		HTTPFingers:              httpFingers,
-		SocketFingers:            socketFingers,
-		HTTPFingersActiveFingers: filterActiveFingers(httpFingers),
-		Favicons:                 favicon.NewFavicons(),
+	_, err := resources.LoadPorts()
+	if err != nil {
+		return nil, err
+	}
+	fEngine, err := fingersEngine.NewEngine(httpFingers, socketFingers)
+	if err != nil {
+		return nil, err
 	}
 
 	engine.Register(fEngine)
@@ -154,51 +161,16 @@ func (e *Engine) convertToEngine(responses []cyberhub.FingerprintResponse) (*fin
 	return engine, nil
 }
 
-func filterActiveFingers(fingers fingersEngine.Fingers) fingersEngine.Fingers {
-	var active fingersEngine.Fingers
-	for _, f := range fingers {
-		if f.Focus {
-			active = append(active, f)
-		}
+// Count 获取指纹总数
+func (e *Engine) Count() int {
+	if e.config == nil {
+		return 0
 	}
-	return active
-}
-
-// Get 获取底层的 fingers.Engine
-func (e *Engine) Get() *fingersLib.Engine {
-	return e.engine
-}
-
-// GetFingersEngine 获取 FingersEngine（用于 gogo 集成）
-func (e *Engine) GetFingersEngine() (*fingersEngine.FingersEngine, error) {
-	if e.engine == nil {
-		if _, err := e.Load(context.Background()); err != nil {
-			return nil, err
-		}
-	}
-
-	impl := e.engine.GetEngine("fingers")
-	if impl == nil {
-		return nil, nil
-	}
-
-	return impl.(*fingersEngine.FingersEngine), nil
-}
-
-// Reload 重新加载指纹
-func (e *Engine) Reload(ctx context.Context) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.engine = nil
-	_, err := e.Load(ctx)
-	return err
+	return len(e.config.FullFingers.Fingers())
 }
 
 // Close 关闭引擎
 func (e *Engine) Close() error {
-	if e.client != nil {
-		return e.client.Close()
-	}
 	return nil
 }
 
@@ -209,9 +181,7 @@ func (e *Engine) Close() error {
 // Match 匹配单个 HTTP 响应原始数据（唯一的核心 API）
 func (e *Engine) Match(data []byte) (common.Frameworks, error) {
 	if e.engine == nil {
-		if _, err := e.Load(context.Background()); err != nil {
-			return nil, err
-		}
+		return nil, fmt.Errorf("fingers engine is not initialized")
 	}
 	return e.engine.DetectContent(data)
 }
@@ -229,9 +199,7 @@ func (e *Engine) Name() string {
 func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
 	// 确保引擎已初始化
 	if e.engine == nil {
-		if _, err := e.Load(context.Background()); err != nil {
-			return nil, fmt.Errorf("failed to load fingerprints: %w", err)
-		}
+		return nil, fmt.Errorf("fingers engine is not initialized")
 	}
 
 	// 验证任务
@@ -245,11 +213,22 @@ func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, err
 		return nil, fmt.Errorf("unsupported task type: %s", task.Type())
 	}
 
-	return e.executeMatch(ctx, matchTask)
+	var runCtx *Context
+	if ctx == nil {
+		runCtx = NewContext()
+	} else {
+		var ok bool
+		runCtx, ok = ctx.(*Context)
+		if !ok {
+			return nil, fmt.Errorf("unsupported context type: %T", ctx)
+		}
+	}
+
+	return e.executeMatch(runCtx, matchTask)
 }
 
 // executeMatch 执行单个指纹匹配任务
-func (e *Engine) executeMatch(ctx sdk.Context, task *MatchTask) (<-chan sdk.Result, error) {
+func (e *Engine) executeMatch(ctx *Context, task *MatchTask) (<-chan sdk.Result, error) {
 	resultCh := make(chan sdk.Result, 1)
 
 	go func() {
@@ -269,122 +248,4 @@ func (e *Engine) executeMatch(ctx sdk.Context, task *MatchTask) (<-chan sdk.Resu
 	}()
 
 	return resultCh, nil
-}
-
-// ========================================
-// Context 实现
-// ========================================
-
-// Context Fingers 上下文
-type Context struct {
-	ctx    context.Context
-	config *Config
-}
-
-// NewContext 创建 Fingers 上下文
-func NewContext() *Context {
-	return &Context{
-		ctx:    context.Background(),
-		config: NewConfig(),
-	}
-}
-
-func (c *Context) Context() context.Context {
-	return c.ctx
-}
-
-func (c *Context) Config() sdk.Config {
-	return c.config
-}
-
-func (c *Context) WithConfig(config sdk.Config) sdk.Context {
-	return &Context{
-		ctx:    c.ctx,
-		config: config.(*Config),
-	}
-}
-
-func (c *Context) WithTimeout(timeout time.Duration) sdk.Context {
-	ctx, _ := context.WithTimeout(c.ctx, timeout)
-	return &Context{
-		ctx:    ctx,
-		config: c.config,
-	}
-}
-
-func (c *Context) WithCancel() (sdk.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(c.ctx)
-	return &Context{
-		ctx:    ctx,
-		config: c.config,
-	}, cancel
-}
-
-// ========================================
-// Task 实现（SDK Engine 可选）
-// ========================================
-
-// MatchTask 指纹匹配任务
-type MatchTask struct {
-	Data []byte // HTTP 响应原始数据
-}
-
-// NewMatchTask 创建匹配任务
-func NewMatchTask(data []byte) *MatchTask {
-	return &MatchTask{Data: data}
-}
-
-// NewMatchTaskFromResponse 从 HTTP Response 创建任务
-func NewMatchTaskFromResponse(resp *http.Response) *MatchTask {
-	data := httputils.ReadRaw(resp)
-	return &MatchTask{Data: data}
-}
-
-func (t *MatchTask) Type() string {
-	return "match"
-}
-
-func (t *MatchTask) Validate() error {
-	if len(t.Data) == 0 {
-		return fmt.Errorf("data cannot be empty")
-	}
-	return nil
-}
-
-// ========================================
-// Result 实现
-// ========================================
-
-// MatchResult 指纹匹配结果
-type MatchResult struct {
-	success    bool
-	err        error
-	frameworks common.Frameworks
-}
-
-func (r *MatchResult) Success() bool {
-	return r.success
-}
-
-func (r *MatchResult) Error() error {
-	return r.err
-}
-
-func (r *MatchResult) Data() interface{} {
-	return r.frameworks
-}
-
-// Frameworks 获取匹配到的指纹
-func (r *MatchResult) Frameworks() common.Frameworks {
-	return r.frameworks
-}
-
-// HasMatch 是否匹配到指纹
-func (r *MatchResult) HasMatch() bool {
-	return len(r.frameworks) > 0
-}
-
-// Count 匹配到的指纹数量
-func (r *MatchResult) Count() int {
-	return len(r.frameworks)
 }

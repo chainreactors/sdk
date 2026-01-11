@@ -33,28 +33,25 @@ go build -o spray/spray.exe ./spray/main.go
 ### 基本用法
 
 ```bash
-# 从本地加载指纹
-./fingers/fingers.exe -target http://127.0.0.1:3000
-
-# 从 Cyberhub 加载指纹
+# 从 Cyberhub 加载指纹（CLI 当前仅支持该方式）
 ./fingers/fingers.exe -url http://127.0.0.1:8080 -key your_api_key -target http://127.0.0.1:3000
 
 # 按 source 过滤
 ./fingers/fingers.exe -url http://127.0.0.1:8080 -key your_key -source github -target http://example.com
 
 # JSON 输出
-./fingers/fingers.exe -target http://127.0.0.1:3000 -json
+./fingers/fingers.exe -url http://127.0.0.1:8080 -key your_key -target http://127.0.0.1:3000 -json
 
 # 显示详细信息
-./fingers/fingers.exe -target http://127.0.0.1:3000 -info
+./fingers/fingers.exe -url http://127.0.0.1:8080 -key your_key -target http://127.0.0.1:3000 -info
 ```
 
 ### 参数说明
 
-- `-url`: Cyberhub URL (可选)
-- `-key`: Cyberhub API Key (与 -url 一起使用)
+- `-url`: Cyberhub URL **(必需)**
+- `-key`: Cyberhub API Key **(必需)** (与 -url 一起使用)
 - `-source`: 按来源过滤指纹 (可选)
-- `-engines`: 启用特定引擎 (可选)
+- `-engines`: 预留参数，当前未生效
 - `-target`: 目标 URL **(必需)**
 - `-json`: JSON 格式输出
 - `-info`: 显示详细信息（版本、CPE 等）
@@ -107,7 +104,7 @@ go build -o spray/spray.exe ./spray/main.go
 - `-list`: 列出所有 POC
 - `-severity`: 按严重程度过滤 (info/low/medium/high/critical)
 - `-tags`: 按标签过滤
-- `-timeout`: 请求超时时间 (默认: 10秒)
+- `-timeout`: 预留参数，当前未生效
 - `-max`: 最大执行 POC 数量 (0 = 全部)
 - `-json`: JSON 格式输出
 
@@ -120,14 +117,11 @@ go build -o spray/spray.exe ./spray/main.go
 ### 基本用法
 
 ```bash
-# 基本扫描
-./gogo/gogo.exe -target 127.0.0.1 -ports 80,443,8080
+# 基本扫描（CLI 需要 Cyberhub）
+./gogo/gogo.exe -url http://127.0.0.1:8080 -key your_key -target 127.0.0.1 -ports 80,443,8080
 
 # CIDR 扫描
-./gogo/gogo.exe -target 192.168.1.0/24 -ports 80,443
-
-# 使用 Cyberhub 指纹
-./gogo/gogo.exe -url http://127.0.0.1:8080 -key your_key -target 127.0.0.1
+./gogo/gogo.exe -url http://127.0.0.1:8080 -key your_key -target 192.168.1.0/24 -ports 80,443
 
 # 同时加载 Fingers 和 Neutron POC
 ./gogo/gogo.exe -url ... -key ... -fingers -neutron -target 127.0.0.1
@@ -136,16 +130,16 @@ go build -o spray/spray.exe ./spray/main.go
 ./gogo/gogo.exe -url ... -key ... -source github -target 127.0.0.1
 
 # 高级选项
-./gogo/gogo.exe -target 127.0.0.1 -ports 1-65535 -threads 2000 -version 2
+./gogo/gogo.exe -url http://127.0.0.1:8080 -key your_key -target 127.0.0.1 -ports 1-65535 -threads 2000 -version 2
 
 # JSON 输出
-./gogo/gogo.exe -target 127.0.0.1 -json
+./gogo/gogo.exe -url http://127.0.0.1:8080 -key your_key -target 127.0.0.1 -json
 ```
 
 ### 参数说明
 
-- `-url`: Cyberhub URL (可选)
-- `-key`: Cyberhub API Key (与 -url 一起使用)
+- `-url`: Cyberhub URL **(必需)**
+- `-key`: Cyberhub API Key **(必需)** (与 -url 一起使用)
 - `-source`: 按来源过滤 (可选)
 - `-fingers`: 从 Cyberhub 加载指纹 (默认: true)
 - `-neutron`: 从 Cyberhub 加载 POC (默认: false)
@@ -182,9 +176,6 @@ go build -o spray/spray.exe ./spray/main.go
 # 过滤特定状态码
 ./spray/spray.exe -f urls.txt -fc 404,403
 
-# 使用代理
-./spray/spray.exe -u http://example.com -proxy http://127.0.0.1:8080
-
 # 静默模式（只显示匹配的 URL）
 ./spray/spray.exe -f urls.txt -q
 
@@ -201,16 +192,16 @@ go build -o spray/spray.exe ./spray/main.go
 - `-f`: 包含 URL 的文件 (每行一个)
 - `-threads`: 线程数 (默认: 50)
 - `-timeout`: 超时时间 (默认: 10秒)
-- `-retries`: 最大重试次数 (默认: 0)
+- `-retries`: 预留参数，当前未生效
 - `-method`: HTTP 方法 (默认: GET)
 - `-headers`: 自定义请求头 (格式: 'Key1:Value1,Key2:Value2')
-- `-ua`: 自定义 User-Agent
-- `-proxy`: 代理 URL
-- `-follow`: 跟随重定向 (默认: true)
+- `-ua`: 预留参数，当前未生效
+- `-proxy`: 预留参数，当前未生效
+- `-follow`: 预留参数，当前未生效
 - `-fc`: 过滤状态码 (逗号分隔)
 - `-mc`: 匹配状态码 (逗号分隔)
-- `-fs`: 过滤大小
-- `-ms`: 匹配大小
+- `-fs`: 预留参数，当前未生效
+- `-ms`: 预留参数，当前未生效
 - `-json`: JSON 格式输出
 - `-v`: 详细输出
 - `-q`: 静默模式
@@ -223,11 +214,11 @@ go build -o spray/spray.exe ./spray/main.go
 ### Fingers
 
 ```bash
-# 测试本地服务
-./fingers/fingers.exe -target http://127.0.0.1:3000
+# 测试本地服务（仍需 Cyberhub）
+./fingers/fingers.exe -url http://127.0.0.1:8080 -key your_key -target http://127.0.0.1:3000
 
-# 测试远程服务
-./fingers/fingers.exe -target http://127.0.0.1:8080
+# 测试远程服务（仍需 Cyberhub）
+./fingers/fingers.exe -url http://127.0.0.1:8080 -key your_key -target http://127.0.0.1:8080
 ```
 
 ### Neutron
@@ -244,7 +235,7 @@ go build -o spray/spray.exe ./spray/main.go
 
 ```bash
 # 扫描本地端口
-./gogo/gogo.exe -target 127.0.0.1 -ports 3000,8080
+./gogo/gogo.exe -url http://127.0.0.1:8080 -key your_key -target 127.0.0.1 -ports 3000,8080
 
 # 使用 Cyberhub 数据
 ./gogo/gogo.exe -url http://127.0.0.1:8080 -key your_key -target 127.0.0.1 -ports 80,443,3000,8080
@@ -275,9 +266,9 @@ A: 在 Cyberhub 管理界面的设置页面生成 API Key。
 ### Q: 支持哪些数据源?
 
 A:
-- **本地**: 使用内置数据或本地文件
-- **Cyberhub**: 从 Cyberhub 服务加载数据
-- **Source 过滤**: 可以按 source 字段过滤（如 github, local 等）
+- **Fingers**: CLI 仅支持 Cyberhub
+- **Neutron**: 支持本地目录/文件和 Cyberhub
+- **GoGo**: CLI 仅支持 Cyberhub
 
 ### Q: JSON 输出格式是什么?
 
