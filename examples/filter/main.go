@@ -67,21 +67,22 @@ func testExportFilter() {
 
 // testLocalFilter 测试本地筛选 API
 func testLocalFilter() {
-	fConfig := fingers.NewConfig()
-	fConfig.WithFilter(func(f *fingers.FullFinger) bool {
+	// 测试 FullFingers.Filter（需要先有数据才能过滤）
+	fullFingers := fingers.FullFingers{}
+	_ = fullFingers.Filter(func(f *fingers.FullFinger) bool {
 		return f.Finger != nil && f.Finger.Protocol == "http"
 	})
-	fmt.Println("Fingers WithFilter: OK")
+	fmt.Println("FullFingers.Filter: OK")
 
-	nConfig := neutron.NewConfig()
-	nConfig.WithFilter(func(t *templates.Template) bool {
+	// 测试 Templates.Filter
+	tpls := neutron.Templates{}
+	_ = tpls.Filter(func(t *templates.Template) bool {
 		severity := t.Info.Severity
 		return severity == "critical" || severity == "high"
 	})
-	fmt.Println("Neutron WithFilter: OK")
+	fmt.Println("Templates.Filter (severity): OK")
 
-	tpls := neutron.Templates{}
-	filtered := tpls.Filter(func(t *templates.Template) bool {
+	_ = tpls.Filter(func(t *templates.Template) bool {
 		for _, tag := range t.GetTags() {
 			if tag == "rce" {
 				return true
@@ -89,7 +90,7 @@ func testLocalFilter() {
 		}
 		return false
 	})
-	fmt.Printf("Templates.Filter: OK (filtered %d)\n", filtered.Len())
+	fmt.Println("Templates.Filter (tags): OK")
 }
 
 // testWithRealData 测试真实数据加载

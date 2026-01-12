@@ -320,7 +320,7 @@ nEngine, _ := neutron.NewEngine(nConfig)
 
 #### 2. 本地筛选（加载后在内存中过滤）
 
-使用 `WithFilter` 对已加载的数据进行二次过滤：
+使用 `FullFingers.Filter` 或 `Templates.Filter` 对已加载的数据进行二次过滤：
 
 ```go
 import (
@@ -329,27 +329,31 @@ import (
     neutronTemplates "github.com/chainreactors/neutron/templates"
 )
 
-// 指纹本地筛选
+// 加载指纹后筛选
 fConfig := fingers.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
-fConfig.WithFilter(func(f *fingers.FullFinger) bool {
-    // 只保留 HTTP 协议的指纹
-    return f.Finger != nil && f.Finger.Protocol == "http"
-})
 fEngine, _ := fingers.NewEngine(fConfig)
 
-// POC 本地筛选
+// 获取并过滤指纹（按协议筛选）
+allFingers := fConfig.FullFingers
+httpFingers := allFingers.Filter(func(f *fingers.FullFinger) bool {
+    return f.Finger != nil && f.Finger.Protocol == "http"
+})
+
+// 加载 POC 后筛选
 nConfig := neutron.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
-nConfig.WithFilter(func(t *neutronTemplates.Template) bool {
-    // 只保留 critical 和 high 级别的 POC
+nEngine, _ := neutron.NewEngine(nConfig)
+
+// 使用 Templates.Filter 筛选
+allTemplates := (neutron.Templates{}).Merge(nEngine.Get())
+
+// 按严重级别筛选
+highSeverity := allTemplates.Filter(func(t *neutronTemplates.Template) bool {
     severity := t.Info.Severity
     return severity == "critical" || severity == "high"
 })
-nEngine, _ := neutron.NewEngine(nConfig)
 
-// 也可以在加载后使用 Templates.Filter
-templates := (neutron.Templates{}).Merge(nEngine.Get())
-filtered := templates.Filter(func(t *neutronTemplates.Template) bool {
-    // 自定义过滤逻辑
+// 按标签筛选
+rceTemplates := allTemplates.Filter(func(t *neutronTemplates.Template) bool {
     for _, tag := range t.GetTags() {
         if tag == "rce" {
             return true
