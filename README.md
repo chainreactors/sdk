@@ -276,6 +276,93 @@ GoGo 可以同时集成 Fingers 和 Neutron：
 - 模板按指纹、ID、标签建立索引
 - 9,444 个 POC 生成 61,267 条索引（多重索引）
 
+### 数据筛选
+
+SDK 支持两种筛选方式：
+
+#### 1. 远程筛选（请求 Cyberhub 时过滤）
+
+使用 `ExportFilter` 在请求 API 时筛选，减少传输数据量：
+
+```go
+import (
+    "time"
+    "github.com/chainreactors/sdk/fingers"
+    "github.com/chainreactors/sdk/neutron"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
+)
+
+// 指纹筛选
+filter := cyberhub.NewExportFilter().
+    WithTags("cms", "framework").            // 按标签筛选
+    WithSources("github").                   // 按来源筛选
+    WithLimit(100).                          // 限制数量
+    WithUpdatedAfter(time.Now().AddDate(0, -1, 0)) // 最近一个月更新的
+
+config := fingers.NewConfig().
+    WithCyberhub("http://127.0.0.1:8080", "your_key")
+config.ExportFilter = filter
+
+engine, _ := fingers.NewEngine(config)
+
+// POC 筛选
+pocFilter := cyberhub.NewExportFilter().
+    WithTags("cve", "rce").                  // 按标签筛选
+    WithSources("nuclei").                   // 按来源筛选
+    WithCreatedAfter(time.Now().AddDate(-1, 0, 0)) // 最近一年创建的
+
+nConfig := neutron.NewConfig().
+    WithCyberhub("http://127.0.0.1:8080", "your_key")
+nConfig.ExportFilter = pocFilter
+
+nEngine, _ := neutron.NewEngine(nConfig)
+```
+
+#### 2. 本地筛选（加载后在内存中过滤）
+
+使用 `FullFingers.Filter` 或 `Templates.Filter` 对已加载的数据进行二次过滤：
+
+```go
+import (
+    "github.com/chainreactors/sdk/fingers"
+    "github.com/chainreactors/sdk/neutron"
+    neutronTemplates "github.com/chainreactors/neutron/templates"
+)
+
+// 加载指纹后筛选
+fConfig := fingers.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
+fEngine, _ := fingers.NewEngine(fConfig)
+
+// 获取并过滤指纹（按协议筛选）
+allFingers := fConfig.FullFingers
+httpFingers := allFingers.Filter(func(f *fingers.FullFinger) bool {
+    return f.Finger != nil && f.Finger.Protocol == "http"
+})
+
+// 加载 POC 后筛选
+nConfig := neutron.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
+nEngine, _ := neutron.NewEngine(nConfig)
+
+// 使用 Templates.Filter 筛选
+allTemplates := (neutron.Templates{}).Merge(nEngine.Get())
+
+// 按严重级别筛选
+highSeverity := allTemplates.Filter(func(t *neutronTemplates.Template) bool {
+    severity := t.Info.Severity
+    return severity == "critical" || severity == "high"
+})
+
+// 按标签筛选
+rceTemplates := allTemplates.Filter(func(t *neutronTemplates.Template) bool {
+    for _, tag := range t.GetTags() {
+        if tag == "rce" {
+            return true
+        }
+    }
+    return false
+})
+```
+
 ### 基于指纹筛选 POC 示例
 
 下面示例演示：Fingers 命中指纹后，使用 `neutron.Templates.Filter` 从模板集中筛选相关 POC 并执行。
