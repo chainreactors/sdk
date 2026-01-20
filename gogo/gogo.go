@@ -1,10 +1,12 @@
 package gogo
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
 
+	"github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/gogo/v2/core"
 	"github.com/chainreactors/gogo/v2/engine"
 	"github.com/chainreactors/gogo/v2/pkg"
@@ -92,18 +94,29 @@ func (e *GogoEngine) Init() error {
 	if e.fingersEngine != nil {
 		fingerImpl, err := e.fingersEngine.GetFingersEngine()
 		if err != nil {
-			return fmt.Errorf("get fingers engine failed: %v", err)
+			logs.Log.Warnf("get fingers engine failed: %v, continuing without fingerprints", err)
+		} else if fingerImpl == nil {
+			logs.Log.Warn("fingers engine is nil, continuing without fingerprints")
+		} else {
+			pkg.FingerEngine = fingerImpl
+			logs.Log.Infof("using custom fingers engine: %d http fingers, %d socket fingers",
+				len(fingerImpl.HTTPFingers), len(fingerImpl.SocketFingers))
 		}
-		if fingerImpl == nil {
-			return fmt.Errorf("fingers engine is nil")
-		}
-		pkg.FingerEngine = fingerImpl
-		logs.Log.Infof("using custom fingers engine: %d http fingers, %d socket fingers",
-			len(fingerImpl.HTTPFingers), len(fingerImpl.SocketFingers))
 	} else {
-		// 否则使用默认加载方式
+		// 否则使用默认加载方式，但允许失败
 		if err := pkg.LoadFinger(nil); err != nil {
-			return fmt.Errorf("load finger config failed: %v", err)
+			logs.Log.Warnf("load finger config failed: %v, continuing without fingerprints", err)
+		}
+	}
+
+	// 如果 FingerEngine 仍然是 nil，创建一个空的引擎避免 nil pointer panic
+	if pkg.FingerEngine == nil {
+		emptyEngine, err := fingers.NewEngine(fingers.Fingers{}, nil)
+		if err != nil {
+			logs.Log.Warnf("create empty fingers engine failed: %v", err)
+		} else {
+			pkg.FingerEngine = emptyEngine
+			logs.Log.Info("using empty fingers engine (no fingerprint detection)")
 		}
 	}
 

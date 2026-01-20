@@ -78,7 +78,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("✅ Fingerprints loaded successfully\n")
+	fmt.Println("✅ Fingerprints loaded successfully")
 
 	// 2. 发起 HTTP 请求
 	fmt.Printf("Fetching target: %s\n", *target)

@@ -1,9 +1,7 @@
 package spray
 
 import (
-	"context"
 	"fmt"
-	"time"
 
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/parsers"
@@ -41,48 +39,16 @@ func NewEngine(config *Config) *SprayEngine {
 }
 
 // DefaultConfig 返回默认配置
+// 注意: 这个函数已弃用，请使用 NewDefaultRunnerConfig
 func DefaultConfig() *core.Option {
-	opt := &core.Option{}
-	opt.Method = "GET"
-	opt.MaxBodyLength = 100
-	opt.RandomUserAgent = false
-	opt.BlackStatus = "400,410"
-	opt.WhiteStatus = "200"
-	opt.FuzzyStatus = "500,501,502,503,301,302,404"
-	opt.UniqueStatus = "403,200,404"
-	opt.CheckPeriod = 200
-	opt.ErrPeriod = 10
-	opt.BreakThreshold = 20
-	opt.Recursive = "current.IsDir()"
-	opt.Depth = 0
-	opt.Index = "/"
-	opt.Random = ""
-	opt.RetryCount = 0
-	opt.SimhashDistance = 8
-	opt.Mod = "path"
-	opt.Client = "auto"
-	opt.Timeout = 5
-	opt.Threads = 20
-	opt.PoolSize = 1
-	opt.Deadline = 999999
-	opt.Quiet = true
-	opt.NoBar = true
-	opt.NoStat = true
-	opt.NoColor = false
-	opt.Json = false
-	opt.FileOutput = "json"
-	opt.Advance = false
-	opt.Finger = false
-	opt.CrawlPlugin = false
-	opt.BakPlugin = false
-	opt.FuzzuliPlugin = false
-	opt.CommonPlugin = false
-	opt.ActivePlugin = false
-	opt.ReconPlugin = false
-	opt.CrawlDepth = 3
-	opt.AppendDepth = 2
-	opt.FingerEngines = "all"
+	opt, _ := core.NewDefaultRunnerConfig()
 	return opt
+}
+
+// NewDefaultRunnerConfig 创建并返回一个带有默认值且已初始化的 Runner 配置
+// 这个函数直接调用 spray/core 中的 NewDefaultRunnerConfig
+func NewDefaultRunnerConfig() (*core.Option, error) {
+	return core.NewDefaultRunnerConfig()
 }
 
 // Init 初始化引擎（加载指纹库等）
@@ -105,28 +71,18 @@ func (e *SprayEngine) Init() error {
 		logs.Log.Infof("using custom fingers engine: %s", libEngine.String())
 
 		// 提取 ActivePath (spray 需要)
-		for _, f := range libEngine.Fingers().HTTPFingers {
-			for _, rule := range f.Rules {
-				if rule.SendDataStr != "" {
-					pkg.ActivePath = append(pkg.ActivePath, rule.SendDataStr)
+		if fingers := libEngine.Fingers(); fingers != nil {
+			for _, f := range fingers.HTTPFingers {
+				for _, rule := range f.Rules {
+					if rule.SendDataStr != "" {
+						pkg.ActivePath = append(pkg.ActivePath, rule.SendDataStr)
+					}
 				}
 			}
 		}
-
-		// FingerPrintHub 可能为 nil
-		if hub := libEngine.FingerPrintHub(); hub != nil {
-			for _, f := range hub.FingerPrints {
-				if f.Path != "/" {
-					pkg.ActivePath = append(pkg.ActivePath, f.Path)
-				}
-			}
-		}
-	} else {
-		// 否则使用默认加载方式
-		if err := pkg.LoadFingers(); err != nil {
-			return fmt.Errorf("load fingers failed: %v", err)
-		}
+		// 注意: FingerPrintHub 的 FingerPrints 字段已移除，跳过相关处理
 	}
+	// 注意: 不调用 pkg.LoadFingers() 因为它使用了已弃用的 API
 
 	e.inited = true
 	return nil
@@ -218,6 +174,8 @@ func (e *SprayEngine) executeCheck(ctx sdk.Context, task *CheckTask) (<-chan sdk
 	}
 
 	runner.IsCheck = true
+	// 禁用内置的 OutputHandler，让 SDK 完全控制输出处理
+	runner.DisableOutputHandler = true
 
 	// 创建结果 channel
 	resultCh := make(chan sdk.Result, 100)
@@ -278,6 +236,8 @@ func (e *SprayEngine) executeBrute(ctx sdk.Context, task *BruteTask) (<-chan sdk
 	runner.Wordlist = task.Wordlist
 	runner.Total = len(task.Wordlist)
 	runner.IsCheck = false
+	// 禁用内置的 OutputHandler，让 SDK 完全控制输出处理
+	runner.DisableOutputHandler = true
 
 	// 创建结果 channel
 	resultCh := make(chan sdk.Result, 100)
@@ -335,8 +295,10 @@ func (e *SprayEngine) Check(ctx *Context, urls []string) ([]*parsers.SprayResult
 
 	var sprayResults []*parsers.SprayResult
 	for r := range resultCh {
-		if r.Success() {
-			sprayResults = append(sprayResults, r.(*Result).SprayResult())
+		// 返回所有结果，无论是否成功/有效
+		// URL存活检测需要看到所有URL的状态，而不仅仅是有效的
+		if result := r.(*Result).SprayResult(); result != nil {
+			sprayResults = append(sprayResults, result)
 		}
 	}
 
@@ -395,8 +357,9 @@ func (e *SprayEngine) Brute(ctx *Context, baseURL string, wordlist []string) ([]
 
 	var sprayResults []*parsers.SprayResult
 	for r := range resultCh {
-		if r.Success() {
-			sprayResults = append(sprayResults, r.(*Result).SprayResult())
+		// 返回所有结果，无论是否成功/有效
+		if result := r.(*Result).SprayResult(); result != nil {
+			sprayResults = append(sprayResults, result)
 		}
 	}
 
