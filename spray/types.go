@@ -102,6 +102,109 @@ func (c *Context) SetOption(opt *core.Option) *Context {
 }
 
 // ========================================
+// Plugin 配置方法
+// ========================================
+
+// SetAdvance 启用所有插件
+func (c *Context) SetAdvance(enable bool) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.Advance = enable
+	return c
+}
+
+// SetActivePlugin 启用主动指纹路径插件
+func (c *Context) SetActivePlugin(enable bool) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.ActivePlugin = enable
+	return c
+}
+
+// SetReconPlugin 启用信息提取插件
+func (c *Context) SetReconPlugin(enable bool) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.ReconPlugin = enable
+	return c
+}
+
+// SetBakPlugin 启用备份文件发现插件
+func (c *Context) SetBakPlugin(enable bool) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.BakPlugin = enable
+	return c
+}
+
+// SetFuzzuliPlugin 启用 Fuzzuli 插件
+func (c *Context) SetFuzzuliPlugin(enable bool) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.FuzzuliPlugin = enable
+	return c
+}
+
+// SetCommonPlugin 启用常见文件发现插件
+func (c *Context) SetCommonPlugin(enable bool) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.CommonPlugin = enable
+	return c
+}
+
+// SetCrawlPlugin 启用爬虫插件
+func (c *Context) SetCrawlPlugin(enable bool) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.CrawlPlugin = enable
+	return c
+}
+
+// SetCrawlDepth 设置爬虫深度
+func (c *Context) SetCrawlDepth(depth int) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.CrawlDepth = depth
+	return c
+}
+
+// SetFinger 启用主动指纹检测
+func (c *Context) SetFinger(enable bool) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.Finger = enable
+	return c
+}
+
+// SetExtracts 设置信息提取规则
+func (c *Context) SetExtracts(extracts []string) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.Extracts = extracts
+	return c
+}
+
+// SetRecursiveDepth 设置递归深度
+func (c *Context) SetRecursiveDepth(depth int) *Context {
+	if c.opt == nil {
+		c.opt = DefaultConfig()
+	}
+	c.opt.Depth = depth
+	return c
+}
+
+// ========================================
 // Config 实现
 // ========================================
 
