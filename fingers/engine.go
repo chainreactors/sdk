@@ -7,7 +7,6 @@ import (
 	fingersLib "github.com/chainreactors/fingers"
 	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/fingers/common"
-	"github.com/chainreactors/fingers/favicon"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/resources"
 	sdk "github.com/chainreactors/sdk/pkg"
@@ -120,16 +119,17 @@ func (e *Engine) Reload(ctx context.Context) error {
 
 // buildEngineFromFingers 从指纹列表构建引擎
 func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alias) (*fingersLib.Engine, error) {
-	engine := &fingersLib.Engine{
-		EnginesImpl:  make(map[string]fingersLib.EngineImpl),
-		Enabled:      make(map[string]bool),
-		Capabilities: make(map[string]common.EngineCapability),
+	engine, err := fingersLib.NewEngine(
+		fingersLib.FaviconEngine,
+		fingersLib.EHoleEngine,
+		fingersLib.FingerPrintEngine,
+		fingersLib.GobyEngine,
+		fingersLib.WappalyzerEngine,
+		fingersLib.NmapEngine,
+	)
+	if err != nil {
+		return nil, err
 	}
-
-	// 初始化 Favicon 引擎（Compile 需要）
-	faviconEngine := favicon.NewFavicons()
-	engine.EnginesImpl["favicon"] = faviconEngine
-	engine.Capabilities["favicon"] = faviconEngine.Capability()
 
 	var httpFingers, socketFingers fingersEngine.Fingers
 	for _, finger := range fingers {
@@ -139,7 +139,7 @@ func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alia
 			socketFingers = append(socketFingers, finger)
 		}
 	}
-	_, err := resources.LoadPorts()
+	_, err = resources.LoadPorts()
 	if err != nil {
 		return nil, err
 	}
