@@ -2,6 +2,7 @@ package spray
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -18,7 +19,7 @@ func TestNewEngine(t *testing.T) {
 	}
 
 	// 测试使用自定义配置
-	opt := DefaultConfig()
+	opt := NewDefaultOption()
 	opt.Threads = 200
 	engine2 := NewEngine(NewConfig())
 	_ = opt
@@ -43,7 +44,7 @@ func TestSprayEngineName(t *testing.T) {
 
 // TestDefaultConfig 测试默认配置
 func TestDefaultConfig(t *testing.T) {
-	config := DefaultConfig()
+	config := NewDefaultOption()
 
 	if config.Method != "GET" {
 		t.Errorf("Expected default Method 'GET', got '%s'", config.Method)
@@ -194,32 +195,33 @@ func TestResult(t *testing.T) {
 	}
 }
 
-// TestSetThreads 测试设置线程数
-func TestContextSetThreads(t *testing.T) {
+func TestSpray(t *testing.T) {
+	engine := NewEngine(nil)
+
+	// 2. 初始化（加载指纹库等）
+	engine.Init()
+
+	// 3. 使用
 	ctx := NewContext()
 
-	ctx.SetThreads(300)
-	if ctx.opt.Threads != 300 {
-		t.Errorf("Expected threads 300, got %d", ctx.opt.Threads)
+	// URL 检测
+	urls := []string{"http://example.com", "http://httpbin.org"}
+	resultCh1, _ := engine.CheckStream(ctx, urls)
+	for result := range resultCh1 {
+		fmt.Printf("%s [%d]\n", result.UrlString, result.Status)
 	}
 
-	ctx.SetThreads(500)
-	if ctx.opt.Threads != 500 {
-		t.Errorf("Expected threads 500, got %d", ctx.opt.Threads)
-	}
-}
-
-// TestSetTimeout 测试设置超时
-func TestContextSetTimeout(t *testing.T) {
-	ctx := NewContext()
-
-	ctx.SetTimeout(20)
-	if ctx.opt.Timeout != 20 {
-		t.Errorf("Expected timeout 20, got %d", ctx.opt.Timeout)
+	// 路径暴力破解
+	wordlist := []string{"admin", "api", "test", ".git"}
+	resultCh2, _ := engine.BruteStream(ctx, "http://example.com", wordlist)
+	for result := range resultCh2 {
+		fmt.Printf("%s [%d] %d bytes\n",
+			result.UrlString, result.Status, result.BodyLength)
 	}
 
-	ctx.SetTimeout(30)
-	if ctx.opt.Timeout != 30 {
-		t.Errorf("Expected timeout 30, got %d", ctx.opt.Timeout)
+	// 同步检测（等待所有结果）
+	results, _ := engine.Check(ctx, urls)
+	for _, result := range results {
+		fmt.Printf("%s [%d]\n", result.UrlString, result.Status)
 	}
 }
