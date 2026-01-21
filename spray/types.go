@@ -17,14 +17,14 @@ import (
 // Context Spray 上下文
 type Context struct {
 	ctx context.Context
-	opt *core.Option
+	opt *Option
 }
 
 // NewContext 创建 Spray 上下文
 func NewContext() *Context {
 	return &Context{
 		ctx: context.Background(),
-		opt: DefaultConfig(),
+		opt: NewDefaultOption(),
 	}
 }
 
@@ -50,61 +50,43 @@ func (c *Context) WithCancel() (sdk.Context, context.CancelFunc) {
 
 // SetThreads 设置线程数
 func (c *Context) SetThreads(threads int) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.Threads = threads
 	return c
 }
 
 // SetTimeout 设置超时时间（秒）
 func (c *Context) SetTimeout(timeout int) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.Timeout = timeout
 	return c
 }
 
 // SetMethod 设置 HTTP 方法
 func (c *Context) SetMethod(method string) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.Method = method
 	return c
 }
 
 // SetHeaders 设置自定义请求头
 func (c *Context) SetHeaders(headers []string) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.Headers = headers
 	return c
 }
 
 // SetFilter 设置过滤规则
 func (c *Context) SetFilter(filter string) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.Filter = filter
 	return c
 }
 
 // SetMatch 设置匹配规则
 func (c *Context) SetMatch(match string) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.Match = match
 	return c
 }
 
 // SetOption 设置完整选项
 func (c *Context) SetOption(opt *core.Option) *Context {
-	c.opt = opt
+	c.opt = &Option{opt}
 	return c
 }
 
@@ -114,99 +96,66 @@ func (c *Context) SetOption(opt *core.Option) *Context {
 
 // SetAdvance 启用所有插件
 func (c *Context) SetAdvance(enable bool) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.Advance = enable
 	return c
 }
 
 // SetActivePlugin 启用主动指纹路径插件
 func (c *Context) SetActivePlugin(enable bool) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.ActivePlugin = enable
 	return c
 }
 
 // SetReconPlugin 启用信息提取插件
 func (c *Context) SetReconPlugin(enable bool) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.ReconPlugin = enable
 	return c
 }
 
 // SetBakPlugin 启用备份文件发现插件
 func (c *Context) SetBakPlugin(enable bool) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.BakPlugin = enable
 	return c
 }
 
 // SetFuzzuliPlugin 启用 Fuzzuli 插件
 func (c *Context) SetFuzzuliPlugin(enable bool) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.FuzzuliPlugin = enable
 	return c
 }
 
 // SetCommonPlugin 启用常见文件发现插件
 func (c *Context) SetCommonPlugin(enable bool) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.CommonPlugin = enable
 	return c
 }
 
 // SetCrawlPlugin 启用爬虫插件
 func (c *Context) SetCrawlPlugin(enable bool) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.CrawlPlugin = enable
 	return c
 }
 
 // SetCrawlDepth 设置爬虫深度
 func (c *Context) SetCrawlDepth(depth int) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.CrawlDepth = depth
 	return c
 }
 
 // SetFinger 启用主动指纹检测
 func (c *Context) SetFinger(enable bool) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.Finger = enable
 	return c
 }
 
 // SetExtracts 设置信息提取规则
 func (c *Context) SetExtracts(extracts []string) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.Extracts = extracts
 	return c
 }
 
 // SetRecursiveDepth 设置递归深度
 func (c *Context) SetRecursiveDepth(depth int) *Context {
-	if c.opt == nil {
-		c.opt = DefaultConfig()
-	}
 	c.opt.Depth = depth
 	return c
 }

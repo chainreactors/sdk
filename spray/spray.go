@@ -1,6 +1,7 @@
 package spray
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/chainreactors/logs"
@@ -38,19 +39,6 @@ func NewEngine(config *Config) *SprayEngine {
 	return NewSprayEngine(config)
 }
 
-// DefaultConfig 返回默认配置
-// 注意: 这个函数已弃用，请使用 NewDefaultRunnerConfig
-func DefaultConfig() *core.Option {
-	opt, _ := core.NewDefaultRunnerConfig()
-	return opt
-}
-
-// NewDefaultRunnerConfig 创建并返回一个带有默认值且已初始化的 Runner 配置
-// 这个函数直接调用 spray/core 中的 NewDefaultRunnerConfig
-func NewDefaultRunnerConfig() (*core.Option, error) {
-	return core.NewDefaultRunnerConfig()
-}
-
 // Init 初始化引擎（加载指纹库等）
 func (e *SprayEngine) Init() error {
 	if e.inited {
@@ -60,7 +48,6 @@ func (e *SprayEngine) Init() error {
 	if err := pkg.Load(); err != nil {
 		return fmt.Errorf("load config failed: %v", err)
 	}
-
 	// 如果提供了自定义 fingers 引擎，直接使用
 	if e.fingersEngine != nil {
 		libEngine := e.fingersEngine.Get()
@@ -69,21 +56,22 @@ func (e *SprayEngine) Init() error {
 		}
 		pkg.FingerEngine = libEngine
 		logs.Log.Infof("using custom fingers engine: %s", libEngine.String())
-
-		// 提取 ActivePath (spray 需要)
-		if fingers := libEngine.Fingers(); fingers != nil {
-			for _, f := range fingers.HTTPFingers {
-				for _, rule := range f.Rules {
-					if rule.SendDataStr != "" {
-						pkg.ActivePath = append(pkg.ActivePath, rule.SendDataStr)
-					}
+	} else {
+		err := pkg.LoadFingers()
+		if err != nil {
+			return err
+		}
+	}
+	// 提取 ActivePath (spray 需要)
+	if fingers := pkg.FingerEngine.Fingers(); fingers != nil {
+		for _, f := range fingers.HTTPFingers {
+			for _, rule := range f.Rules {
+				if rule.SendDataStr != "" {
+					pkg.ActivePath = append(pkg.ActivePath, rule.SendDataStr)
 				}
 			}
 		}
-		// 注意: FingerPrintHub 的 FingerPrints 字段已移除，跳过相关处理
 	}
-	// 注意: 不调用 pkg.LoadFingers() 因为它使用了已弃用的 API
-
 	e.inited = true
 	return nil
 }
@@ -93,12 +81,6 @@ func (e *SprayEngine) Name() string {
 }
 
 func (e *SprayEngine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
-	if !e.inited {
-		if err := e.Init(); err != nil {
-			return nil, err
-		}
-	}
-
 	if err := task.Validate(); err != nil {
 		return nil, err
 	}
@@ -145,87 +127,51 @@ func (r *Result) SprayResult() *parsers.SprayResult {
 	return r.data
 }
 
-// ========================================
-// 内部实现
-// ========================================
+func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan sdk.Result) {
+	// 启动结果处理 goroutine
+	// 创建结果 channel
+	go func() {
+		for bl := range runner.OutputCh {
+			select {
+			case ch <- &Result{
+				success: bl.IsValid,
+				data:    bl.SprayResult,
+			}:
+			case <-ctx.Done():
+				return
+			}
+			runner.OutWg.Done()
+		}
+	}()
+}
 
 func (e *SprayEngine) executeCheck(ctx sdk.Context, task *CheckTask) (<-chan sdk.Result, error) {
-	if ctx == nil {
-		ctx = NewContext()
-	}
-	runCtx := ctx.(*Context)
-	if runCtx.opt == nil {
-		runCtx.opt = DefaultConfig()
-	}
-
 	// 克隆配置
-	opt := *runCtx.opt
+	opt := *ctx.(*Context).opt
 	opt.URL = task.URLs
-
-	// 准备配置
-	if err := opt.Prepare(); err != nil {
-		return nil, fmt.Errorf("prepare config failed: %v", err)
-	}
 
 	// 创建 Runner
 	runner, err := opt.NewRunner()
 	if err != nil {
 		return nil, fmt.Errorf("create runner failed: %v", err)
 	}
-
-	runner.IsCheck = true
-	// 禁用内置的 OutputHandler，让 SDK 完全控制输出处理
-	runner.DisableOutputHandler = true
-
-	// 创建结果 channel
-	resultCh := make(chan sdk.Result, 100)
-
+	ch := make(chan sdk.Result)
 	// 启动检测 goroutine
 	go func() {
-		defer close(resultCh)
 		defer e.closeRunner(runner)
+		defer close(ch)
+		e.handler(ctx.Context(), runner, ch)
 
-		// 启动结果处理 goroutine
-		go func() {
-			for bl := range runner.OutputCh {
-				select {
-				case resultCh <- &Result{
-					success: bl.IsValid,
-					data:    bl.SprayResult,
-				}:
-				case <-ctx.Context().Done():
-					return
-				}
-				runner.OutWg.Done()
-			}
-		}()
-
-		// 运行检测
-		if err := runner.Prepare(ctx.Context()); err != nil {
-			logs.Log.Errorf("runner prepare failed: %v", err)
-		}
+		runner.RunWithCheck(ctx.Context())
 	}()
 
-	return resultCh, nil
+	return ch, nil
 }
 
 func (e *SprayEngine) executeBrute(ctx sdk.Context, task *BruteTask) (<-chan sdk.Result, error) {
-	if ctx == nil {
-		ctx = NewContext()
-	}
-	runCtx := ctx.(*Context)
-	if runCtx.opt == nil {
-		runCtx.opt = DefaultConfig()
-	}
-
 	// 克隆配置
-	opt := *runCtx.opt
+	opt := *ctx.(*Context).opt
 	opt.URL = []string{task.BaseURL}
-
-	// 准备配置
-	if err := opt.Prepare(); err != nil {
-		return nil, fmt.Errorf("prepare config failed: %v", err)
-	}
 
 	// 创建 Runner
 	runner, err := opt.NewRunner()
@@ -236,36 +182,16 @@ func (e *SprayEngine) executeBrute(ctx sdk.Context, task *BruteTask) (<-chan sdk
 	runner.Wordlist = task.Wordlist
 	runner.Total = len(task.Wordlist)
 	runner.IsCheck = false
-	// 禁用内置的 OutputHandler，让 SDK 完全控制输出处理
-	runner.DisableOutputHandler = true
 
-	// 创建结果 channel
-	resultCh := make(chan sdk.Result, 100)
-
-	// 启动暴力破解 goroutine
+	resultCh := make(chan sdk.Result)
+	// 启动检测 goroutine
 	go func() {
-		defer close(resultCh)
 		defer e.closeRunner(runner)
+		defer close(resultCh)
 
-		// 启动结果处理 goroutine
-		go func() {
-			for bl := range runner.OutputCh {
-				select {
-				case resultCh <- &Result{
-					success: bl.IsValid,
-					data:    bl.SprayResult,
-				}:
-				case <-ctx.Context().Done():
-					return
-				}
-				runner.OutWg.Done()
-			}
-		}()
+		e.handler(ctx.Context(), runner, resultCh)
 
-		// 运行暴力破解
-		if err := runner.Prepare(ctx.Context()); err != nil {
-			logs.Log.Errorf("runner prepare failed: %v", err)
-		}
+		runner.RunWithBrute(ctx.Context())
 	}()
 
 	return resultCh, nil
@@ -277,16 +203,6 @@ func (e *SprayEngine) executeBrute(ctx sdk.Context, task *BruteTask) (<-chan sdk
 
 // Check URL 批量检测（同步）
 func (e *SprayEngine) Check(ctx *Context, urls []string) ([]*parsers.SprayResult, error) {
-	if !e.inited {
-		if err := e.Init(); err != nil {
-			return nil, err
-		}
-	}
-
-	if ctx == nil {
-		ctx = NewContext()
-	}
-
 	task := NewCheckTask(urls)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -307,16 +223,6 @@ func (e *SprayEngine) Check(ctx *Context, urls []string) ([]*parsers.SprayResult
 
 // CheckStream URL 批量检测（流式）
 func (e *SprayEngine) CheckStream(ctx *Context, urls []string) (<-chan *parsers.SprayResult, error) {
-	if !e.inited {
-		if err := e.Init(); err != nil {
-			return nil, err
-		}
-	}
-
-	if ctx == nil {
-		ctx = NewContext()
-	}
-
 	task := NewCheckTask(urls)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -324,7 +230,7 @@ func (e *SprayEngine) CheckStream(ctx *Context, urls []string) (<-chan *parsers.
 	}
 
 	// 转换为 SprayResult channel
-	sprayResultCh := make(chan *parsers.SprayResult, 100)
+	sprayResultCh := make(chan *parsers.SprayResult, 1)
 	go func() {
 		defer close(sprayResultCh)
 		for result := range resultCh {
@@ -339,16 +245,6 @@ func (e *SprayEngine) CheckStream(ctx *Context, urls []string) (<-chan *parsers.
 
 // Brute 暴力破解（同步）
 func (e *SprayEngine) Brute(ctx *Context, baseURL string, wordlist []string) ([]*parsers.SprayResult, error) {
-	if !e.inited {
-		if err := e.Init(); err != nil {
-			return nil, err
-		}
-	}
-
-	if ctx == nil {
-		ctx = NewContext()
-	}
-
 	task := NewBruteTask(baseURL, wordlist)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -368,16 +264,6 @@ func (e *SprayEngine) Brute(ctx *Context, baseURL string, wordlist []string) ([]
 
 // BruteStream 暴力破解（流式）
 func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []string) (<-chan *parsers.SprayResult, error) {
-	if !e.inited {
-		if err := e.Init(); err != nil {
-			return nil, err
-		}
-	}
-
-	if ctx == nil {
-		ctx = NewContext()
-	}
-
 	task := NewBruteTask(baseURL, wordlist)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -385,7 +271,7 @@ func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []strin
 	}
 
 	// 转换为 SprayResult channel
-	sprayResultCh := make(chan *parsers.SprayResult, 100)
+	sprayResultCh := make(chan *parsers.SprayResult)
 	go func() {
 		defer close(sprayResultCh)
 		for result := range resultCh {

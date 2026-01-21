@@ -1,16 +1,14 @@
 module github.com/chainreactors/sdk
 
-go 1.21
-
-toolchain go1.23.1
+go 1.20
 
 require (
 	github.com/chainreactors/fingers v1.1.1-0.20260110164933-65840487c1eb
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260110190827-a2c3000f54be
 	github.com/chainreactors/logs v0.0.0-20241115105204-6132e39f5261
-	github.com/chainreactors/neutron v0.0.0-20251231090857-6d5f086ddf02
+	github.com/chainreactors/neutron v0.0.0-20260110190404-ab49252d61d5
 	github.com/chainreactors/parsers v0.0.0-20251202162218-4b2258465d0a
-	github.com/chainreactors/spray v1.2.3
+	github.com/chainreactors/spray v1.2.4-0.20260121025911-4f08ee9640d7
 	github.com/chainreactors/utils v0.0.0-20251216161625-70054cf04e88
 	github.com/panjf2000/ants/v2 v2.9.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -37,15 +35,19 @@ require (
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/expr-lang/expr v1.16.9 // indirect
 	github.com/facebookincubator/nvdtools v0.1.5 // indirect
+	github.com/fatih/color v1.17.0 // indirect
 	github.com/go-dedup/megophone v0.0.0-20170830025436-f01be21026f5 // indirect
 	github.com/go-dedup/simhash v0.0.0-20170904020510-9ecaca7b509c // indirect
 	github.com/go-dedup/text v0.0.0-20170907015346-8bb1b95e3cb7 // indirect
+	github.com/goccy/go-yaml v1.11.3 // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/gookit/config/v2 v2.2.5 // indirect
 	github.com/gookit/goutil v0.6.15 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
+	github.com/jessevdk/go-flags v1.6.1 // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
@@ -69,8 +71,6 @@ require (
 	golang.org/x/term v0.29.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
+	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
-
-// 使用本地修复的 spray
-replace github.com/chainreactors/spray => ../spray-fix
