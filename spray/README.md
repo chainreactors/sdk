@@ -252,6 +252,40 @@ engine.Init()
 results, _ := engine.Check(ctx, urls)
 ```
 
+### 自定义Host检测
+
+在某些场景下需要自定义Host头进行检测：
+- 虚拟主机探测：同一IP上的不同域名
+- CDN绕过：直接访问源站IP但指定域名
+- 负载均衡测试：指定后端服务器
+
+```go
+engine := spray.NewEngine(nil)
+engine.Init()
+
+// 方式1: 使用SetHost方法（推荐）
+ctx := spray.NewContext().
+    SetThreads(20).
+    SetTimeout(10).
+    SetHost("target.example.com")  // 设置自定义Host头
+
+// 使用IP访问，但Host头指定域名
+urls := []string{"http://1.2.3.4/admin"}
+results, _ := engine.Check(ctx, urls)
+// 实际请求: GET /admin HTTP/1.1
+//          Host: target.example.com
+
+// 方式2: Host碰撞检测（批量测试多个域名）
+hosts := []string{"example.com", "admin.example.com", "test.example.com"}
+for _, host := range hosts {
+    ctx := spray.NewContext().SetHost(host)
+    results, _ := engine.Check(ctx, []string{"http://1.2.3.4"})
+    for _, result := range results {
+        fmt.Printf("[%s] %s [%d]\n", host, result.UrlString, result.Status)
+    }
+}
+```
+
 ### 使用过滤器
 
 ```go

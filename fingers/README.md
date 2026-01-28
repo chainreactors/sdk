@@ -19,20 +19,116 @@ go get github.com/chainreactors/sdk/fingers
 
 ### API 设计
 
-Fingers SDK 在初始化阶段完成加载，随后你可以直接匹配：
+Fingers SDK 提供两类 API：
+
+1. **被动匹配 API**：直接匹配已有的 HTTP 响应数据
+   - `Match(data []byte)` - 匹配原始字节数据
+   - `MatchFavicon(data []byte)` - 匹配 favicon 数据
+   - `MatchHTTP(resp *http.Response)` - 匹配 HTTP 响应
+
+2. **主动探测 API**：支持批量目标扫描
+   - `HTTPMatch(ctx, urls []string)` - HTTP/HTTPS 批量扫描（同步）
+   - `HTTPMatchStream(ctx, urls []string)` - HTTP/HTTPS 批量扫描（流式）
+   - `ServiceMatch(ctx, targets []string)` - 通用服务批量扫描（同步）
+   - `ServiceMatchStream(ctx, targets []string)` - 通用服务批量扫描（流式）
+
+### 被动匹配示例
 
 ```go
 config := fingers.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your-api-key")
 engine, _ := fingers.NewEngine(config)
 
+// 匹配原始字节数据
 frameworks, _ := engine.Match(httpResponseBytes)
+
+// 匹配 HTTP 响应
+resp, _ := http.Get("http://example.com")
+frameworks, _ := engine.MatchHTTP(resp)
+
+// 匹配 favicon
+faviconData, _ := os.ReadFile("favicon.ico")
+frameworks, _ := engine.MatchFavicon(faviconData)
 ```
 
-如需使用原生 fingers 引擎：
+### 主动探测示例
+
+#### 单目标扫描
 
 ```go
-libEngine := engine.Get()
-frameworks, _ := libEngine.DetectContent(httpResponseBytes)
+config := fingers.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+engine, _ := fingers.NewEngine(config)
+
+// 创建上下文（配置 timeout、level 等）
+ctx := fingers.NewContext().WithTimeout(10).WithLevel(1)
+
+// HTTP 主动探测
+results, _ := engine.HTTPMatch(ctx, []string{"https://example.com"})
+for _, targetResult := range results {
+    if targetResult.Error != nil {
+        fmt.Printf("Error scanning %s: %v\n", targetResult.Target, targetResult.Error)
+        continue
+    }
+
+    for _, result := range targetResult.Results {
+        fmt.Printf("Found: %s\n", result.Framework.Name)
+    }
+}
+```
+
+#### 批量目标扫描
+
+```go
+// 批量扫描多个目标
+urls := []string{
+    "https://example1.com",
+    "https://example2.com",
+    "https://example3.com",
+}
+
+// 同步版本 - 等待所有结果
+results, _ := engine.HTTPMatch(ctx, urls)
+for _, targetResult := range results {
+    fmt.Printf("Target: %s, Results: %d\n",
+        targetResult.Target, len(targetResult.Results))
+}
+
+// 流式版本 - 边扫描边处理
+resultCh, _ := engine.HTTPMatchStream(ctx, urls)
+for targetResult := range resultCh {
+    // 实时处理每个目标的结果
+    if targetResult.Success() && targetResult.HasResults() {
+        fmt.Printf("Found %d fingerprints on %s\n",
+            len(targetResult.Results), targetResult.Target)
+    }
+}
+```
+
+#### Service 扫描示例
+
+```go
+// Service 扫描（支持 TCP/UDP 等协议）
+targets := []string{
+    "192.168.1.1:22",
+    "192.168.1.1:80",
+    "192.168.1.1:443",
+}
+
+ctx := fingers.NewContext().WithTimeout(5).WithLevel(2)
+results, _ := engine.ServiceMatch(ctx, targets)
+```
+
+### Context 配置
+
+```go
+ctx := fingers.NewContext().
+    WithTimeout(10).              // 设置超时（秒）
+    WithLevel(1).                 // 设置探测级别（HTTP: 0-3, Service: 0-9）
+    WithProxy("socks5://127.0.0.1:1080"). // 设置代理
+    WithClient(customHTTPClient)  // 自定义 HTTP 客户端
+
+// 探测级别说明：
+// HTTP: 0=被动, 1=基础主动, 2=深度主动, 3=最深主动
+// Service: 0-9 级别，数字越大探测越深入
 ```
 
 ### 示例 1：从 Cyberhub 加载
@@ -191,8 +287,39 @@ sdk/
 - [x] 本地 YAML/目录加载
 - [x] Alias 管理
 - [x] SDK Engine 接口（可选）
-- [x] 支持 `[]byte` 和 `http.Response` 匹配
+- [x] 被动匹配：支持 `[]byte`、`http.Response`、Favicon
+- [x] 主动探测：HTTP/HTTPS 批量扫描（同步/流式）
+- [x] 主动探测：通用服务批量扫描（同步/流式）
+- [x] Context 配置：timeout、level、proxy、自定义 HTTP 客户端
+- [x] 批量目标扫描：支持多目标并发探测
 - [x] 动态扩展（AddFingers / AddFingersFile）
+
+## 📚 API 参考
+
+### TargetResult 结构
+
+```go
+type TargetResult struct {
+    Target  string                    // 扫描的目标 URL 或 target
+    Results []*common.ServiceResult   // 指纹识别结果
+    Error   error                     // 错误信息（如果有）
+}
+
+// 方法
+func (r *TargetResult) Success() bool      // 是否成功（无错误）
+func (r *TargetResult) HasResults() bool   // 是否有匹配结果
+```
+
+### Context 方法
+
+```go
+func NewContext() *Context
+func (c *Context) WithTimeout(timeout int) *Context
+func (c *Context) WithLevel(level int) *Context
+func (c *Context) WithProxy(proxy string) *Context
+func (c *Context) WithClient(client *http.Client) *Context
+func (c *Context) WithHTTPSender(sender HTTPSender) *Context
+```
 
 ## 📖 文档
 

@@ -3,12 +3,12 @@ module github.com/chainreactors/sdk
 go 1.20
 
 require (
-	github.com/chainreactors/fingers v1.1.1-0.20260110164933-65840487c1eb
+	github.com/chainreactors/fingers v1.1.1-0.20260127104843-a77f7d9e7b6c
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260110190827-a2c3000f54be
 	github.com/chainreactors/logs v0.0.0-20241115105204-6132e39f5261
-	github.com/chainreactors/neutron v0.0.0-20251231090857-6d5f086ddf02
+	github.com/chainreactors/neutron v0.0.0-20260110190404-ab49252d61d5
 	github.com/chainreactors/parsers v0.0.0-20251202162218-4b2258465d0a
-	github.com/chainreactors/spray v1.2.4-0.20251205170859-986158c72a49
+	github.com/chainreactors/spray v1.2.4-0.20260121025911-4f08ee9640d7
 	github.com/chainreactors/utils v0.0.0-20251216161625-70054cf04e88
 	github.com/panjf2000/ants/v2 v2.9.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -69,3 +69,5 @@ require (
 	golang.org/x/time v0.5.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+replace github.com/chainreactors/spray => ../spray

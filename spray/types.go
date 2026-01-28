@@ -65,6 +65,18 @@ func (c *Context) SetHeaders(headers []string) *Context {
 	return c
 }
 
+// SetHost 设置自定义Host头
+func (c *Context) SetHost(host string) *Context {
+	c.opt.Host = host
+	return c
+}
+
+// SetMod 设置运行模式 (path/host/param)
+func (c *Context) SetMod(mod string) *Context {
+	c.opt.Mod = mod
+	return c
+}
+
 // SetFilter 设置过滤规则
 func (c *Context) SetFilter(filter string) *Context {
 	c.opt.Filter = filter

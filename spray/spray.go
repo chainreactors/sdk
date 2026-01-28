@@ -128,10 +128,24 @@ func (r *Result) SprayResult() *parsers.SprayResult {
 }
 
 func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan sdk.Result) {
-	// 启动结果处理 goroutine
-	// 创建结果 channel
+	// 启动结果处理 goroutine - 处理 OutputCh
 	go func() {
 		for bl := range runner.OutputCh {
+			select {
+			case ch <- &Result{
+				success: bl.IsValid,
+				data:    bl.SprayResult,
+			}:
+			case <-ctx.Done():
+				return
+			}
+			runner.OutWg.Done()
+		}
+	}()
+
+	// 启动结果处理 goroutine - 处理 FuzzyCh
+	go func() {
+		for bl := range runner.FuzzyCh {
 			select {
 			case ch <- &Result{
 				success: bl.IsValid,

@@ -142,3 +142,9 @@ func (opt *Option) WithDepth(depth int) *Option {
 	opt.Depth = depth
 	return opt
 }
+
+// WithMod 设置运行模式 (path/host/param)
+func (opt *Option) WithMod(mod string) *Option {
+	opt.Mod = mod
+	return opt
+}

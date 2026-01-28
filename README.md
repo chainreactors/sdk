@@ -177,10 +177,29 @@ config := gogo.NewConfig().
 ```go
 ctx := gogo.NewContext().
     SetThreads(1000).
-    SetVersionLevel(2).         // 0-3，数值越高检测越深
+    SetVersionLevel(2).         // 指纹识别级别（见下方说明）
     SetExploit("all").          // none/all/known
     SetDelay(5)                 // 请求超时时间
 ```
+
+**指纹识别级别说明**:
+
+- **Level 0 (被动模式)**: 仅分析响应内容，不发送主动探测请求
+  - 适用场景：快速扫描、隐蔽性要求高
+  - 优点：速度快、流量小、不易被检测
+  - 缺点：识别准确度较低
+
+- **Level 1 (基础模式)**: 使用指纹级别的主动探测
+  - 发送finger-level的send_data探测请求
+  - 适用场景：常规扫描、平衡速度和准确度
+  - 优点：准确度较高、流量适中
+  - 缺点：会产生额外的探测流量
+
+- **Level 2 (全量模式)**: 使用指纹+规则级别的主动探测
+  - 发送finger-level和rule-level的send_data探测请求
+  - 适用场景：深度扫描、要求最高准确度
+  - 优点：识别最准确、覆盖最全面
+  - 缺点：速度较慢、流量较大
 
 ### Spray 运行时上下文
 
