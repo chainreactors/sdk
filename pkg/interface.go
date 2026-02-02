@@ -13,21 +13,39 @@ import (
 // EngineFactory 引擎工厂函数类型
 type EngineFactory func(config interface{}) (Engine, error)
 
-// RegisterFunc 注册函数类型
+// RegisterFunc 注册函数类型（用于引擎）
 type RegisterFunc func(name string, factory EngineFactory)
 
-// globalRegister 全局注册函数（由外层 SDK 包设置）
+// globalRegister 全局引擎注册函数（由外层 SDK 包设置）
 var globalRegister RegisterFunc
 
-// SetRegisterFunc 设置全局注册函数（仅由 SDK 根包调用）
+// pendingRegistrations 缓存早期的注册请求（在 SetRegisterFunc 之前）
+var pendingRegistrations []struct {
+	name    string
+	factory EngineFactory
+}
+
+// SetRegisterFunc 设置全局引擎注册函数（仅由 SDK 根包调用）
 func SetRegisterFunc(fn RegisterFunc) {
 	globalRegister = fn
+
+	// 执行所有缓存的注册
+	for _, reg := range pendingRegistrations {
+		globalRegister(reg.name, reg.factory)
+	}
+	pendingRegistrations = nil
 }
 
 // Register 注册引擎（供各引擎包的 init() 调用）
 func Register(name string, factory EngineFactory) {
 	if globalRegister != nil {
 		globalRegister(name, factory)
+	} else {
+		// 缓存注册请求，等待 SetRegisterFunc 调用
+		pendingRegistrations = append(pendingRegistrations, struct {
+			name    string
+			factory EngineFactory
+		}{name, factory})
 	}
 }
 

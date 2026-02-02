@@ -201,17 +201,27 @@ func (r *MatchResult) Count() int {
 type TargetResult struct {
 	Target  string                  // 扫描的目标 URL 或 target
 	Results []*common.ServiceResult // 指纹识别结果
-	Error   error                   // 错误信息（如果有）
+	Err     error                   // 错误信息（如果有）
 }
 
 // Success 是否成功（无错误）
 func (r *TargetResult) Success() bool {
-	return r.Error == nil
+	return r.Err == nil
+}
+
+// Error 返回错误（实现 sdk.Result 接口）
+func (r *TargetResult) Error() error {
+	return r.Err
 }
 
 // HasResults 是否有匹配结果
 func (r *TargetResult) HasResults() bool {
 	return len(r.Results) > 0
+}
+
+// Data 返回结果数据（实现 sdk.Result 接口）
+func (r *TargetResult) Data() interface{} {
+	return r.Results
 }
 
 // ========================================
@@ -239,6 +249,69 @@ func (t *MatchTask) Type() string {
 }
 
 func (t *MatchTask) Validate() error {
+	if len(t.Data) == 0 {
+		return fmt.Errorf("data cannot be empty")
+	}
+	return nil
+}
+
+// HTTPMatchTask HTTP主动探测任务
+type HTTPMatchTask struct {
+	URLs []string // 目标URL列表
+}
+
+// NewHTTPMatchTask 创建HTTP匹配任务
+func NewHTTPMatchTask(urls []string) *HTTPMatchTask {
+	return &HTTPMatchTask{URLs: urls}
+}
+
+func (t *HTTPMatchTask) Type() string {
+	return "http_match"
+}
+
+func (t *HTTPMatchTask) Validate() error {
+	if len(t.URLs) == 0 {
+		return fmt.Errorf("urls cannot be empty")
+	}
+	return nil
+}
+
+// ServiceMatchTask 服务主动探测任务
+type ServiceMatchTask struct {
+	Targets []string // 目标地址列表（格式：ip:port 或 host:port）
+}
+
+// NewServiceMatchTask 创建服务匹配任务
+func NewServiceMatchTask(targets []string) *ServiceMatchTask {
+	return &ServiceMatchTask{Targets: targets}
+}
+
+func (t *ServiceMatchTask) Type() string {
+	return "service_match"
+}
+
+func (t *ServiceMatchTask) Validate() error {
+	if len(t.Targets) == 0 {
+		return fmt.Errorf("targets cannot be empty")
+	}
+	return nil
+}
+
+// FaviconMatchTask Favicon匹配任务
+type FaviconMatchTask struct {
+	Data []byte // favicon图标的原始字节数据
+}
+
+// NewFaviconMatchTask 创建Favicon匹配任务
+func NewFaviconMatchTask(data []byte) *FaviconMatchTask {
+	return &FaviconMatchTask{Data: data}
+}
+
+func (t *FaviconMatchTask) Type() string {
+	return "favicon_match"
+}
+
+func (t *FaviconMatchTask) Validate() error {
 	if len(t.Data) == 0 {
 		return fmt.Errorf("data cannot be empty")
 	}

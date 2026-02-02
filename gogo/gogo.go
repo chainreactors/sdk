@@ -85,8 +85,10 @@ func (e *GogoEngine) Init() error {
 		return nil
 	}
 
+	// 尝试加载端口配置，失败时使用默认配置
 	if err := pkg.LoadPortConfig(""); err != nil {
-		return fmt.Errorf("load port config failed: %v", err)
+		// 使用默认端口配置，不阻止初始化
+		logs.Log.Debugf("load port config failed, using default: %v", err)
 	}
 
 	// 如果提供了自定义 fingers 引擎，直接使用
@@ -96,9 +98,9 @@ func (e *GogoEngine) Init() error {
 			pkg.FingerEngine = fingerImpl
 		}
 	} else {
-		// 否则使用默认加载方式，但允许失败
+		// 否则使用默认加载方式，允许失败（使用内置指纹）
 		if err := pkg.LoadFinger(nil); err != nil {
-			return err
+			logs.Log.Debugf("load finger failed, using built-in: %v", err)
 		}
 	}
 
@@ -117,8 +119,10 @@ func (e *GogoEngine) Init() error {
 		logs.Log.Infof("using custom neutron templates: %d templates in %d categories",
 			templateCount, len(templateMap))
 	} else {
-		// 否则使用默认加载方式
-		pkg.LoadNeutron("")
+		// 否则使用默认加载方式，允许失败
+		if err := pkg.LoadNeutron(""); err != nil {
+			logs.Log.Debugf("load neutron failed, using built-in: %v", err)
+		}
 	}
 
 	e.inited = true

@@ -121,7 +121,25 @@ func (c *Config) Load(ctx context.Context) error {
 		c.FullFingers = (FullFingers{}).Merge(fingersData, aliases)
 		return nil
 	}
-	return fmt.Errorf("no data source configured")
+
+	// 尝试从默认路径加载指纹库
+	defaultPaths := []string{
+		"fingers.json",
+		"data/fingers.json",
+		"./fingers.json",
+		"./data/fingers.json",
+	}
+
+	for _, path := range defaultPaths {
+		fingers, err := loadFingersFromPath(path)
+		if err == nil {
+			c.FullFingers = (FullFingers{}).Merge(fingers, nil)
+			return nil
+		}
+	}
+
+	// 如果所有默认路径都失败，返回友好的错误信息
+	return fmt.Errorf("no data source configured: please use WithLocalFile(), WithCyberhub(), or WithFingers() to configure fingerprint data")
 }
 
 type FullFinger struct {

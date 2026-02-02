@@ -37,13 +37,22 @@ func NewEngine(config *Config) (*Engine, error) {
 		config = NewConfig()
 	}
 
+	// 尝试加载配置，如果失败则创建空引擎
 	if err := config.Load(context.Background()); err != nil {
-		return nil, err
+		// 返回空引擎，允许后续配置
+		return &Engine{
+			config: config,
+			engine: nil,
+		}, nil
 	}
 
 	fingers := config.FullFingers.Fingers()
 	if len(fingers) == 0 {
-		return nil, fmt.Errorf("fingers data is empty")
+		// 返回空引擎，允许后续配置
+		return &Engine{
+			config: config,
+			engine: nil,
+		}, nil
 	}
 
 	e := &Engine{
@@ -94,7 +103,8 @@ func (e *Engine) Get() *fingersLib.Engine {
 // GetFingersEngine 获取 FingersEngine（用于 gogo 集成）
 func (e *Engine) GetFingersEngine() (*fingersEngine.FingersEngine, error) {
 	if e.engine == nil {
-		return nil, fmt.Errorf("fingers engine is not initialized")
+		// 返回 nil，允许引擎在未配置时也能使用
+		return nil, nil
 	}
 
 	impl := e.engine.GetEngine("fingers")
@@ -187,7 +197,8 @@ func (e *Engine) Close() error {
 // Match 匹配单个 HTTP 响应原始数据（被动指纹识别 - Level 0）
 func (e *Engine) Match(data []byte) (common.Frameworks, error) {
 	if e.engine == nil {
-		return nil, fmt.Errorf("fingers engine is not initialized")
+		// 返回空结果，允许引擎在未配置时也能使用
+		return nil, nil
 	}
 	return e.engine.DetectContent(data)
 }
@@ -200,7 +211,8 @@ func (e *Engine) Match(data []byte) (common.Frameworks, error) {
 //   - error: 错误信息
 func (e *Engine) MatchFavicon(data []byte) (common.Frameworks, error) {
 	if e.engine == nil {
-		return nil, fmt.Errorf("fingers engine is not initialized")
+		// 返回空结果，允许引擎在未配置时也能使用
+		return nil, nil
 	}
 	return e.engine.MatchFavicon(data), nil
 }
@@ -213,7 +225,8 @@ func (e *Engine) MatchFavicon(data []byte) (common.Frameworks, error) {
 //   - error: 错误信息
 func (e *Engine) MatchHTTP(resp *http.Response) (common.Frameworks, error) {
 	if e.engine == nil {
-		return nil, fmt.Errorf("fingers engine is not initialized")
+		// 返回空结果，允许引擎在未配置时也能使用
+		return nil, nil
 	}
 
 	// 读取响应原始数据
@@ -255,7 +268,7 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int, client *htt
 	// 解析 URL 获取 base URL (scheme://host:port)
 	parsedURL, err := parseURL(url)
 	if err != nil {
-		result.Error = fmt.Errorf("invalid url: %w", err)
+		result.Err = fmt.Errorf("invalid url: %w", err)
 		return result
 	}
 	baseURL := parsedURL.Scheme + "://" + parsedURL.Host
@@ -308,7 +321,7 @@ func (e *Engine) scanServiceTarget(ctx *Context, target string, level int) *Targ
 	// 解析target获取host和port
 	host, port, err := parseTarget(target)
 	if err != nil {
-		result.Error = fmt.Errorf("invalid target: %w", err)
+		result.Err = fmt.Errorf("invalid target: %w", err)
 		return result
 	}
 
@@ -324,7 +337,7 @@ func (e *Engine) scanServiceTarget(ctx *Context, target string, level int) *Targ
 	// 执行主动探测
 	serviceResults, err := e.engine.DetectService(host, port, level, sender, nil)
 	if err != nil {
-		result.Error = err
+		result.Err = err
 		return result
 	}
 
@@ -364,7 +377,10 @@ func (e *Engine) ServiceMatch(ctx *Context, targets []string) ([]*TargetResult, 
 //   - error: 错误信息（仅在引擎初始化失败等严重错误时返回）
 func (e *Engine) HTTPMatchStream(ctx *Context, urls []string) (<-chan *TargetResult, error) {
 	if e.engine == nil {
-		return nil, fmt.Errorf("fingers engine is not initialized")
+		// 返回空 channel，允许引擎在未配置时也能使用
+		ch := make(chan *TargetResult)
+		close(ch)
+		return ch, nil
 	}
 
 	// 从 Context 获取 level (HTTP: 0-3)
@@ -424,7 +440,10 @@ func (e *Engine) HTTPMatchStream(ctx *Context, urls []string) (<-chan *TargetRes
 //   - error: 错误信息（仅在引擎初始化失败等严重错误时返回）
 func (e *Engine) ServiceMatchStream(ctx *Context, targets []string) (<-chan *TargetResult, error) {
 	if e.engine == nil {
-		return nil, fmt.Errorf("fingers engine is not initialized")
+		// 返回空 channel，允许引擎在未配置时也能使用
+		ch := make(chan *TargetResult)
+		close(ch)
+		return ch, nil
 	}
 
 	// 从 Context 获取 level (Service: 0-9)
@@ -469,7 +488,10 @@ func (e *Engine) Name() string {
 func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
 	// 确保引擎已初始化
 	if e.engine == nil {
-		return nil, fmt.Errorf("fingers engine is not initialized")
+		// 返回空 channel，允许引擎在未配置时也能使用
+		ch := make(chan sdk.Result)
+		close(ch)
+		return ch, nil
 	}
 
 	// 验证任务
