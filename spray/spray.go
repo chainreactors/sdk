@@ -57,17 +57,30 @@ func (e *SprayEngine) Init() error {
 		pkg.FingerEngine = libEngine
 		logs.Log.Infof("using custom fingers engine: %s", libEngine.String())
 	} else {
-		err := pkg.LoadFingers()
-		if err != nil {
-			return err
+		// 尝试创建默认的 fingers 引擎
+		defaultFingers, err := sdkfingers.NewEngine(nil)
+		if err == nil && defaultFingers != nil {
+			e.fingersEngine = defaultFingers
+			libEngine := defaultFingers.Get()
+			if libEngine != nil {
+				pkg.FingerEngine = libEngine
+				logs.Log.Debugf("using default fingers engine")
+			}
+		} else {
+			// 如果创建失败，尝试使用内置指纹
+			if err := pkg.LoadFingers(); err != nil {
+				logs.Log.Debugf("load fingers failed, using built-in: %v", err)
+			}
 		}
 	}
 	// 提取 ActivePath (spray 需要)
-	if fingers := pkg.FingerEngine.Fingers(); fingers != nil {
-		for _, f := range fingers.HTTPFingers {
-			for _, rule := range f.Rules {
-				if rule.SendDataStr != "" {
-					pkg.ActivePath = append(pkg.ActivePath, rule.SendDataStr)
+	if pkg.FingerEngine != nil {
+		if fingers := pkg.FingerEngine.Fingers(); fingers != nil {
+			for _, f := range fingers.HTTPFingers {
+				for _, rule := range f.Rules {
+					if rule.SendDataStr != "" {
+						pkg.ActivePath = append(pkg.ActivePath, rule.SendDataStr)
+					}
 				}
 			}
 		}

@@ -98,9 +98,19 @@ func (e *GogoEngine) Init() error {
 			pkg.FingerEngine = fingerImpl
 		}
 	} else {
-		// 否则使用默认加载方式，允许失败（使用内置指纹）
-		if err := pkg.LoadFinger(nil); err != nil {
-			logs.Log.Debugf("load finger failed, using built-in: %v", err)
+		// 尝试创建默认的 fingers 引擎
+		defaultFingers, err := sdkfingers.NewEngine(nil)
+		if err == nil && defaultFingers != nil {
+			e.fingersEngine = defaultFingers
+			fingerImpl, err := defaultFingers.GetFingersEngine()
+			if fingerImpl != nil && err == nil {
+				pkg.FingerEngine = fingerImpl
+			}
+		} else {
+			// 如果创建失败，尝试使用内置指纹
+			if err := pkg.LoadFinger(nil); err != nil {
+				logs.Log.Debugf("load finger failed, using built-in: %v", err)
+			}
 		}
 	}
 
