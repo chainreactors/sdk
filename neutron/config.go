@@ -101,5 +101,23 @@ func (c *Config) Load(ctx context.Context) error {
 		c.Templates = (Templates{}).Merge(loaded)
 		return nil
 	}
-	return fmt.Errorf("no data source configured")
+
+	// 尝试从默认路径加载模板
+	defaultPaths := []string{
+		"templates",
+		"pocs",
+		"./templates",
+		"./pocs",
+	}
+
+	for _, path := range defaultPaths {
+		loaded, err := loadTemplatesFromPath(path)
+		if err == nil {
+			c.Templates = (Templates{}).Merge(loaded)
+			return nil
+		}
+	}
+
+	// 如果所有默认路径都失败，返回友好的错误信息
+	return fmt.Errorf("no data source configured: please use WithLocalFile(), WithCyberhub(), or WithTemplates() to configure template data")
 }

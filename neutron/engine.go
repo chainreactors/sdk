@@ -30,12 +30,23 @@ func NewEngine(config *Config) (*Engine, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
+
+	// 尝试加载配置，如果失败则创建空引擎
 	if err := config.Load(context.Background()); err != nil {
-		return nil, err
+		// 返回空引擎，允许后续配置
+		return &Engine{
+			config:    config,
+			templates: nil,
+		}, nil
 	}
+
 	templates := config.Templates.Templates()
 	if len(templates) == 0 {
-		return nil, fmt.Errorf("templates data is empty")
+		// 返回空引擎，允许后续配置
+		return &Engine{
+			config:    config,
+			templates: nil,
+		}, nil
 	}
 
 	e := &Engine{
@@ -88,7 +99,10 @@ func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, err
 		templates = e.templates
 	}
 	if len(templates) == 0 {
-		return nil, fmt.Errorf("templates are empty")
+		// 返回空 channel，允许引擎在未配置时也能使用
+		ch := make(chan sdk.Result)
+		close(ch)
+		return ch, nil
 	}
 
 	var runCtx *Context
