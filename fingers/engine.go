@@ -143,6 +143,10 @@ func (e *Engine) convertToEngine(responses []cyberhub.FingerprintResponse) (*fin
 
 	engine.Register(fEngine)
 
+	// Compile 会从 finger 列表重建 aliases（不含 pocs），
+	// 所以必须先 Compile，再用 CyberHub 导出的 aliases（含 pocs）覆盖。
+	engine.Compile()
+
 	if len(aliases) > 0 {
 		aliasEngine, err := alias.NewAliases(aliases...)
 		if err == nil {
@@ -150,7 +154,6 @@ func (e *Engine) convertToEngine(responses []cyberhub.FingerprintResponse) (*fin
 		}
 	}
 
-	engine.Compile()
 	return engine, nil
 }
 
