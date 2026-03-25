@@ -126,4 +126,25 @@ func main() {
 			idx++
 		}
 	}
+
+	// 5. 通过 Alias 查找关联 POC（纯内存查找，无额外 API 调用）
+	//
+	// 完整链路:
+	//   DetectContent(data) 返回 Frameworks (map[name]*Framework)
+	//     → libEngine.Aliases.FindFramework(fw) 根据 fw.Name 查找 Alias
+	//       → Alias.Pocs 就是关联的 POC ID 列表 (如 ["CVE-2021-29441", ...])
+	//
+	// 数据来源: CyberHub 导出指纹时，Alias 及其 Pocs 字段一起加载到内存。
+	// 查找方式: FindFramework 通过 framework.From (引擎名) + framework.Name
+	//           在 Aliases.Map 中做精确匹配，时间复杂度 O(1)。
+	fmt.Println("\n--- Associated POCs ---")
+	if libEngine.Aliases == nil {
+		fmt.Println("(No alias data loaded)")
+	} else {
+		for _, fw := range frameworks {
+			if a, ok := libEngine.Aliases.FindFramework(fw); ok && len(a.Pocs) > 0 {
+				fmt.Printf("%s -> POCs: %v\n", fw.Name, a.Pocs)
+			}
+		}
+	}
 }
