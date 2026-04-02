@@ -4,21 +4,18 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
 	"github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/gogo"
-	"github.com/chainreactors/sdk/neutron"
 )
 
 var (
-	// Cyberhub 配置
-	cyberhubURL = flag.String("url", "", "Cyberhub URL (e.g., http://127.0.0.1:8080)")
-	apiKey      = flag.String("key", "", "Cyberhub API Key")
-	source      = flag.String("source", "", "Filter by source (optional)")
-	loadFingers = flag.Bool("fingers", true, "Load fingers from Cyberhub")
-	loadNeutron = flag.Bool("neutron", false, "Load neutron POCs from Cyberhub")
+	// 本地指纹配置
+	fingersPath = flag.String("fingers-path", "", "Local fingers directory path")
+	loadFingers = flag.Bool("fingers", true, "Load fingerprints")
 
 	// 扫描配置
 	target       = flag.String("target", "", "Target IP or CIDR (required)")
@@ -38,47 +35,30 @@ func main() {
 
 	// 验证参数
 	if *target == "" {
-		fmt.Println("Usage: gogo [-url <cyberhub_url> -key <api_key>] -target <ip/cidr> -ports <ports>")
+		fmt.Println("Usage: gogo -target <ip/cidr> [-ports <ports>] [options]")
 		fmt.Println("\nBasic scan:")
 		fmt.Println("  gogo -target 127.0.0.1 -ports 80,443")
-		fmt.Println("\nWith Cyberhub fingerprints:")
-		fmt.Println("  gogo -url http://127.0.0.1:8080 -key your_key -target 127.0.0.1")
-		fmt.Println("\nWith Cyberhub fingerprints and POCs:")
-		fmt.Println("  gogo -url ... -key ... -fingers -neutron -target 127.0.0.1")
-		fmt.Println("\nFilter by source:")
-		fmt.Println("  gogo -url ... -key ... -source github -target 127.0.0.1")
+		fmt.Println("\nWith local fingerprints:")
+		fmt.Println("  gogo -fingers -fingers-path /path/to/fingers -target 127.0.0.1")
 		fmt.Println("\nAdvanced:")
 		fmt.Println("  gogo -target 192.168.1.0/24 -ports 80,443,8080 -threads 2000 -version 2")
-		fmt.Println("\nNote: GoGo CLI requires Cyberhub (-url and -key) to load fingerprints and POCs.")
-		fmt.Println("      For standalone usage, please use the gogo command-line tool directly.")
 		os.Exit(1)
 	}
 
-	// GoGo CLI 需要 Cyberhub 配置
-	if *cyberhubURL == "" || *apiKey == "" {
-		fmt.Println("Error: GoGo CLI requires Cyberhub configuration")
-		fmt.Println("Usage: gogo -url <cyberhub_url> -key <api_key> -target <ip/cidr>")
-		fmt.Println("\nExample:")
-		fmt.Println("  gogo -url http://127.0.0.1:8080 -key your_key -target 127.0.0.1 -ports 80,443")
-		os.Exit(1)
-	}
+	// 判断 target 是否为域名
+	isDomain := !strings.Contains(*target, "/") && net.ParseIP(*target) == nil
 
-	// 1. 加载 Fingers 和 Neutron (可选)
+	// 1. 加载 Fingers (可选)
 	var fEngine *fingers.Engine
-	var neutronEng *neutron.Engine
-	templatesCount := 0
 
 	// 加载 Fingers
 	if *loadFingers {
 		if !*jsonOut {
-			fmt.Printf("Loading fingerprints from Cyberhub (%s)...\n", *cyberhubURL)
+			fmt.Printf("Loading fingerprints from local path (%s)...\n", *fingersPath)
 		}
 
 		fingersConfig := fingers.NewConfig()
-		if *source != "" {
-			fingersConfig.SetSources(*source)
-		}
-		fingersConfig.WithCyberhub(*cyberhubURL, *apiKey)
+		fingersConfig.WithLocalFile(*fingersPath)
 
 		fingersEng, err := fingers.NewEngine(fingersConfig)
 		if err != nil {
@@ -94,34 +74,9 @@ func main() {
 		if impl != nil {
 			fEngine = fingersEng
 			if !*jsonOut {
-				fmt.Printf("? Loaded %d HTTP fingerprints, %d Socket fingerprints\n",
+				fmt.Printf("✅ Loaded %d HTTP fingerprints, %d Socket fingerprints\n",
 					len(impl.HTTPFingers), len(impl.SocketFingers))
 			}
-		}
-	}
-
-	// 加载 Neutron POCs
-	if *loadNeutron {
-		if !*jsonOut {
-			fmt.Printf("Loading POCs from Cyberhub (%s)...\n", *cyberhubURL)
-		}
-
-		neutronConfig := neutron.NewConfig()
-		if *source != "" {
-			neutronConfig.SetSources(*source)
-		}
-		neutronConfig.WithCyberhub(*cyberhubURL, *apiKey)
-
-		neutronEng, err := neutron.NewEngine(neutronConfig)
-		if err != nil {
-			fmt.Printf("Error creating neutron engine: %v\n", err)
-			os.Exit(1)
-		}
-
-		templates := neutronEng.Get()
-		templatesCount = len(templates)
-		if !*jsonOut {
-			fmt.Printf("? Loaded and compiled %d POCs\n", templatesCount)
 		}
 	}
 
@@ -133,9 +88,6 @@ func main() {
 	gogoConfig := gogo.NewConfig()
 	if fEngine != nil {
 		gogoConfig.WithFingersEngine(fEngine)
-	}
-	if neutronEng != nil {
-		gogoConfig.WithNeutronEngine(neutronEng)
 	}
 	gogoEngine := gogo.NewEngine(gogoConfig)
 
@@ -184,10 +136,21 @@ func main() {
 
 		aliveCount++
 
+		// 转换端口为整数
+		portNum := 0
+		fmt.Sscanf(gogoResult.Port, "%d", &portNum)
+
+		// 如果输入是域名，使用域名作为 host
+		hostValue := gogoResult.Ip
+		if isDomain {
+			hostValue = *target
+		}
+
 		resultMap := map[string]interface{}{
-			"ip":     gogoResult.Ip,
-			"port":   gogoResult.Port,
-			"status": gogoResult.Status,
+			"host":     hostValue,
+			"port":     portNum,
+			"protocol": gogoResult.Protocol,
+			"status":   gogoResult.Status,
 		}
 
 		if len(gogoResult.Frameworks) > 0 {
@@ -206,7 +169,7 @@ func main() {
 
 		// 实时输出
 		if !*jsonOut {
-			output := fmt.Sprintf("✓ %s:%s - %s", gogoResult.Ip, gogoResult.Port, gogoResult.Status)
+			output := fmt.Sprintf("✓ %s:%d - %s", gogoResult.Ip, portNum, gogoResult.Status)
 			if len(gogoResult.Frameworks) > 0 {
 				fwNames := []string{}
 				for _, fw := range gogoResult.Frameworks {
@@ -224,10 +187,7 @@ func main() {
 	// 6. 输出汇总
 	if *jsonOut {
 		output := map[string]interface{}{
-			"target":      *target,
-			"ports":       *ports,
-			"alive_count": aliveCount,
-			"results":     results,
+			"results": results,
 		}
 		jsonData, _ := json.MarshalIndent(output, "", "  ")
 		fmt.Println(string(jsonData))
