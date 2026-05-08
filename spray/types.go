@@ -33,7 +33,7 @@ func NewContext() *Context {
 func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
 		ctx: ctx,
-		opt: c.opt,
+		opt: cloneOption(c.opt),
 	}
 }
 
@@ -91,7 +91,7 @@ func (c *Context) SetMatch(match string) *Context {
 
 // SetOption 设置完整选项
 func (c *Context) SetOption(opt *core.Option) *Context {
-	c.opt = &Option{opt}
+	c.opt = cloneOption(&Option{opt})
 	return c
 }
 
@@ -166,12 +166,38 @@ func (c *Context) SetRecursiveDepth(depth int) *Context {
 }
 
 // ========================================
+// 字典 / 规则配置方法
+// ========================================
+
+func (c *Context) SetDictionaries(dicts []string) *Context {
+	c.opt.Dictionaries = dicts
+	return c
+}
+
+func (c *Context) SetRules(rules []string) *Context {
+	c.opt.Rules = rules
+	return c
+}
+
+func (c *Context) SetWord(word string) *Context {
+	c.opt.Word = word
+	return c
+}
+
+func (c *Context) SetDefaultDict(enable bool) *Context {
+	c.opt.DefaultDict = enable
+	return c
+}
+
+// ========================================
 // Config 实现
 // ========================================
 
 // Config Spray 配置
 type Config struct {
-	FingersEngine *sdkfingers.Engine
+	FingersEngine    *sdkfingers.Engine
+	ResourceProvider func(string) []byte
+	Capacity         int
 }
 
 // NewConfig 创建默认配置
@@ -186,6 +212,20 @@ func (c *Config) Validate() error {
 // WithFingersEngine 设置自定义 fingers 引擎
 func (c *Config) WithFingersEngine(engine *sdkfingers.Engine) *Config {
 	c.FingersEngine = engine
+	return c
+}
+
+// WithResourceProvider sets a provider used by the underlying spray package.
+func (c *Config) WithResourceProvider(provider func(string) []byte) *Config {
+	c.ResourceProvider = provider
+	return c
+}
+
+// WithCapacity sets the total capacity for concurrent thread usage across all
+// simultaneous invocations. When set, each Execute call acquires its thread
+// count from this shared bucket and blocks if capacity is exhausted.
+func (c *Config) WithCapacity(total int) *Config {
+	c.Capacity = total
 	return c
 }
 
@@ -216,7 +256,8 @@ func (t *CheckTask) Validate() error {
 
 // BruteTask 暴力破解任务
 type BruteTask struct {
-	BaseURL  string
+	BaseURL  string   // kept for compatibility with older single-target callers
+	BaseURLs []string // optional batch targets; executed by spray Runner's task pool
 	Wordlist []string
 }
 
@@ -224,6 +265,15 @@ type BruteTask struct {
 func NewBruteTask(baseURL string, wordlist []string) *BruteTask {
 	return &BruteTask{
 		BaseURL:  baseURL,
+		BaseURLs: []string{baseURL},
+		Wordlist: wordlist,
+	}
+}
+
+func NewBruteTasks(baseURLs []string, wordlist []string) *BruteTask {
+	return &BruteTask{
+		BaseURL:  firstString(baseURLs),
+		BaseURLs: append([]string(nil), baseURLs...),
 		Wordlist: wordlist,
 	}
 }
@@ -233,11 +283,36 @@ func (t *BruteTask) Type() string {
 }
 
 func (t *BruteTask) Validate() error {
-	if t.BaseURL == "" {
-		return fmt.Errorf("BaseURL cannot be empty")
+	if len(t.urls()) == 0 {
+		return fmt.Errorf("BaseURLs cannot be empty")
 	}
 	if len(t.Wordlist) == 0 {
 		return fmt.Errorf("Wordlist cannot be empty")
 	}
 	return nil
+}
+
+func (t *BruteTask) urls() []string {
+	if t == nil {
+		return nil
+	}
+	urls := make([]string, 0, len(t.BaseURLs)+1)
+	for _, u := range t.BaseURLs {
+		if u != "" {
+			urls = append(urls, u)
+		}
+	}
+	if len(urls) == 0 && t.BaseURL != "" {
+		urls = append(urls, t.BaseURL)
+	}
+	return urls
+}
+
+func firstString(values []string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
