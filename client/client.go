@@ -10,6 +10,7 @@ import (
 	"github.com/chainreactors/sdk/neutron"
 	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/spray"
+	"github.com/chainreactors/sdk/zombie"
 )
 
 // ========================================
@@ -135,6 +136,15 @@ func (c *Client) Neutron() (*neutron.Engine, error) {
 		return nil, err
 	}
 	return eng.(*neutron.Engine), nil
+}
+
+// Zombie 获取 Zombie 引擎（类型安全）
+func (c *Client) Zombie() (*zombie.Engine, error) {
+	eng, err := c.getOrCreateEngine("zombie")
+	if err != nil {
+		return nil, err
+	}
+	return eng.(*zombie.Engine), nil
 }
 
 // Close 关闭所有引擎

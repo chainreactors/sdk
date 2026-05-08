@@ -3,8 +3,17 @@ package spray
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/chainreactors/parsers"
+	sdkfingers "github.com/chainreactors/sdk/fingers"
+	sdk "github.com/chainreactors/sdk/pkg"
 )
 
 // TestNewSprayEngine 测试引擎创建
@@ -40,6 +49,313 @@ func TestSprayEngineName(t *testing.T) {
 	if engine.Name() != "spray" {
 		t.Errorf("Expected engine name 'spray', got '%s'", engine.Name())
 	}
+}
+
+func TestExecuteInitializesWithEmptyCustomFingers(t *testing.T) {
+	engine := NewEngine(NewConfig().WithFingersEngine(&sdkfingers.Engine{}))
+	ctx := NewContext()
+	timeoutCtx, cancel := context.WithTimeout(ctx.Context(), time.Second)
+	defer cancel()
+	ctx = ctx.WithContext(timeoutCtx).SetTimeout(1)
+
+	resultCh, err := engine.CheckStream(ctx, []string{"http://127.0.0.1:1"})
+	if err != nil {
+		t.Fatalf("CheckStream() returned error: %v", err)
+	}
+	for range resultCh {
+	}
+}
+
+func TestInitConcurrent(t *testing.T) {
+	engine := NewEngine(nil)
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- engine.Init()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("Init() error = %v", err)
+		}
+	}
+}
+
+func TestSprayEngineConcurrentCheckAndBrute(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte("home"))
+		case "/admin":
+			_, _ = w.Write([]byte("admin panel admin panel admin panel admin panel admin panel"))
+		case "/api":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"service":"spray-sdk-concurrency","ok":true,"padding":"xxxxxxxxxxxxxxxxxxxxxxxx"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	engine := NewEngine(nil)
+	if err := engine.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	const workers = 12
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			sprayCtx := NewContext().SetThreads(4).SetTimeout(1).WithContext(ctx)
+
+			var count int
+			switch i % 3 {
+			case 0:
+				ch, err := engine.Execute(sprayCtx, NewCheckTask([]string{server.URL, server.URL + "/admin"}))
+				if err != nil {
+					errs <- err
+					return
+				}
+				for range ch {
+					count++
+				}
+			case 1:
+				ch, err := engine.Execute(sprayCtx, NewBruteTask(server.URL, []string{"admin", "api", "missing"}))
+				if err != nil {
+					errs <- err
+					return
+				}
+				for range ch {
+					count++
+				}
+			default:
+				ch, err := engine.BruteStream(sprayCtx, server.URL, []string{"admin", "api"})
+				if err != nil {
+					errs <- err
+					return
+				}
+				for range ch {
+					count++
+				}
+			}
+
+			if count == 0 {
+				errs <- fmt.Errorf("worker %d produced no spray results", i)
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSprayEngineConcurrentCancelledContexts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(25 * time.Millisecond)
+		_, _ = w.Write([]byte("delayed"))
+	}))
+	defer server.Close()
+
+	engine := NewEngine(nil)
+	const workers = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cancelled, cancel := context.WithCancel(context.Background())
+			cancel()
+			sprayCtx := NewContext().SetThreads(2).SetTimeout(1).WithContext(cancelled)
+
+			var ch <-chan *parsers.SprayResult
+			var err error
+			if i%2 == 0 {
+				ch, err = engine.CheckStream(sprayCtx, []string{server.URL})
+			} else {
+				ch, err = engine.BruteStream(sprayCtx, server.URL, []string{"admin"})
+			}
+			if err != nil {
+				errs <- err
+				return
+			}
+
+			done := make(chan struct{})
+			go func() {
+				for range ch {
+				}
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				errs <- fmt.Errorf("worker %d did not stop after cancellation", i)
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSprayEngineBruteBatchUsesRunnerTaskPool(t *testing.T) {
+	type overlapTracker struct {
+		mu               sync.Mutex
+		activeByServer   map[int]int
+		activeServers    int
+		maxActiveServers int
+	}
+
+	tracker := &overlapTracker{activeByServer: make(map[int]int)}
+	enter := func(id int) {
+		tracker.mu.Lock()
+		defer tracker.mu.Unlock()
+		if tracker.activeByServer[id] == 0 {
+			tracker.activeServers++
+			if tracker.activeServers > tracker.maxActiveServers {
+				tracker.maxActiveServers = tracker.activeServers
+			}
+		}
+		tracker.activeByServer[id]++
+	}
+	leave := func(id int) {
+		tracker.mu.Lock()
+		defer tracker.mu.Unlock()
+		tracker.activeByServer[id]--
+		if tracker.activeByServer[id] == 0 {
+			tracker.activeServers--
+		}
+	}
+
+	var servers []*httptest.Server
+	for i := 0; i < 3; i++ {
+		id := i
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			enter(id)
+			defer leave(id)
+			time.Sleep(80 * time.Millisecond)
+
+			switch r.URL.Path {
+			case "/":
+				_, _ = w.Write([]byte("home"))
+			case "/admin":
+				_, _ = w.Write([]byte("admin panel for runner task pool concurrency"))
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer server.Close()
+		servers = append(servers, server)
+	}
+
+	baseURLs := make([]string, 0, len(servers))
+	for _, server := range servers {
+		baseURLs = append(baseURLs, server.URL)
+	}
+
+	engine := NewEngine(nil)
+	ctx := NewContext().
+		SetThreads(6).
+		SetTimeout(2).
+		SetMatch(`current.Path == "/admin"`)
+
+	resultCh, err := engine.Execute(ctx, NewBruteTasks(baseURLs, []string{"admin"}))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	adminHits := make(map[string]bool)
+	for result := range resultCh {
+		sprayResult := result.(*Result).SprayResult()
+		if result.Success() && sprayResult != nil && strings.HasSuffix(sprayResult.UrlString, "/admin") {
+			adminHits[pkgBaseURL(sprayResult.UrlString)] = true
+		}
+	}
+
+	if len(adminHits) != len(baseURLs) {
+		t.Fatalf("admin hits = %d, want %d (%v)", len(adminHits), len(baseURLs), adminHits)
+	}
+	if tracker.maxActiveServers < 2 {
+		t.Fatalf("runner task pool did not overlap targets; max active servers = %d", tracker.maxActiveServers)
+	}
+}
+
+func TestSprayEngineConcurrentExecuteWithSharedContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte("home"))
+		case "/admin":
+			_, _ = w.Write([]byte("shared context admin panel admin panel"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	engine := NewEngine(nil)
+	sharedCtx := NewContext().SetThreads(4).SetTimeout(1)
+
+	const workers = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var resultCh <-chan sdk.Result
+			var err error
+			if i%2 == 0 {
+				resultCh, err = engine.Execute(sharedCtx, NewCheckTask([]string{server.URL + "/admin"}))
+			} else {
+				resultCh, err = engine.Execute(sharedCtx, NewBruteTask(server.URL, []string{"admin"}))
+			}
+			if err != nil {
+				errs <- err
+				return
+			}
+			for range resultCh {
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func pkgBaseURL(rawURL string) string {
+	if idx := strings.LastIndex(rawURL, "/"); idx > len("http://") {
+		return rawURL[:idx]
+	}
+	return rawURL
 }
 
 // TestDefaultConfig 测试默认配置
@@ -108,6 +424,111 @@ func TestConfig(t *testing.T) {
 	if err := config.Validate(); err != nil {
 		t.Errorf("Valid config should pass validation: %v", err)
 	}
+}
+
+func TestConfigWithCapacity(t *testing.T) {
+	engine := NewEngine(NewConfig().WithCapacity(50))
+	if engine.Capacity() == nil {
+		t.Fatal("engine should have a capacity after WithCapacity()")
+	}
+	if engine.Capacity().Total() != 50 {
+		t.Fatalf("capacity total = %d, want 50", engine.Capacity().Total())
+	}
+}
+
+func TestSetCapacityPostCreation(t *testing.T) {
+	engine := NewEngine(nil)
+	if engine.Capacity() != nil {
+		t.Fatal("engine should have no capacity by default")
+	}
+	engine.SetCapacity(100)
+	if engine.Capacity() == nil {
+		t.Fatal("engine should have a capacity after SetCapacity()")
+	}
+	if engine.Capacity().Total() != 100 {
+		t.Fatalf("capacity total = %d, want 100", engine.Capacity().Total())
+	}
+}
+
+func TestCapacityThrottlesConcurrentChecks(t *testing.T) {
+	var maxConcurrent int32
+	var currentConcurrent int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cur := atomic.AddInt32(&currentConcurrent, 1)
+		defer atomic.AddInt32(&currentConcurrent, -1)
+		for {
+			old := atomic.LoadInt32(&maxConcurrent)
+			if cur <= old || atomic.CompareAndSwapInt32(&maxConcurrent, old, cur) {
+				break
+			}
+		}
+		time.Sleep(30 * time.Millisecond)
+		_, _ = w.Write([]byte("capacity-test"))
+	}))
+	defer server.Close()
+
+	// Capacity=4, threads=4 per check → only 1 check at a time
+	engine := NewEngine(NewConfig().WithCapacity(4))
+	if err := engine.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	const workers = 3
+	var wg sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			sprayCtx := NewContext().SetThreads(4).SetTimeout(2).WithContext(ctx)
+
+			ch, err := engine.CheckStream(sprayCtx, []string{server.URL})
+			if err != nil {
+				t.Errorf("CheckStream: %v", err)
+				return
+			}
+			for range ch {
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	got := atomic.LoadInt32(&maxConcurrent)
+	t.Logf("max concurrent HTTP requests = %d (capacity=4, threads=4 per check)", got)
+	if got > 4 {
+		t.Fatalf("max concurrent requests = %d, expected <= 4 (capacity should throttle)", got)
+	}
+	if avail := engine.Capacity().Available(); avail != 4 {
+		t.Fatalf("capacity available = %d, want 4 (all released)", avail)
+	}
+}
+
+func TestCapacityContextCancellation(t *testing.T) {
+	engine := NewEngine(NewConfig().WithCapacity(4))
+	if err := engine.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	// Exhaust capacity
+	if err := engine.Capacity().Acquire(context.Background(), 4); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cancelled context should fail Acquire
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	sprayCtx := NewContext().SetThreads(4).SetTimeout(1).WithContext(ctx)
+
+	_, err := engine.CheckStream(sprayCtx, []string{"http://127.0.0.1:1"})
+	if err == nil {
+		t.Fatal("expected error from cancelled context")
+	}
+
+	engine.Capacity().Release(4)
 }
 
 // TestCheckTask 测试 CheckTask
