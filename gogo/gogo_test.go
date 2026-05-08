@@ -2,10 +2,20 @@ package gogo
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/chainreactors/gogo/v2/pkg"
+	"github.com/chainreactors/parsers"
+	sdkfingers "github.com/chainreactors/sdk/fingers"
+	sdkneutron "github.com/chainreactors/sdk/neutron"
 )
 
 // TestNewGogoEngine 测试引擎创建
@@ -43,6 +53,179 @@ func TestGogoEngineName(t *testing.T) {
 	if engine.Name() != "gogo" {
 		t.Errorf("Expected engine name 'gogo', got '%s'", engine.Name())
 	}
+}
+
+func TestInitWithEmptyNeutronEngineDoesNotFail(t *testing.T) {
+	emptyNeutron := &sdkneutron.Engine{}
+	engine := NewEngine(NewConfig().WithNeutronEngine(emptyNeutron))
+	if err := engine.Init(); err != nil {
+		t.Fatalf("Init() with empty neutron engine returned error: %v", err)
+	}
+}
+
+func TestInitWithEmptyCustomFingersDoesNotFail(t *testing.T) {
+	engine := NewEngine(NewConfig().WithFingersEngine(&sdkfingers.Engine{}))
+	if err := engine.Init(); err != nil {
+		t.Fatalf("Init() with empty fingers engine returned error: %v", err)
+	}
+}
+
+func TestInitConcurrent(t *testing.T) {
+	engine := NewEngine(nil)
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- engine.Init()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("Init() error = %v", err)
+		}
+	}
+}
+
+func TestGogoEngineConcurrentScanScenarios(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("gogo-sdk-concurrency"))
+	}))
+	defer server.Close()
+
+	host, port := splitTestServerHostPort(t, server.URL)
+	engine := NewEngine(nil)
+	if err := engine.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	const workers = 12
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			gogoCtx := NewContext().SetThreads(4).SetDelay(1).SetVersionLevel(0).WithContext(ctx)
+
+			switch i % 3 {
+			case 0:
+				result := engine.ScanOne(gogoCtx, host, port)
+				if result == nil || result.Port != port {
+					errs <- fmt.Errorf("ScanOne worker %d returned %#v", i, result)
+				}
+			case 1:
+				results, err := engine.Scan(gogoCtx, host, port)
+				if err != nil {
+					errs <- err
+					return
+				}
+				if len(results) == 0 {
+					errs <- fmt.Errorf("Scan worker %d produced no open-port results", i)
+				}
+			default:
+				workflow := &pkg.Workflow{Name: "concurrent", IP: host, Ports: port}
+				ch, err := engine.WorkflowStream(gogoCtx, workflow)
+				if err != nil {
+					errs <- err
+					return
+				}
+				var count int
+				for range ch {
+					count++
+				}
+				if count == 0 {
+					errs <- fmt.Errorf("WorkflowStream worker %d produced no open-port results", i)
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestGogoEngineConcurrentCancelledContexts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(25 * time.Millisecond)
+		_, _ = w.Write([]byte("delayed"))
+	}))
+	defer server.Close()
+
+	host, port := splitTestServerHostPort(t, server.URL)
+	engine := NewEngine(nil)
+	const workers = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+
+	for i := 0; i < workers; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cancelled, cancel := context.WithCancel(context.Background())
+			cancel()
+			gogoCtx := NewContext().SetThreads(2).SetDelay(1).WithContext(cancelled)
+
+			var ch <-chan *parsers.GOGOResult
+			var err error
+			if i%2 == 0 {
+				ch, err = engine.ScanStream(gogoCtx, host, port)
+			} else {
+				workflow := &pkg.Workflow{Name: "cancelled", IP: host, Ports: port}
+				ch, err = engine.WorkflowStream(gogoCtx, workflow)
+			}
+			if err != nil {
+				errs <- err
+				return
+			}
+
+			done := make(chan struct{})
+			go func() {
+				for range ch {
+				}
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				errs <- fmt.Errorf("worker %d did not stop after cancellation", i)
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func splitTestServerHostPort(t *testing.T, rawURL string) (string, string) {
+	t.Helper()
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	host, port, err := net.SplitHostPort(parsed.Host)
+	if err != nil {
+		t.Fatalf("split test server host/port: %v", err)
+	}
+	return host, port
 }
 
 // TestGogoEngineSetThreads 测试设置线程数
@@ -108,6 +291,116 @@ func TestConfig(t *testing.T) {
 	if err := config.Validate(); err != nil {
 		t.Errorf("Valid config should pass validation: %v", err)
 	}
+}
+
+func TestConfigWithCapacity(t *testing.T) {
+	engine := NewEngine(NewConfig().WithCapacity(100))
+	if engine.Capacity() == nil {
+		t.Fatal("engine should have a capacity after WithCapacity()")
+	}
+	if engine.Capacity().Total() != 100 {
+		t.Fatalf("capacity total = %d, want 100", engine.Capacity().Total())
+	}
+}
+
+func TestSetCapacityPostCreation(t *testing.T) {
+	engine := NewEngine(nil)
+	if engine.Capacity() != nil {
+		t.Fatal("engine should have no capacity by default")
+	}
+	engine.SetCapacity(200)
+	if engine.Capacity() == nil {
+		t.Fatal("engine should have a capacity after SetCapacity()")
+	}
+	if engine.Capacity().Total() != 200 {
+		t.Fatalf("capacity total = %d, want 200", engine.Capacity().Total())
+	}
+}
+
+func TestCapacityThrottlesConcurrentScans(t *testing.T) {
+	var maxConcurrent int32
+	var currentConcurrent int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cur := atomic.AddInt32(&currentConcurrent, 1)
+		defer atomic.AddInt32(&currentConcurrent, -1)
+		for {
+			old := atomic.LoadInt32(&maxConcurrent)
+			if cur <= old || atomic.CompareAndSwapInt32(&maxConcurrent, old, cur) {
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+		_, _ = w.Write([]byte("capacity-test"))
+	}))
+	defer server.Close()
+
+	host, port := splitTestServerHostPort(t, server.URL)
+
+	// Capacity=4, each scan uses 4 threads → only 1 scan at a time
+	engine := NewEngine(NewConfig().WithCapacity(4))
+	if err := engine.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	const workers = 3
+	var wg sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			gogoCtx := NewContext().SetThreads(4).SetDelay(1).WithContext(ctx)
+
+			ch, err := engine.ScanStream(gogoCtx, host, port)
+			if err != nil {
+				t.Errorf("ScanStream: %v", err)
+				return
+			}
+			for range ch {
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	got := atomic.LoadInt32(&maxConcurrent)
+	t.Logf("max concurrent HTTP requests = %d (capacity=4, threads=4 per scan)", got)
+	// With capacity=4 and threads=4, at most 4 concurrent requests should be inflight
+	// (1 scan at a time, each using 4 threads)
+	if got > 4 {
+		t.Fatalf("max concurrent requests = %d, expected <= 4 (capacity should throttle)", got)
+	}
+	// All scans should complete and capacity should be fully released
+	if avail := engine.Capacity().Available(); avail != 4 {
+		t.Fatalf("capacity available = %d, want 4 (all released)", avail)
+	}
+}
+
+func TestCapacityContextCancellation(t *testing.T) {
+	engine := NewEngine(NewConfig().WithCapacity(4))
+	if err := engine.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	// Exhaust the capacity
+	if err := engine.Capacity().Acquire(context.Background(), 4); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try to scan with cancelled context — should fail immediately
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	gogoCtx := NewContext().SetThreads(4).WithContext(ctx)
+
+	_, err := engine.ScanStream(gogoCtx, "127.0.0.1", "65535")
+	if err == nil {
+		t.Fatal("expected error from cancelled context")
+	}
+
+	engine.Capacity().Release(4)
 }
 
 // TestScanTask 测试 ScanTask

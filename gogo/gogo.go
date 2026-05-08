@@ -24,9 +24,12 @@ import (
 
 // GogoEngine GoGo 引擎实现
 type GogoEngine struct {
-	inited        bool
-	fingersEngine *sdkfingers.Engine // 可选的自定义 fingers 引擎
-	neutronEngine *neutron.Engine    // 可选的 neutron 引擎
+	mu               sync.Mutex
+	inited           bool
+	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
+	neutronEngine    *neutron.Engine    // 可选的 neutron 引擎
+	resourceProvider func(string) []byte
+	capacity         *sdk.Capacity
 }
 
 // NewGogoEngine 创建 GoGo 引擎
@@ -35,11 +38,16 @@ func NewGogoEngine(config *Config) *GogoEngine {
 		config = NewConfig()
 	}
 
-	return &GogoEngine{
-		inited:        false,
-		fingersEngine: config.FingersEngine,
-		neutronEngine: config.NeutronEngine,
+	e := &GogoEngine{
+		inited:           false,
+		fingersEngine:    config.FingersEngine,
+		neutronEngine:    config.NeutronEngine,
+		resourceProvider: config.ResourceProvider,
 	}
+	if config.Capacity > 0 {
+		e.capacity = sdk.NewCapacity(config.Capacity)
+	}
+	return e
 }
 
 // buildTemplateMap 构建 template map（按 finger、id、tag 分类）
@@ -81,6 +89,10 @@ func NewEngine(config *Config) *GogoEngine {
 
 // Init 初始化引擎（加载指纹库等）
 func (e *GogoEngine) Init() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.installResourceProvider()
 	if e.inited {
 		return nil
 	}
@@ -91,44 +103,22 @@ func (e *GogoEngine) Init() error {
 		logs.Log.Debugf("load port config failed, using default: %v", err)
 	}
 
-	// 如果提供了自定义 fingers 引擎，直接使用
-	if e.fingersEngine != nil {
-		fingerImpl, err := e.fingersEngine.GetFingersEngine()
-		if fingerImpl != nil && err == nil {
-			pkg.FingerEngine = fingerImpl
-		}
-	} else {
+	if ok := e.applyInjectedFingers(); !ok {
 		// 尝试创建默认的 fingers 引擎
 		defaultFingers, err := sdkfingers.NewEngine(nil)
 		if err == nil && defaultFingers != nil {
 			e.fingersEngine = defaultFingers
-			fingerImpl, err := defaultFingers.GetFingersEngine()
-			if fingerImpl != nil && err == nil {
-				pkg.FingerEngine = fingerImpl
-			}
-		} else {
+			e.applyInjectedFingers()
+		}
+		if e.fingersEngine == nil || pkg.FingerEngine == nil {
 			// 如果创建失败，尝试使用内置指纹
 			if err := pkg.LoadFinger(nil); err != nil {
-				logs.Log.Debugf("load finger failed, using built-in: %v", err)
+				logs.Log.Debugf("load finger failed, continuing without fingerprints: %v", err)
 			}
 		}
 	}
 
-	// 如果提供了自定义 neutron 引擎，直接使用
-	if e.neutronEngine != nil {
-		templates := e.neutronEngine.Get()
-		if len(templates) == 0 {
-			return fmt.Errorf("neutron templates are empty")
-		}
-		templateMap := buildTemplateMap(templates)
-		pkg.TemplateMap = templateMap
-		templateCount := 0
-		for _, values := range templateMap {
-			templateCount += len(values)
-		}
-		logs.Log.Infof("resources type=neutron source=custom templates=%d categories=%d",
-			templateCount, len(templateMap))
-	} else {
+	if ok := e.applyInjectedNeutron(); !ok {
 		// 否则使用默认加载方式，允许失败
 		if err := pkg.LoadNeutron(""); err != nil {
 			logs.Log.Debugf("load neutron failed, using built-in: %v", err)
@@ -139,15 +129,81 @@ func (e *GogoEngine) Init() error {
 	return nil
 }
 
+func (e *GogoEngine) installResourceProvider() {
+	if e.resourceProvider == nil {
+		return
+	}
+	pkg.SetResourceProvider(e.resourceProvider)
+}
+
+// InstallResourceProvider installs the configured resource provider without
+// initializing scanner globals. CLI wrappers call this before core parsing so
+// direct commands load aiscan-managed templates during their own Init path.
+func (e *GogoEngine) InstallResourceProvider() {
+	if e == nil {
+		return
+	}
+	e.installResourceProvider()
+}
+
+func (e *GogoEngine) applyInjectedEngines() error {
+	e.applyInjectedFingers()
+	e.applyInjectedNeutron()
+	return nil
+}
+
+func (e *GogoEngine) applyInjectedFingers() bool {
+	if e.fingersEngine == nil {
+		return false
+	}
+	fingerImpl, err := e.fingersEngine.GetFingersEngine()
+	if fingerImpl == nil || err != nil {
+		logs.Log.Debugf("custom fingers engine is empty, falling back to built-in fingers")
+		return false
+	}
+	pkg.FingerEngine = fingerImpl
+	return true
+}
+
+func (e *GogoEngine) applyInjectedNeutron() bool {
+	if e.neutronEngine == nil {
+		return false
+	}
+	templates := e.neutronEngine.Get()
+	if len(templates) == 0 {
+		logs.Log.Debugf("custom neutron engine has no templates, skipping neutron integration")
+		return false
+	}
+	templateMap := buildTemplateMap(templates)
+	pkg.TemplateMap = templateMap
+	templateCount := 0
+	for _, values := range templateMap {
+		templateCount += len(values)
+	}
+	logs.Log.Infof("resources type=neutron source=custom templates=%d categories=%d",
+		templateCount, len(templateMap))
+	return true
+}
+
 func (e *GogoEngine) Name() string {
 	return "gogo"
 }
 
+// SetCapacity configures a capacity limit on an already-created engine.
+func (e *GogoEngine) SetCapacity(total int) {
+	if total > 0 {
+		e.capacity = sdk.NewCapacity(total)
+	}
+}
+
+// Capacity returns the engine's capacity bucket, or nil if unconfigured.
+func (e *GogoEngine) Capacity() *sdk.Capacity {
+	return e.capacity
+}
+
 func (e *GogoEngine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
-	if !e.inited {
-		if err := e.Init(); err != nil {
-			return nil, err
-		}
+	if err := e.Init(); err != nil {
+		return nil, err
 	}
 
 	if err := task.Validate(); err != nil {
@@ -236,7 +292,7 @@ func (e *GogoEngine) executeWorkflow(ctx *Context, task *WorkflowTask) (<-chan s
 func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow, runCtx *Context) (<-chan sdk.Result, error) {
 	// 创建基础配置
 	if runCtx.opt == nil {
-		runCtx.opt = pkg.DefaultRunnerOption
+		runCtx.opt = cloneRunnerOption(pkg.DefaultRunnerOption)
 	}
 	baseConfig := pkg.NewDefaultConfig(runCtx.opt)
 	preparedConfig := workflow.PrepareConfig(baseConfig)
@@ -252,6 +308,15 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow,
 		initConfig.Threads = runCtx.threads
 	}
 
+	// Acquire capacity before starting the scan goroutine
+	threads := initConfig.Threads
+	if e.capacity != nil {
+		if err := e.capacity.Acquire(ctx, threads); err != nil {
+			preparedConfig.Close()
+			return nil, err
+		}
+	}
+
 	// 创建结果 channel
 	resultCh := make(chan sdk.Result, 100)
 
@@ -259,6 +324,9 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow,
 	go func() {
 		defer close(resultCh)
 		defer preparedConfig.Close()
+		if e.capacity != nil {
+			defer e.capacity.Release(threads)
+		}
 
 		var wg sync.WaitGroup
 		var aliveCount int32
@@ -347,8 +415,8 @@ func (e *GogoEngine) ScanOne(ctx *Context, ip, port string) *parsers.GOGOResult 
 	default:
 	}
 
-	if !e.inited {
-		e.Init()
+	if err := e.Init(); err != nil {
+		return result.GOGOResult
 	}
 
 	engine.Dispatch(runCtx.opt, result)
@@ -357,10 +425,8 @@ func (e *GogoEngine) ScanOne(ctx *Context, ip, port string) *parsers.GOGOResult 
 
 // Scan 批量端口扫描（同步）
 func (e *GogoEngine) Scan(ctx *Context, ip, ports string) ([]*parsers.GOGOResult, error) {
-	if !e.inited {
-		if err := e.Init(); err != nil {
-			return nil, err
-		}
+	if err := e.Init(); err != nil {
+		return nil, err
 	}
 
 	if ctx == nil {
@@ -385,10 +451,8 @@ func (e *GogoEngine) Scan(ctx *Context, ip, ports string) ([]*parsers.GOGOResult
 
 // ScanStream 批量端口扫描（流式）
 func (e *GogoEngine) ScanStream(ctx *Context, ip, ports string) (<-chan *parsers.GOGOResult, error) {
-	if !e.inited {
-		if err := e.Init(); err != nil {
-			return nil, err
-		}
+	if err := e.Init(); err != nil {
+		return nil, err
 	}
 
 	if ctx == nil {
@@ -417,10 +481,8 @@ func (e *GogoEngine) ScanStream(ctx *Context, ip, ports string) (<-chan *parsers
 
 // Workflow 工作流扫描（同步）
 func (e *GogoEngine) Workflow(ctx *Context, workflow *pkg.Workflow) ([]*parsers.GOGOResult, error) {
-	if !e.inited {
-		if err := e.Init(); err != nil {
-			return nil, err
-		}
+	if err := e.Init(); err != nil {
+		return nil, err
 	}
 
 	if ctx == nil {
@@ -445,10 +507,8 @@ func (e *GogoEngine) Workflow(ctx *Context, workflow *pkg.Workflow) ([]*parsers.
 
 // WorkflowStream 工作流扫描（流式）
 func (e *GogoEngine) WorkflowStream(ctx *Context, workflow *pkg.Workflow) (<-chan *parsers.GOGOResult, error) {
-	if !e.inited {
-		if err := e.Init(); err != nil {
-			return nil, err
-		}
+	if err := e.Init(); err != nil {
+		return nil, err
 	}
 
 	if ctx == nil {

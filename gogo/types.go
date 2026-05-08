@@ -28,7 +28,7 @@ func NewContext() *Context {
 	return &Context{
 		ctx:     context.Background(),
 		threads: 1000,
-		opt:     pkg.DefaultRunnerOption,
+		opt:     cloneRunnerOption(pkg.DefaultRunnerOption),
 	}
 }
 
@@ -37,7 +37,7 @@ func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
 		ctx:     ctx,
 		threads: c.threads,
-		opt:     c.opt,
+		opt:     cloneRunnerOption(c.opt),
 	}
 }
 
@@ -55,14 +55,14 @@ func (c *Context) SetThreads(threads int) *Context {
 
 // SetOption 设置运行选项
 func (c *Context) SetOption(opt *pkg.RunnerOption) *Context {
-	c.opt = opt
+	c.opt = cloneRunnerOption(opt)
 	return c
 }
 
 // SetVersionLevel 设置指纹识别级别
 func (c *Context) SetVersionLevel(level int) *Context {
 	if c.opt == nil {
-		c.opt = pkg.DefaultRunnerOption
+		c.opt = cloneRunnerOption(pkg.DefaultRunnerOption)
 	}
 	c.opt.VersionLevel = level
 	return c
@@ -71,7 +71,7 @@ func (c *Context) SetVersionLevel(level int) *Context {
 // SetExploit 设置漏洞检测模式
 func (c *Context) SetExploit(exploit string) *Context {
 	if c.opt == nil {
-		c.opt = pkg.DefaultRunnerOption
+		c.opt = cloneRunnerOption(pkg.DefaultRunnerOption)
 	}
 	c.opt.Exploit = exploit
 	return c
@@ -80,10 +80,27 @@ func (c *Context) SetExploit(exploit string) *Context {
 // SetDelay 设置超时时间（秒）
 func (c *Context) SetDelay(delay int) *Context {
 	if c.opt == nil {
-		c.opt = pkg.DefaultRunnerOption
+		c.opt = cloneRunnerOption(pkg.DefaultRunnerOption)
 	}
 	c.opt.Delay = delay
 	return c
+}
+
+func cloneRunnerOption(opt *pkg.RunnerOption) *pkg.RunnerOption {
+	if opt == nil {
+		opt = pkg.DefaultRunnerOption
+	}
+	clone := *opt
+	if opt.ScanFilters != nil {
+		clone.ScanFilters = make([][]string, len(opt.ScanFilters))
+		for i, filter := range opt.ScanFilters {
+			clone.ScanFilters[i] = append([]string(nil), filter...)
+		}
+	}
+	if opt.ExcludeCIDRs != nil {
+		clone.ExcludeCIDRs = append(clone.ExcludeCIDRs[:0:0], opt.ExcludeCIDRs...)
+	}
+	return &clone
 }
 
 // ========================================
@@ -92,8 +109,10 @@ func (c *Context) SetDelay(delay int) *Context {
 
 // Config GoGo 配置
 type Config struct {
-	FingersEngine *sdkfingers.Engine
-	NeutronEngine *neutron.Engine
+	FingersEngine    *sdkfingers.Engine
+	NeutronEngine    *neutron.Engine
+	ResourceProvider func(string) []byte
+	Capacity         int
 }
 
 // NewConfig 创建默认配置
@@ -114,6 +133,20 @@ func (c *Config) WithFingersEngine(engine *sdkfingers.Engine) *Config {
 // WithNeutronEngine 设置自定义 neutron 引擎
 func (c *Config) WithNeutronEngine(engine *neutron.Engine) *Config {
 	c.NeutronEngine = engine
+	return c
+}
+
+// WithResourceProvider sets a provider used by the underlying gogo package.
+func (c *Config) WithResourceProvider(provider func(string) []byte) *Config {
+	c.ResourceProvider = provider
+	return c
+}
+
+// WithCapacity sets the total capacity for concurrent thread usage across all
+// simultaneous invocations. When set, each Execute call acquires its thread
+// count from this shared bucket and blocks if capacity is exhausted.
+func (c *Config) WithCapacity(total int) *Config {
+	c.Capacity = total
 	return c
 }
 
