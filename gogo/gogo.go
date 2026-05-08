@@ -126,7 +126,7 @@ func (e *GogoEngine) Init() error {
 		for _, values := range templateMap {
 			templateCount += len(values)
 		}
-		logs.Log.Infof("using custom neutron templates: %d templates in %d categories",
+		logs.Log.Infof("resources type=neutron source=custom templates=%d categories=%d",
 			templateCount, len(templateMap))
 	} else {
 		// 否则使用默认加载方式，允许失败

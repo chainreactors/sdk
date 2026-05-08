@@ -55,7 +55,7 @@ func (e *SprayEngine) Init() error {
 			return fmt.Errorf("fingers engine is nil")
 		}
 		pkg.FingerEngine = libEngine
-		logs.Log.Infof("using custom fingers engine: %s", libEngine.String())
+		logs.Log.Infof("resources type=fingers source=custom %s", libEngine.String())
 	} else {
 		// 尝试创建默认的 fingers 引擎
 		defaultFingers, err := sdkfingers.NewEngine(nil)
