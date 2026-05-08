@@ -21,6 +21,7 @@ type Config struct {
 	// 加载配置
 	LocalPath string
 	Templates Templates
+	Capacity  int
 }
 
 // ========================================

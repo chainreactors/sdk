@@ -71,6 +71,13 @@ func (c *Config) WithFilter(predicate func(*templates.Template) bool) *Config {
 	return c
 }
 
+// WithCapacity sets the total capacity for concurrent Execute calls.
+// When set, each Execute call acquires 1 unit and blocks if capacity is exhausted.
+func (c *Config) WithCapacity(total int) *Config {
+	c.Capacity = total
+	return c
+}
+
 // Load 执行数据加载
 func (c *Config) Load(ctx context.Context) error {
 	if c == nil {

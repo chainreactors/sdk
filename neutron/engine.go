@@ -17,6 +17,7 @@ import (
 type Engine struct {
 	templates []*templates.Template
 	config    *Config
+	capacity  *sdk.Capacity
 }
 
 // NewEngine 创建一个新的 Engine 实例
@@ -51,6 +52,9 @@ func NewEngine(config *Config) (*Engine, error) {
 
 	e := &Engine{
 		config: config,
+	}
+	if config.Capacity > 0 {
+		e.capacity = sdk.NewCapacity(config.Capacity)
 	}
 
 	e.templates = e.compileTemplates(templates)
@@ -120,10 +124,19 @@ func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, err
 }
 
 func (e *Engine) executeTemplates(ctx *Context, templates []*templates.Template, target string, payload map[string]interface{}) (<-chan sdk.Result, error) {
+	if e.capacity != nil {
+		if err := e.capacity.Acquire(ctx.Context(), 1); err != nil {
+			return nil, err
+		}
+	}
+
 	resultCh := make(chan sdk.Result)
 
 	go func() {
 		defer close(resultCh)
+		if e.capacity != nil {
+			defer e.capacity.Release(1)
+		}
 
 		for _, t := range templates {
 			result, err := t.Execute(target, payload)
@@ -168,6 +181,19 @@ func (e *Engine) Get() []*templates.Template {
 // Count 获取已加载的 template 数量
 func (e *Engine) Count() int {
 	return len(e.templates)
+}
+
+// SetCapacity configures a capacity limit on an already-created engine.
+// Subsequent Execute calls will acquire/release from this shared bucket.
+func (e *Engine) SetCapacity(total int) {
+	if total > 0 {
+		e.capacity = sdk.NewCapacity(total)
+	}
+}
+
+// Capacity returns the engine's capacity bucket, or nil if unconfigured.
+func (e *Engine) Capacity() *sdk.Capacity {
+	return e.capacity
 }
 
 // Close 关闭引擎
