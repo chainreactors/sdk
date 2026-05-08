@@ -3,12 +3,15 @@ package spray
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/parsers"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/spray/core"
+	"github.com/chainreactors/spray/core/baseline"
+	"github.com/chainreactors/spray/core/ihttp"
 	"github.com/chainreactors/spray/pkg"
 )
 
@@ -18,8 +21,11 @@ import (
 
 // SprayEngine Spray 引擎实现
 type SprayEngine struct {
-	inited        bool
-	fingersEngine *sdkfingers.Engine // 可选的自定义 fingers 引擎
+	inited           bool
+	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
+	resourceProvider func(string) []byte
+	capacity         *sdk.Capacity
+	mu               sync.Mutex
 }
 
 // NewSprayEngine 创建 Spray 引擎
@@ -28,10 +34,15 @@ func NewSprayEngine(config *Config) *SprayEngine {
 		config = NewConfig()
 	}
 
-	return &SprayEngine{
-		inited:        false,
-		fingersEngine: config.FingersEngine,
+	e := &SprayEngine{
+		inited:           false,
+		fingersEngine:    config.FingersEngine,
+		resourceProvider: config.ResourceProvider,
 	}
+	if config.Capacity > 0 {
+		e.capacity = sdk.NewCapacity(config.Capacity)
+	}
+	return e
 }
 
 // NewEngine 创建 Spray 引擎
@@ -41,6 +52,10 @@ func NewEngine(config *Config) *SprayEngine {
 
 // Init 初始化引擎（加载指纹库等）
 func (e *SprayEngine) Init() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.installResourceProvider()
 	if e.inited {
 		return nil
 	}
@@ -48,61 +63,166 @@ func (e *SprayEngine) Init() error {
 	if err := pkg.Load(); err != nil {
 		return fmt.Errorf("load config failed: %v", err)
 	}
-	// 如果提供了自定义 fingers 引擎，直接使用
-	if e.fingersEngine != nil {
-		libEngine := e.fingersEngine.Get()
-		if libEngine == nil {
-			return fmt.Errorf("fingers engine is nil")
-		}
-		pkg.FingerEngine = libEngine
-		logs.Log.Infof("resources type=fingers source=custom %s", libEngine.String())
-	} else {
+
+	loadedFingers := false
+	if e.applyInjectedFingers() {
+		loadedFingers = true
+	}
+	if !loadedFingers {
 		// 尝试创建默认的 fingers 引擎
 		defaultFingers, err := sdkfingers.NewEngine(nil)
 		if err == nil && defaultFingers != nil {
 			e.fingersEngine = defaultFingers
-			libEngine := defaultFingers.Get()
-			if libEngine != nil {
-				pkg.FingerEngine = libEngine
+			if e.applyInjectedFingers() {
+				loadedFingers = true
 				logs.Log.Debugf("using default fingers engine")
 			}
-		} else {
-			// 如果创建失败，尝试使用内置指纹
+		}
+		if !loadedFingers {
 			if err := pkg.LoadFingers(); err != nil {
-				logs.Log.Debugf("load fingers failed, using built-in: %v", err)
+				logs.Log.Debugf("load built-in fingers failed, continuing without fingerprints: %v", err)
+			} else if pkg.FingerEngine != nil {
+				loadedFingers = true
 			}
 		}
 	}
-	// 提取 ActivePath (spray 需要)
+	e.refreshActivePath()
+	e.configureSDKGlobals()
+	e.inited = true
+	return nil
+}
+
+func (e *SprayEngine) configureSDKGlobals() {
+	opt := NewDefaultOption()
+	baseline.Distance = uint8(opt.SimhashDistance)
+	if opt.MaxBodyLength == -1 {
+		ihttp.DefaultMaxBodySize = -1
+	} else {
+		ihttp.DefaultMaxBodySize = opt.MaxBodyLength * 1024
+	}
+	pkg.BlackStatus = pkg.ParseStatus(pkg.DefaultBlackStatus, opt.BlackStatus)
+	pkg.WhiteStatus = pkg.ParseStatus(pkg.DefaultWhiteStatus, opt.WhiteStatus)
+	pkg.FuzzyStatus = pkg.ParseStatus(pkg.DefaultFuzzyStatus, opt.FuzzyStatus)
+	pkg.UniqueStatus = pkg.ParseStatus(pkg.DefaultUniqueStatus, opt.UniqueStatus)
+	pkg.EnableAllFingerEngine = true
+	pkg.Extractors["recon"] = combinedReconExtractors()
+	logs.Log.SetQuiet(true)
+	logs.Log.SetColor(false)
+}
+
+func combinedReconExtractors() []*parsers.Extractor {
+	pentestExtractors := pkg.ExtractRegexps["pentest"]
+	infoExtractors := pkg.ExtractRegexps["info"]
+	reconExtractors := make([]*parsers.Extractor, 0, len(pentestExtractors)+len(infoExtractors))
+	reconExtractors = append(reconExtractors, pentestExtractors...)
+	reconExtractors = append(reconExtractors, infoExtractors...)
+	return reconExtractors
+}
+
+func (e *SprayEngine) installResourceProvider() {
+	if e.resourceProvider == nil {
+		return
+	}
+	pkg.SetResourceProvider(e.resourceProvider)
+}
+
+// InstallResourceProvider installs the configured resource provider without
+// initializing scanner globals. CLI wrappers call this before core parsing so
+// direct commands load aiscan-managed templates during their own Prepare path.
+func (e *SprayEngine) InstallResourceProvider() {
+	if e == nil {
+		return
+	}
+	e.installResourceProvider()
+}
+
+func (e *SprayEngine) applyInjectedFingers() bool {
+	if e.fingersEngine == nil {
+		return false
+	}
+	libEngine := e.fingersEngine.Get()
+	if libEngine == nil {
+		logs.Log.Debugf("custom fingers engine is empty, falling back to built-in fingers")
+		return false
+	}
+	pkg.FingerEngine = libEngine
+	pkg.ActivePath = pkg.ActivePath[:0]
+	logs.Log.Infof("resources type=fingers source=custom %s", libEngine.String())
+	e.refreshActivePath()
+	return true
+}
+
+func (e *SprayEngine) refreshActivePath() {
 	if pkg.FingerEngine != nil {
 		if fingers := pkg.FingerEngine.Fingers(); fingers != nil {
+			seen := make(map[string]struct{}, len(pkg.ActivePath))
+			for _, path := range pkg.ActivePath {
+				seen[path] = struct{}{}
+			}
 			for _, f := range fingers.HTTPFingers {
 				for _, rule := range f.Rules {
 					if rule.SendDataStr != "" {
+						if _, ok := seen[rule.SendDataStr]; ok {
+							continue
+						}
 						pkg.ActivePath = append(pkg.ActivePath, rule.SendDataStr)
+						seen[rule.SendDataStr] = struct{}{}
 					}
 				}
 			}
 		}
 	}
-	e.inited = true
-	return nil
 }
 
 func (e *SprayEngine) Name() string {
 	return "spray"
 }
 
+// SetCapacity configures a capacity limit on an already-created engine.
+func (e *SprayEngine) SetCapacity(total int) {
+	if total > 0 {
+		e.capacity = sdk.NewCapacity(total)
+	}
+}
+
+// Capacity returns the engine's capacity bucket, or nil if unconfigured.
+func (e *SprayEngine) Capacity() *sdk.Capacity {
+	return e.capacity
+}
+
 func (e *SprayEngine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
+	if e == nil {
+		return nil, fmt.Errorf("spray engine is nil")
+	}
+	if task == nil {
+		return nil, fmt.Errorf("task cannot be nil")
+	}
+	if err := e.Init(); err != nil {
+		return nil, err
+	}
 	if err := task.Validate(); err != nil {
 		return nil, err
 	}
 
+	var runCtx *Context
+	if ctx == nil {
+		runCtx = NewContext()
+	} else {
+		var ok bool
+		runCtx, ok = ctx.(*Context)
+		if !ok {
+			return nil, fmt.Errorf("unsupported context type: %T", ctx)
+		}
+		if runCtx == nil {
+			runCtx = NewContext()
+		}
+	}
+
 	switch t := task.(type) {
 	case *CheckTask:
-		return e.executeCheck(ctx, t)
+		return e.executeCheck(runCtx, t)
 	case *BruteTask:
-		return e.executeBrute(ctx, t)
+		return e.executeBrute(runCtx, t)
 	default:
 		return nil, fmt.Errorf("unsupported task type: %s", task.Type())
 	}
@@ -149,10 +269,11 @@ func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan 
 				success: bl.IsValid,
 				data:    bl.SprayResult,
 			}:
+				runner.OutWg.Done()
 			case <-ctx.Done():
-				return
+				runner.OutWg.Done()
+				continue
 			}
-			runner.OutWg.Done()
 		}
 	}()
 
@@ -164,64 +285,70 @@ func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan 
 				success: bl.IsValid,
 				data:    bl.SprayResult,
 			}:
+				runner.OutWg.Done()
 			case <-ctx.Done():
-				return
+				runner.OutWg.Done()
+				continue
 			}
-			runner.OutWg.Done()
 		}
 	}()
 }
 
-func (e *SprayEngine) executeCheck(ctx sdk.Context, task *CheckTask) (<-chan sdk.Result, error) {
-	// 克隆配置
-	opt := *ctx.(*Context).opt
-	opt.URL = task.URLs
+func (e *SprayEngine) executeCheck(ctx *Context, task *CheckTask) (<-chan sdk.Result, error) {
+	return e.execute(ctx, task.URLs, nil)
+}
 
-	// 创建 Runner
+func (e *SprayEngine) executeBrute(ctx *Context, task *BruteTask) (<-chan sdk.Result, error) {
+	return e.execute(ctx, task.urls(), task.Wordlist)
+}
+
+// execute 是 check/brute 的统一执行路径.
+// wordlist == nil 表示 check 模式, 否则 brute 模式.
+func (e *SprayEngine) execute(ctx *Context, urls []string, wordlist []string) (<-chan sdk.Result, error) {
+	opt := cloneOption(ctx.opt)
+	opt.URL = urls
+	opt.PortRange = ""
+	if opt.PoolSize <= 0 || opt.PoolSize > len(opt.URL) {
+		opt.PoolSize = len(opt.URL)
+	}
+
+	threads := opt.Threads * opt.PoolSize
+	if e.capacity != nil {
+		if err := e.capacity.Acquire(ctx.Context(), threads); err != nil {
+			return nil, err
+		}
+	}
+
 	runner, err := opt.NewRunner()
 	if err != nil {
+		if e.capacity != nil {
+			e.capacity.Release(threads)
+		}
 		return nil, fmt.Errorf("create runner failed: %v", err)
 	}
+
+	if wordlist != nil {
+		runner.Wordlist = wordlist
+		runner.Total = len(wordlist)
+		runner.IsCheck = false
+	}
+
 	ch := make(chan sdk.Result)
-	// 启动检测 goroutine
 	go func() {
 		defer e.closeRunner(runner)
 		defer close(ch)
+		if e.capacity != nil {
+			defer e.capacity.Release(threads)
+		}
 		e.handler(ctx.Context(), runner, ch)
 
-		runner.RunWithCheck(ctx.Context())
+		if runner.IsCheck {
+			runner.RunWithCheck(ctx.Context())
+		} else {
+			runner.RunWithBrute(ctx.Context())
+		}
 	}()
-
 	return ch, nil
-}
-
-func (e *SprayEngine) executeBrute(ctx sdk.Context, task *BruteTask) (<-chan sdk.Result, error) {
-	// 克隆配置
-	opt := *ctx.(*Context).opt
-	opt.URL = []string{task.BaseURL}
-
-	// 创建 Runner
-	runner, err := opt.NewRunner()
-	if err != nil {
-		return nil, fmt.Errorf("create runner failed: %v", err)
-	}
-
-	runner.Wordlist = task.Wordlist
-	runner.Total = len(task.Wordlist)
-	runner.IsCheck = false
-
-	resultCh := make(chan sdk.Result)
-	// 启动检测 goroutine
-	go func() {
-		defer e.closeRunner(runner)
-		defer close(resultCh)
-
-		e.handler(ctx.Context(), runner, resultCh)
-
-		runner.RunWithBrute(ctx.Context())
-	}()
-
-	return resultCh, nil
 }
 
 // ========================================
@@ -289,6 +416,23 @@ func (e *SprayEngine) Brute(ctx *Context, baseURL string, wordlist []string) ([]
 	return sprayResults, nil
 }
 
+func (e *SprayEngine) BruteMany(ctx *Context, baseURLs []string, wordlist []string) ([]*parsers.SprayResult, error) {
+	task := NewBruteTasks(baseURLs, wordlist)
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
+	var sprayResults []*parsers.SprayResult
+	for r := range resultCh {
+		if result := r.(*Result).SprayResult(); result != nil {
+			sprayResults = append(sprayResults, result)
+		}
+	}
+
+	return sprayResults, nil
+}
+
 // BruteStream 暴力破解（流式）
 func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []string) (<-chan *parsers.SprayResult, error) {
 	task := NewBruteTask(baseURL, wordlist)
@@ -298,6 +442,26 @@ func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []strin
 	}
 
 	// 转换为 SprayResult channel
+	sprayResultCh := make(chan *parsers.SprayResult)
+	go func() {
+		defer close(sprayResultCh)
+		for result := range resultCh {
+			if result.Success() {
+				sprayResultCh <- result.(*Result).SprayResult()
+			}
+		}
+	}()
+
+	return sprayResultCh, nil
+}
+
+func (e *SprayEngine) BruteManyStream(ctx *Context, baseURLs []string, wordlist []string) (<-chan *parsers.SprayResult, error) {
+	task := NewBruteTasks(baseURLs, wordlist)
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
+	}
+
 	sprayResultCh := make(chan *parsers.SprayResult)
 	go func() {
 		defer close(sprayResultCh)

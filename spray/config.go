@@ -2,9 +2,6 @@ package spray
 
 import (
 	"github.com/chainreactors/spray/core"
-	"github.com/chainreactors/spray/core/baseline"
-	"github.com/chainreactors/spray/core/ihttp"
-	"github.com/chainreactors/spray/pkg"
 )
 
 // NewDefaultOption 创建并返回一个带有默认值且已初始化的 Runner 配置
@@ -20,6 +17,7 @@ func NewDefaultOption() *Option {
 
 	// Request 配置
 	opt.Method = "GET"
+	opt.PortRange = "80,443"
 	opt.MaxBodyLength = 100
 	opt.RandomUserAgent = false
 
@@ -49,7 +47,7 @@ func NewDefaultOption() *Option {
 	opt.Client = "auto"
 	opt.Timeout = 5
 	opt.Threads = 20
-	opt.PoolSize = 1
+	opt.PoolSize = 5
 	opt.Deadline = 999999
 
 	// 输出配置 (SDK 模式下默认静默)
@@ -75,20 +73,51 @@ func NewDefaultOption() *Option {
 	// 指纹引擎配置
 	opt.FingerEngines = "all"
 
-	// 初始化全局变量
-	baseline.Distance = uint8(opt.SimhashDistance)
-	if opt.MaxBodyLength == -1 {
-		ihttp.DefaultMaxBodySize = -1
-	} else {
-		ihttp.DefaultMaxBodySize = opt.MaxBodyLength * 1024
-	}
-
-	pkg.BlackStatus = pkg.ParseStatus(pkg.DefaultBlackStatus, opt.BlackStatus)
-	pkg.WhiteStatus = pkg.ParseStatus(pkg.DefaultWhiteStatus, opt.WhiteStatus)
-	pkg.FuzzyStatus = pkg.ParseStatus(pkg.DefaultFuzzyStatus, opt.FuzzyStatus)
-	pkg.UniqueStatus = pkg.ParseStatus(pkg.DefaultUniqueStatus, opt.UniqueStatus)
-
 	return opt
+}
+
+func cloneOption(opt *Option) *Option {
+	if opt == nil || opt.Option == nil {
+		return NewDefaultOption()
+	}
+	coreOpt := *opt.Option
+	clone := &Option{Option: &coreOpt}
+	clone.URL = cloneStrings(opt.URL)
+	clone.CIDRs = cloneStrings(opt.CIDRs)
+	clone.Dictionaries = cloneStrings(opt.Dictionaries)
+	clone.Rules = cloneStrings(opt.Rules)
+	clone.AppendRule = cloneStrings(opt.AppendRule)
+	clone.AppendFile = cloneStrings(opt.AppendFile)
+	clone.Prefixes = cloneStrings(opt.Prefixes)
+	clone.Suffixes = cloneStrings(opt.Suffixes)
+	clone.Replaces = cloneStringMap(opt.Replaces)
+	clone.Skips = cloneStrings(opt.Skips)
+	clone.Headers = cloneStrings(opt.Headers)
+	clone.Cookie = cloneStrings(opt.Cookie)
+	clone.Extracts = cloneStrings(opt.Extracts)
+	clone.Scope = cloneStrings(opt.Scope)
+	clone.Verbose = append([]bool(nil), opt.Verbose...)
+	clone.Proxies = cloneStrings(opt.Proxies)
+	clone.FingerFiles = cloneStrings(opt.FingerFiles)
+	return clone
+}
+
+func cloneStrings(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	return append([]string(nil), values...)
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
+	}
+	clone := make(map[string]string, len(values))
+	for key, value := range values {
+		clone[key] = value
+	}
+	return clone
 }
 
 // ========================================
