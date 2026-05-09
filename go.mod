@@ -66,7 +66,6 @@ require (
 	github.com/jlaffaye/ftp v0.0.0-20201112195030-9aae4d151126 // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
 	github.com/knadh/go-pop3 v0.3.0 // indirect
-	github.com/lcvvvv/kscan/grdp v0.0.0-00010101000000-000000000000 // indirect
 	github.com/lib/pq v1.9.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/lunixbochs/struc v0.0.0-20200707160740-784aaebc1d40 // indirect
@@ -117,5 +116,4 @@ replace (
 	github.com/chainreactors/spray => ../spray
 	github.com/chainreactors/utils => ../utils
 	github.com/chainreactors/zombie => ../zombie
-	github.com/lcvvvv/kscan/grdp => ../zombie/external/github.com/lcvvvv/grdp
 )
