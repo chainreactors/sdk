@@ -11,7 +11,7 @@ require (
 	github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0
 	github.com/chainreactors/spray v1.2.4-0.20260121025911-4f08ee9640d7
 	github.com/chainreactors/utils v0.0.0-20251216161625-70054cf04e88
-	github.com/chainreactors/zombie v0.0.0
+	github.com/chainreactors/zombie v0.0.0-20260509030547-69555848758b
 	github.com/panjf2000/ants/v2 v2.9.1
 	gopkg.in/yaml.v3 v3.0.1
 )
