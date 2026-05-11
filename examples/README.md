@@ -266,7 +266,7 @@ echo "http://127.0.0.1:8080" >> test_urls.txt
 
 ### match_detail - 获取 matcher 详情和命中资源 URL
 
-演示如何让指纹引擎在命中后输出 `MatchDetail`（matcher 类型/值、rule_index、send_data）以及如何拿到命中的资源 URL。提供两种风格，二选一即可：
+演示如何通过 SDK public API 输出 `MatchDetail`（matcher 类型/值、rule_index、send_data）以及命中的资源 URL。提供两种风格，二选一即可：
 
 **风格 ① 直接用 SDK 原生类型（推荐）** —— `cases/match_detail/`
 
@@ -280,7 +280,7 @@ go test ./cases/match_detail -v
 
 **风格 ② 封装一层调用方友好结构** —— `cases/match_detail_helper/`
 
-`FingerMatch` 把 `MatchDetail` 拍平成可直接 JSON 序列化的结构，并把 `match_url` 兜底逻辑封装好；同时给出 `DetectFingersDetail`（被动）和 `SprayWithCrawlAndFingerDetail`（spray + 静态爬虫）两段示例代码。
+`FingerMatch` 演示如何把 SDK 返回的 `fingers.MatchResult` 转成业务自己的 JSON DTO。`match_url`、matcher detail、fallback URL 都来自 SDK，不需要调用方复制解析逻辑。
 
 ```bash
 go test ./cases/match_detail_helper -v
@@ -288,9 +288,9 @@ go test ./cases/match_detail_helper -v
 
 **两种风格共通的要点：**
 
-- 必须在 `fingers.NewEngine()` 之后调用 `eng.GetFingersEngine().EnableMatchDetail()`。`NewEngine` 内部会触发 `engine.Compile()`，把每条 finger 的 `EnableMatchDetail` 重置为 engine 字段默认值 (false)。
-- 命中后直接读 `framework.MatchDetail`，SDK 没有额外封装类型；上面风格 ② 的 `FingerMatch` 只是调用方 ergonomics，可选。
-- `match_url` 取值优先级：`MatchDetail.SendData` 中的 `url=` > 当前请求 URL（`resp.Request.URL`，已处理重定向）/ `SprayResult.UrlString`（spray 链路）。SDK 自带的被动匹配（`DetectContent`/`MatchHTTP`）不会主动发包，所以 `SendData` 通常为空，必须由调用方用请求 URL 兜底。
+- 推荐直接调用 `eng.MatchHTTPWithDetail(resp)`，返回 `[]fingers.MatchResult`。
+- `MatchHTTPWithDetail` 会自动打开底层 `MatchDetail` 开关，调用方不需要手动调用 `GetFingersEngine().EnableMatchDetail()`。
+- `match_url` 取值优先级：`MatchDetail.SendData` 中的 `url=` > 当前请求 URL（`resp.Request.URL`，已处理重定向）。
 
 ---
 
