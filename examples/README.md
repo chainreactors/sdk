@@ -9,7 +9,9 @@ examples/
 ├── fingers/    # 指纹识别工具
 ├── neutron/    # POC 扫描工具
 ├── gogo/       # 端口扫描和指纹识别工具
-└── spray/      # HTTP 批量探测工具
+├── spray/      # HTTP 批量探测工具
+└── cases/      # 小颗粒度使用案例（cookbook）
+    └── match_detail/   # 获取指纹命中的 matcher 详情和命中资源 URL
 ```
 
 ## 快速开始
@@ -254,6 +256,26 @@ echo "http://127.0.0.1:8080" >> test_urls.txt
 # 只显示 200 状态的 URL
 ./spray/spray.exe -f test_urls.txt -mc 200 -q
 ```
+
+---
+
+## Cases - 小颗粒度使用案例
+
+`examples/cases/` 下放的是 cookbook 风格的最小可运行片段，每个 case 只演示一个 API 或一个用法要点，复制即可融入到自己的工程里。
+
+### match_detail - 获取 matcher 详情和命中资源 URL
+
+演示如何让指纹引擎在命中后输出 `MatchDetail`（matcher 类型/值、rule_index、send_data）以及如何拿到命中的资源 URL。
+
+```bash
+go run ./cases/match_detail -url http://127.0.0.1:8080 -key your_api_key -target http://127.0.0.1:3000
+```
+
+要点：
+
+- 必须在 `fingers.NewEngine()` 之后调用 `eng.GetFingersEngine().EnableMatchDetail()`。`NewEngine` 内部会触发 `engine.Compile()`，把每条 finger 的 `EnableMatchDetail` 重置为 engine 字段默认值 (false)。
+- 命中后直接读 `framework.MatchDetail`，不需要任何额外封装。
+- `match_url` 取值优先级：`MatchDetail.SendData` 中的 `url=` > 当前请求 URL（`resp.Request.URL`，已处理重定向）。SDK 自带的被动匹配（`DetectContent`/`MatchHTTP`）不会主动发包，所以 `SendData` 通常为空，必须由调用方用请求 URL 兜底。
 
 ---
 
