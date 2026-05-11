@@ -11,7 +11,8 @@ examples/
 ├── gogo/       # 端口扫描和指纹识别工具
 ├── spray/      # HTTP 批量探测工具
 └── cases/      # 小颗粒度使用案例（cookbook）
-    └── match_detail/   # 获取指纹命中的 matcher 详情和命中资源 URL
+    ├── match_detail/         # 获取 matcher 详情和命中资源 URL（cmd + test）
+    └── match_detail_helper/  # 同上，FingerMatch 封装风格（library + test）
 ```
 
 ## 快速开始
@@ -265,17 +266,31 @@ echo "http://127.0.0.1:8080" >> test_urls.txt
 
 ### match_detail - 获取 matcher 详情和命中资源 URL
 
-演示如何让指纹引擎在命中后输出 `MatchDetail`（matcher 类型/值、rule_index、send_data）以及如何拿到命中的资源 URL。
+演示如何让指纹引擎在命中后输出 `MatchDetail`（matcher 类型/值、rule_index、send_data）以及如何拿到命中的资源 URL。提供两种风格，二选一即可：
+
+**风格 ① 直接用 SDK 原生类型（推荐）** —— `cases/match_detail/`
 
 ```bash
+# 跑命令行版（被动匹配真实 target）
 go run ./cases/match_detail -url http://127.0.0.1:8080 -key your_api_key -target http://127.0.0.1:3000
+
+# 跑测试版（inline finger + httptest，离线可跑）
+go test ./cases/match_detail -v
 ```
 
-要点：
+**风格 ② 封装一层调用方友好结构** —— `cases/match_detail_helper/`
+
+`FingerMatch` 把 `MatchDetail` 拍平成可直接 JSON 序列化的结构，并把 `match_url` 兜底逻辑封装好；同时给出 `DetectFingersDetail`（被动）和 `SprayWithCrawlAndFingerDetail`（spray + 静态爬虫）两段示例代码。
+
+```bash
+go test ./cases/match_detail_helper -v
+```
+
+**两种风格共通的要点：**
 
 - 必须在 `fingers.NewEngine()` 之后调用 `eng.GetFingersEngine().EnableMatchDetail()`。`NewEngine` 内部会触发 `engine.Compile()`，把每条 finger 的 `EnableMatchDetail` 重置为 engine 字段默认值 (false)。
-- 命中后直接读 `framework.MatchDetail`，不需要任何额外封装。
-- `match_url` 取值优先级：`MatchDetail.SendData` 中的 `url=` > 当前请求 URL（`resp.Request.URL`，已处理重定向）。SDK 自带的被动匹配（`DetectContent`/`MatchHTTP`）不会主动发包，所以 `SendData` 通常为空，必须由调用方用请求 URL 兜底。
+- 命中后直接读 `framework.MatchDetail`，SDK 没有额外封装类型；上面风格 ② 的 `FingerMatch` 只是调用方 ergonomics，可选。
+- `match_url` 取值优先级：`MatchDetail.SendData` 中的 `url=` > 当前请求 URL（`resp.Request.URL`，已处理重定向）/ `SprayResult.UrlString`（spray 链路）。SDK 自带的被动匹配（`DetectContent`/`MatchHTTP`）不会主动发包，所以 `SendData` 通常为空，必须由调用方用请求 URL 兜底。
 
 ---
 
