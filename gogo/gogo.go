@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/chainreactors/gogo/v2/core"
 	"github.com/chainreactors/gogo/v2/engine"
@@ -330,6 +331,23 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow,
 
 		var wg sync.WaitGroup
 		var aliveCount int32
+		var requests int64
+		var errors int64
+		var targets int64
+		var tasks int64
+		started := time.Now()
+		defer func() {
+			runCtx.emitStats(sdk.Stats{
+				Engine:   e.Name(),
+				Task:     "scan",
+				Targets:  targets,
+				Tasks:    tasks,
+				Requests: atomic.LoadInt64(&requests),
+				Results:  int64(atomic.LoadInt32(&aliveCount)),
+				Errors:   atomic.LoadInt64(&errors),
+				Duration: time.Since(started),
+			})
+		}()
 
 		// 创建扫描池
 		scanPool, _ := ants.NewPoolWithFunc(initConfig.Threads, func(i interface{}) {
@@ -346,6 +364,7 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow,
 			result := pkg.NewResult(ipPort[0], ipPort[1])
 
 			// 调用扫描引擎
+			atomic.AddInt64(&requests, 1)
 			engine.Dispatch(initConfig.RunnerOpt, result)
 
 			if result.Open {
@@ -381,10 +400,15 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow,
 				if ip.Ver == 6 {
 					ipStr = "[" + ipStr + "]"
 				}
+				targets++
 
 				for _, port := range initConfig.PortList {
 					wg.Add(1)
-					_ = scanPool.Invoke([]string{ipStr, port})
+					tasks++
+					if err := scanPool.Invoke([]string{ipStr, port}); err != nil {
+						atomic.AddInt64(&errors, 1)
+						wg.Done()
+					}
 				}
 			}
 		}

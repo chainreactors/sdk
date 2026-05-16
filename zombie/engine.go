@@ -2,10 +2,12 @@ package zombie
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chainreactors/parsers"
@@ -107,13 +109,26 @@ func (e *Engine) executeWeakpass(ctx *Context, task *WeakpassTask) (<-chan sdk.R
 		}
 	}
 
+	ztasks := expandTasks(ctx, task)
+	started := time.Now()
+	var requests int64
+	var results int64
+	var errors int64
+
 	resultCh := make(chan sdk.Result, ctx.threads)
 	pool, err := ants.NewPoolWithFunc(ctx.threads, func(i interface{}) {
 		defer i.(*workItem).wg.Done()
 		item := i.(*workItem)
+		atomic.AddInt64(&requests, 1)
 		result := runTask(item.ctx, item.task)
 		if result == nil {
 			return
+		}
+		if isZombieExecutionError(result.Err) {
+			atomic.AddInt64(&errors, 1)
+		}
+		if result.OK {
+			atomic.AddInt64(&results, 1)
 		}
 		if result.OK && item.firstOnly {
 			item.task.Canceler()
@@ -141,9 +156,21 @@ func (e *Engine) executeWeakpass(ctx *Context, task *WeakpassTask) (<-chan sdk.R
 		if e.capacity != nil {
 			defer e.capacity.Release(threads)
 		}
+		defer func() {
+			ctx.emitStats(sdk.Stats{
+				Engine:   e.Name(),
+				Task:     task.Type(),
+				Targets:  int64(len(task.Targets)),
+				Tasks:    int64(len(ztasks)),
+				Requests: atomic.LoadInt64(&requests),
+				Results:  atomic.LoadInt64(&results),
+				Errors:   atomic.LoadInt64(&errors),
+				Duration: time.Since(started),
+			})
+		}()
 
 		var wg sync.WaitGroup
-		for _, ztask := range expandTasks(ctx, task) {
+		for _, ztask := range ztasks {
 			select {
 			case <-ctx.Context().Done():
 				wg.Wait()
@@ -158,6 +185,7 @@ func (e *Engine) executeWeakpass(ctx *Context, task *WeakpassTask) (<-chan sdk.R
 				task:      ztask,
 				firstOnly: ctx.firstOnly,
 			}); err != nil {
+				atomic.AddInt64(&errors, 1)
 				wg.Done()
 				select {
 				case resultCh <- &Result{
@@ -223,6 +251,18 @@ func runTask(ctx context.Context, task *zombiepkg.Task) *zombiepkg.Result {
 		task.Canceler()
 		return zombiepkg.NewResult(task, fmt.Errorf("task timed out after %s", timeout))
 	}
+}
+
+func isZombieExecutionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, zombiepkg.ErrorWrongUserOrPwd) ||
+		errors.Is(err, zombiepkg.NotImplUnauthorized) ||
+		errors.Is(err, zombiecore.ErrNoUnauth) {
+		return false
+	}
+	return true
 }
 
 func expandTasks(ctx *Context, task *WeakpassTask) []*zombiepkg.Task {

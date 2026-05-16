@@ -9,12 +9,13 @@ import (
 )
 
 type Context struct {
-	ctx       context.Context
-	threads   int
-	timeout   int
-	top       int
-	firstOnly bool
-	noUnauth  bool
+	ctx          context.Context
+	threads      int
+	timeout      int
+	top          int
+	firstOnly    bool
+	noUnauth     bool
+	statsHandler func(sdk.Stats)
 }
 
 var _ sdk.Context = (*Context)(nil)
@@ -30,12 +31,13 @@ func NewContext() *Context {
 
 func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
-		ctx:       ctx,
-		threads:   c.threads,
-		timeout:   c.timeout,
-		top:       c.top,
-		firstOnly: c.firstOnly,
-		noUnauth:  c.noUnauth,
+		ctx:          ctx,
+		threads:      c.threads,
+		timeout:      c.timeout,
+		top:          c.top,
+		firstOnly:    c.firstOnly,
+		noUnauth:     c.noUnauth,
+		statsHandler: c.statsHandler,
 	}
 }
 
@@ -72,6 +74,17 @@ func (c *Context) SetFirstOnly(firstOnly bool) *Context {
 func (c *Context) SetNoUnauth(noUnauth bool) *Context {
 	c.noUnauth = noUnauth
 	return c
+}
+
+func (c *Context) SetStatsHandler(handler func(sdk.Stats)) *Context {
+	c.statsHandler = handler
+	return c
+}
+
+func (c *Context) emitStats(stats sdk.Stats) {
+	if c != nil && c.statsHandler != nil {
+		c.statsHandler(stats)
+	}
 }
 
 type Config struct {

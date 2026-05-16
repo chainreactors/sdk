@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/parsers"
@@ -295,16 +296,16 @@ func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan 
 }
 
 func (e *SprayEngine) executeCheck(ctx *Context, task *CheckTask) (<-chan sdk.Result, error) {
-	return e.execute(ctx, task.URLs, nil)
+	return e.execute(ctx, task.Type(), task.URLs, nil)
 }
 
 func (e *SprayEngine) executeBrute(ctx *Context, task *BruteTask) (<-chan sdk.Result, error) {
-	return e.execute(ctx, task.urls(), task.Wordlist)
+	return e.execute(ctx, task.Type(), task.urls(), task.Wordlist)
 }
 
 // execute 是 check/brute 的统一执行路径.
 // wordlist == nil 表示 check 模式, 否则 brute 模式.
-func (e *SprayEngine) execute(ctx *Context, urls []string, wordlist []string) (<-chan sdk.Result, error) {
+func (e *SprayEngine) execute(ctx *Context, taskType string, urls []string, wordlist []string) (<-chan sdk.Result, error) {
 	opt := cloneOption(ctx.opt)
 	opt.URL = urls
 	opt.PortRange = ""
@@ -340,6 +341,20 @@ func (e *SprayEngine) execute(ctx *Context, urls []string, wordlist []string) (<
 		if e.capacity != nil {
 			defer e.capacity.Release(threads)
 		}
+		started := time.Now()
+		defer func() {
+			stats := runner.Stats()
+			ctx.emitStats(sdk.Stats{
+				Engine:   e.Name(),
+				Task:     taskType,
+				Targets:  stats.Targets,
+				Tasks:    stats.Tasks,
+				Requests: stats.Requests,
+				Results:  stats.Results,
+				Errors:   stats.Errors,
+				Duration: time.Since(started),
+			})
+		}()
 		e.handler(ctx.Context(), runner, ch)
 
 		if runner.IsCheck {

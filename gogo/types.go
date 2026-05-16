@@ -16,9 +16,10 @@ import (
 
 // Context GoGo 上下文
 type Context struct {
-	ctx     context.Context
-	threads int
-	opt     *pkg.RunnerOption
+	ctx          context.Context
+	threads      int
+	opt          *pkg.RunnerOption
+	statsHandler func(sdk.Stats)
 }
 
 var _ sdk.Context = (*Context)(nil)
@@ -35,9 +36,10 @@ func NewContext() *Context {
 // WithContext 基于给定的 context.Context 复制 Context
 func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
-		ctx:     ctx,
-		threads: c.threads,
-		opt:     cloneRunnerOption(c.opt),
+		ctx:          ctx,
+		threads:      c.threads,
+		opt:          cloneRunnerOption(c.opt),
+		statsHandler: c.statsHandler,
 	}
 }
 
@@ -57,6 +59,17 @@ func (c *Context) SetThreads(threads int) *Context {
 func (c *Context) SetOption(opt *pkg.RunnerOption) *Context {
 	c.opt = cloneRunnerOption(opt)
 	return c
+}
+
+func (c *Context) SetStatsHandler(handler func(sdk.Stats)) *Context {
+	c.statsHandler = handler
+	return c
+}
+
+func (c *Context) emitStats(stats sdk.Stats) {
+	if c != nil && c.statsHandler != nil {
+		c.statsHandler(stats)
+	}
 }
 
 // SetVersionLevel 设置指纹识别级别
