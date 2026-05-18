@@ -11,7 +11,8 @@ examples/
 ├── gogo/       # 端口扫描和指纹识别工具
 ├── spray/      # HTTP 批量探测工具
 └── cases/      # 小颗粒度使用案例（cookbook）
-    └── match_detail/  # 获取 fingers matcher 详情（cmd + test）
+    ├── match_detail/  # 获取 fingers matcher 详情（cmd + test）
+    └── spray_crawl_finger/  # 单 URL 爬虫 + 深度指纹探测（cmd + test）
 ```
 
 ## 快速开始
@@ -276,6 +277,20 @@ go test ./cases/match_detail -v
 ```
 
 要点：在 config 上调用 `WithMatchDetail()`，随后仍然使用原有的 `Match`、`MatchHTTP` 或 `HTTPMatch`，从返回的 `Framework.MatchDetail` 读取命中的规则和 matcher 信息。
+
+### spray_crawl_finger - 单 URL 爬虫 + 深度指纹探测
+
+演示如何输入一个 URL，交给 `spray` 自动爬取，并通过 spray 内部指纹引擎拿到深度匹配结果和 `MatchDetail`。
+
+```bash
+# 跑命令行版
+go run ./cases/spray_crawl_finger -target http://127.0.0.1:3000
+
+# 跑测试版（inline finger + httptest，离线可跑）
+go test ./cases/spray_crawl_finger -v
+```
+
+要点：`spray.NewConfig().WithMatchDetail()` 负责把 matcher 细节带进 `common.Framework`，随后在 `spray.Context` 上打开 `SetCrawlPlugin(true)` 和 `SetFinger(true)` 即可。
 
 ---
 

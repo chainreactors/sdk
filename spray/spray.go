@@ -26,6 +26,7 @@ type SprayEngine struct {
 	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
 	resourceProvider func(string) []byte
 	capacity         *sdk.Capacity
+	matchDetail      bool
 	mu               sync.Mutex
 }
 
@@ -39,6 +40,7 @@ func NewSprayEngine(config *Config) *SprayEngine {
 		inited:           false,
 		fingersEngine:    config.FingersEngine,
 		resourceProvider: config.ResourceProvider,
+		matchDetail:      config.MatchDetail,
 	}
 	if config.Capacity > 0 {
 		e.capacity = sdk.NewCapacity(config.Capacity)
@@ -87,6 +89,7 @@ func (e *SprayEngine) Init() error {
 			}
 		}
 	}
+	e.applyMatchDetail()
 	e.refreshActivePath()
 	e.configureSDKGlobals()
 	e.inited = true
@@ -153,6 +156,17 @@ func (e *SprayEngine) applyInjectedFingers() bool {
 	return true
 }
 
+func (e *SprayEngine) applyMatchDetail() {
+	if !e.matchDetail || pkg.FingerEngine == nil {
+		return
+	}
+	fingersEngine := pkg.FingerEngine.Fingers()
+	if fingersEngine == nil {
+		return
+	}
+	fingersEngine.SetMatchDetailEnabled(true)
+}
+
 func (e *SprayEngine) refreshActivePath() {
 	if pkg.FingerEngine != nil {
 		if fingers := pkg.FingerEngine.Fingers(); fingers != nil {
@@ -161,6 +175,12 @@ func (e *SprayEngine) refreshActivePath() {
 				seen[path] = struct{}{}
 			}
 			for _, f := range fingers.HTTPFingers {
+				if f.SendDataStr != "" {
+					if _, ok := seen[f.SendDataStr]; !ok {
+						pkg.ActivePath = append(pkg.ActivePath, f.SendDataStr)
+						seen[f.SendDataStr] = struct{}{}
+					}
+				}
 				for _, rule := range f.Rules {
 					if rule.SendDataStr != "" {
 						if _, ok := seen[rule.SendDataStr]; ok {

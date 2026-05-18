@@ -3,7 +3,7 @@ module github.com/chainreactors/sdk
 go 1.24.0
 
 require (
-	github.com/chainreactors/fingers v1.2.1-0.20260517173939-651a8e7ceac0
+	github.com/chainreactors/fingers v1.2.1-0.20260518103258-7a88bfa946ff
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260110190827-a2c3000f54be
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
 	github.com/chainreactors/neutron v0.0.1
