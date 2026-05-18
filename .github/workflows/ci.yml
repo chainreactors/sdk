@@ -34,18 +34,8 @@ jobs:
           go list -m all | tee modules.txt
           ! grep -E '=>|00010101000000|000000000000' modules.txt
 
-      - name: Run focused tests
-        run: |
-          go test \
-            ./client \
-            ./pkg/... \
-            ./fingers \
-            ./gogo \
-            ./neutron \
-            ./spray \
-            ./zombie \
-            ./examples/cases/match_detail \
-            ./examples/cases/spray_crawl_finger
+      - name: Run CI tests
+        run: bash scripts/ci-test.sh
 
   consumer-build:
     name: External consumer build

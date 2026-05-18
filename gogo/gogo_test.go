@@ -508,28 +508,31 @@ func TestScanIntegration(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("gogo integration"))
+	}))
+	defer server.Close()
+	host, port := splitTestServerHostPort(t, server.URL)
+
 	engine := NewEngine(nil)
 	if err := engine.Init(); err != nil {
 		t.Skipf("Init failed (may need finger database): %v", err)
 	}
 
-	ctx := NewContext().SetThreads(50)
+	ctx := NewContext().SetThreads(10).SetDelay(1)
 	timeoutCtx, cancel := context.WithTimeout(ctx.Context(), 30*time.Second)
 	defer cancel()
 	ctx = ctx.WithContext(timeoutCtx)
 
-	// 使用用户提供的IP段和top2端口
-	results, err := engine.Scan(ctx, "81.68.175.32/28", "top2")
+	results, err := engine.Scan(ctx, host, port)
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
 	}
 
-	t.Logf("Scan completed, found %d open ports", len(results))
-	for _, result := range results {
-		t.Logf("  %s:%s - %s (Title: %s)", result.Ip, result.Port, result.Status, result.Title)
-	}
-
 	if len(results) == 0 {
-		t.Log("No open ports found, but this may be expected")
+		t.Fatal("expected local httptest server port to be open")
+	}
+	if results[0].Port != port {
+		t.Fatalf("expected port %s, got %+v", port, results[0])
 	}
 }
