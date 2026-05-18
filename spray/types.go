@@ -211,6 +211,7 @@ type Config struct {
 	FingersEngine    *sdkfingers.Engine
 	ResourceProvider func(string) []byte
 	Capacity         int
+	MatchDetail      bool
 }
 
 // NewConfig 创建默认配置
@@ -225,6 +226,12 @@ func (c *Config) Validate() error {
 // WithFingersEngine 设置自定义 fingers 引擎
 func (c *Config) WithFingersEngine(engine *sdkfingers.Engine) *Config {
 	c.FingersEngine = engine
+	return c
+}
+
+// WithMatchDetail enables matcher metadata on spray fingerprint results.
+func (c *Config) WithMatchDetail() *Config {
+	c.MatchDetail = true
 	return c
 }
 
