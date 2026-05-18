@@ -3,14 +3,14 @@ module github.com/chainreactors/sdk
 go 1.24.0
 
 require (
-	github.com/chainreactors/fingers v1.1.2-0.20260203043619-4f90dd60c787
+	github.com/chainreactors/fingers v1.2.1-0.20260517173939-651a8e7ceac0
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260110190827-a2c3000f54be
-	github.com/chainreactors/logs v0.0.0-20250312104344-9f30fa69d3c9
-	github.com/chainreactors/neutron v0.0.0-20260203032004-95c9e8431214
-	github.com/chainreactors/parsers v0.0.0-20251202162218-4b2258465d0a
+	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
+	github.com/chainreactors/neutron v0.0.1
+	github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68
 	github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0
 	github.com/chainreactors/spray v1.2.4-0.20260121025911-4f08ee9640d7
-	github.com/chainreactors/utils v0.0.0-20251216161625-70054cf04e88
+	github.com/chainreactors/utils v0.0.0-20260507101628-fd69d955ae21
 	github.com/chainreactors/zombie v1.2.3-0.20260509062300-b10f008fb8a5
 	github.com/panjf2000/ants/v2 v2.9.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -24,6 +24,7 @@ require (
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20230905024940-24af94b03874 // indirect
 	github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 // indirect
@@ -33,6 +34,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.8.0 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/denisenkom/go-mssqldb v0.9.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/eclipse/paho.mqtt.golang v1.4.3 // indirect
@@ -86,6 +88,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.53.0 // indirect
 	github.com/vbauerster/mpb/v8 v8.7.3 // indirect
+	github.com/weppos/publicsuffix-go v0.15.1-0.20220329081811-9a40b608a236 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
@@ -95,7 +98,7 @@ require (
 	go.mongodb.org/mongo-driver v1.12.0 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
