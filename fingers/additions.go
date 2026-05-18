@@ -19,7 +19,7 @@ func (e *Engine) AddFingers(fingers fingersEngine.Fingers) error {
 	}
 
 	if e.engine == nil {
-		engine, err := buildEngineFromFingers(e.config.FullFingers.Fingers(), e.config.FullFingers.Aliases())
+		engine, err := buildEngineFromFingers(e.config.FullFingers.Fingers(), e.config.FullFingers.Aliases(), e.config.MatchDetail)
 		if err != nil {
 			return err
 		}

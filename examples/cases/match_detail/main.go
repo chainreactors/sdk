@@ -1,4 +1,4 @@
-// match_detail demonstrates the SDK-level switch for fingers MatchDetail.
+// match_detail demonstrates the SDK-level MatchDetail config.
 //
 // Usage:
 //
@@ -24,17 +24,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := fingers.NewConfig()
+	cfg := fingers.NewConfig().WithMatchDetail()
 	if *cyberhubURL != "" {
 		cfg.WithCyberhub(*cyberhubURL, *apiKey)
 	}
 	eng, err := fingers.NewEngine(cfg)
 	if err != nil {
 		fmt.Printf("engine init failed: %v\n", err)
-		os.Exit(1)
-	}
-	if err := eng.EnableMatchDetail(); err != nil {
-		fmt.Printf("enable match detail failed: %v\n", err)
 		os.Exit(1)
 	}
 

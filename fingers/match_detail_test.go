@@ -8,8 +8,8 @@ import (
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 )
 
-func TestEnableMatchDetailPassiveMatch(t *testing.T) {
-	eng := newDetailTestEngine(t, &fingersEngine.Finger{
+func TestWithMatchDetailPassiveMatch(t *testing.T) {
+	eng := newDetailTestEngine(t, NewConfig().WithMatchDetail(), &fingersEngine.Finger{
 		Name:     "passive-app",
 		Protocol: "http",
 		Rules: fingersEngine.Rules{{
@@ -21,20 +21,9 @@ func TestEnableMatchDetailPassiveMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fw := frames["passive-app"]; fw == nil || fw.MatchDetail != nil {
-		t.Fatalf("MatchDetail should be nil before enabling, got %+v", fw)
-	}
-
-	if err := eng.EnableMatchDetail(); err != nil {
-		t.Fatal(err)
-	}
-	frames, err = eng.Match(rawHTTP("PassiveMarker"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	detail := frames["passive-app"].MatchDetail
 	if detail == nil {
-		t.Fatal("expected MatchDetail after EnableMatchDetail")
+		t.Fatal("expected MatchDetail from WithMatchDetail")
 	}
 	if detail.RuleIndex != 0 || detail.MatcherType != "body" || detail.MatcherValue != "passivemarker" {
 		t.Fatalf("unexpected detail: %+v", *detail)
@@ -44,8 +33,8 @@ func TestEnableMatchDetailPassiveMatch(t *testing.T) {
 	}
 }
 
-func TestEnableMatchDetailActiveHTTPMatch(t *testing.T) {
-	eng := newDetailTestEngine(t, &fingersEngine.Finger{
+func TestWithMatchDetailActiveHTTPMatch(t *testing.T) {
+	eng := newDetailTestEngine(t, NewConfig().WithMatchDetail(), &fingersEngine.Finger{
 		Name:        "active-app",
 		Protocol:    "http",
 		SendDataStr: "/probe",
@@ -53,9 +42,6 @@ func TestEnableMatchDetailActiveHTTPMatch(t *testing.T) {
 			Regexps: &fingersEngine.Regexps{Body: []string{"ActiveMarker"}},
 		}},
 	})
-	if err := eng.EnableMatchDetail(); err != nil {
-		t.Fatal(err)
-	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/probe" {
@@ -82,19 +68,30 @@ func TestEnableMatchDetailActiveHTTPMatch(t *testing.T) {
 	}
 }
 
-func TestEnableMatchDetailNilSafe(t *testing.T) {
-	var nilEngine *Engine
-	if err := nilEngine.EnableMatchDetail(); err != nil {
+func TestMatchDetailDisabledByDefault(t *testing.T) {
+	eng := newDetailTestEngine(t, NewConfig(), &fingersEngine.Finger{
+		Name:     "plain-app",
+		Protocol: "http",
+		Rules: fingersEngine.Rules{{
+			Regexps: &fingersEngine.Regexps{Body: []string{"PlainMarker"}},
+		}},
+	})
+
+	frames, err := eng.Match(rawHTTP("PlainMarker"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := (&Engine{}).EnableMatchDetail(); err != nil {
-		t.Fatal(err)
+	if fw := frames["plain-app"]; fw == nil || fw.MatchDetail != nil {
+		t.Fatalf("MatchDetail should be nil by default, got %+v", fw)
 	}
 }
 
-func newDetailTestEngine(t *testing.T, finger *fingersEngine.Finger) *Engine {
+func newDetailTestEngine(t *testing.T, config *Config, finger *fingersEngine.Finger) *Engine {
 	t.Helper()
-	eng, err := NewEngine(NewConfig().WithFingers(fingersEngine.Fingers{finger}))
+	if config == nil {
+		config = NewConfig()
+	}
+	eng, err := NewEngine(config.WithFingers(fingersEngine.Fingers{finger}))
 	if err != nil {
 		t.Fatal(err)
 	}

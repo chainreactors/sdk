@@ -11,7 +11,7 @@ import (
 
 func TestMatchDetailUsage(t *testing.T) {
 	eng, err := sdkfingers.NewEngine(
-		sdkfingers.NewConfig().WithFingers(fingersEngine.Fingers{{
+		sdkfingers.NewConfig().WithMatchDetail().WithFingers(fingersEngine.Fingers{{
 			Name:     "demo-app",
 			Protocol: "http",
 			Rules: fingersEngine.Rules{{
@@ -20,9 +20,6 @@ func TestMatchDetailUsage(t *testing.T) {
 		}}),
 	)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := eng.EnableMatchDetail(); err != nil {
 		t.Fatal(err)
 	}
 

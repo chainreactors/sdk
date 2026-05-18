@@ -30,6 +30,7 @@ type Config struct {
 	// 引擎配置
 	EnableEngines []string
 	FullFingers   FullFingers
+	MatchDetail   bool
 }
 
 // Validate 验证配置
@@ -84,6 +85,12 @@ func (c *Config) WithFingers(fingers fingersEngine.Fingers) *Config {
 func (c *Config) WithAliases(aliases []*alias.Alias) *Config {
 	fingers := c.FullFingers.Fingers()
 	c.FullFingers = (FullFingers{}).Merge(fingers, aliases)
+	return c
+}
+
+// WithMatchDetail enables matcher metadata on match results.
+func (c *Config) WithMatchDetail() *Config {
+	c.MatchDetail = true
 	return c
 }
 

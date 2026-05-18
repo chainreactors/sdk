@@ -59,7 +59,7 @@ func NewEngine(config *Config) (*Engine, error) {
 		config: config,
 	}
 
-	engine, err := buildEngineFromFingers(fingers, config.FullFingers.Aliases())
+	engine, err := buildEngineFromFingers(fingers, config.FullFingers.Aliases(), config.MatchDetail)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func NewEngineWithFingers(fingers FullFingers) (*Engine, error) {
 	config := NewConfig()
 	config.FullFingers = fingers
 
-	engine, err := buildEngineFromFingers(fingers.Fingers(), fingers.Aliases())
+	engine, err := buildEngineFromFingers(fingers.Fingers(), fingers.Aliases(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (e *Engine) Reload(ctx context.Context) error {
 		return err
 	}
 
-	engine, err := buildEngineFromFingers(e.config.FullFingers.Fingers(), e.config.FullFingers.Aliases())
+	engine, err := buildEngineFromFingers(e.config.FullFingers.Fingers(), e.config.FullFingers.Aliases(), e.config.MatchDetail)
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func (e *Engine) Reload(ctx context.Context) error {
 }
 
 // buildEngineFromFingers 从指纹列表构建引擎
-func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alias) (*fingersLib.Engine, error) {
+func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alias, matchDetail bool) (*fingersLib.Engine, error) {
 	engine := &fingersLib.Engine{
 		EnginesImpl:  make(map[string]fingersLib.EngineImpl),
 		Enabled:      make(map[string]bool),
@@ -169,6 +169,9 @@ func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alia
 	// Compile 会从 finger 列表重建 aliases（不含 pocs），
 	// 所以必须先 Compile，再用传入的 aliases（含 pocs）覆盖。
 	engine.Compile()
+	if matchDetail {
+		fEngine.SetMatchDetailEnabled(true)
+	}
 
 	if len(aliases) > 0 {
 		aliasEngine, err := alias.NewAliases(aliases...)

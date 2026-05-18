@@ -265,7 +265,7 @@ echo "http://127.0.0.1:8080" >> test_urls.txt
 
 ### match_detail - 获取 matcher 详情
 
-演示如何通过 SDK 打开底层 `fingers.EnableMatchDetail`，然后从 `common.Framework.MatchDetail` 读取 matcher 类型/值、rule_index、matcher_index 和 send_data。
+演示如何通过 `fingers.NewConfig().WithMatchDetail()` 打开底层 matcher detail，然后从 `common.Framework.MatchDetail` 读取 matcher 类型/值、rule_index、matcher_index 和 send_data。
 
 ```bash
 # 跑命令行版（被动匹配真实 target）
@@ -275,7 +275,7 @@ go run ./cases/match_detail -url http://127.0.0.1:8080 -key your_api_key -target
 go test ./cases/match_detail -v
 ```
 
-要点：创建 engine 后调用 `eng.EnableMatchDetail()`，随后仍然使用原有的 `Match`、`MatchHTTP` 或 `HTTPMatch`，从返回的 `Framework.MatchDetail` 读取命中的规则和 matcher 信息。
+要点：在 config 上调用 `WithMatchDetail()`，随后仍然使用原有的 `Match`、`MatchHTTP` 或 `HTTPMatch`，从返回的 `Framework.MatchDetail` 读取命中的规则和 matcher 信息。
 
 ---
 
