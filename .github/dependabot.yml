@@ -12,10 +12,9 @@ updates:
       - go
     commit-message:
       prefix: deps
+    ignore:
+      - dependency-name: github.com/chainreactors/*
     groups:
-      chainreactors:
-        patterns:
-          - github.com/chainreactors/*
       golang-x:
         patterns:
           - golang.org/x/*
