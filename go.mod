@@ -6,10 +6,10 @@ require (
 	github.com/chainreactors/fingers v1.2.1-0.20260518103258-7a88bfa946ff
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260518120413-769f82fc91a6
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/neutron v0.0.0-20260517173800-28516c3539a3
+	github.com/chainreactors/neutron v0.0.1
 	github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68
 	github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0
-	github.com/chainreactors/spray v1.2.6-0.20260518120729-f3f41e015ff5
+	github.com/chainreactors/spray v1.2.6
 	github.com/chainreactors/utils v0.0.0-20260507101628-fd69d955ae21
 	github.com/chainreactors/zombie v1.2.3-0.20260518115946-9623e4eeb466
 	github.com/panjf2000/ants/v2 v2.9.1
@@ -66,6 +66,7 @@ require (
 	github.com/jlaffaye/ftp v0.0.0-20201112195030-9aae4d151126 // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
 	github.com/knadh/go-pop3 v0.3.0 // indirect
+	github.com/lcvvvv/logs v0.0.3 // indirect
 	github.com/lib/pq v1.9.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/lunixbochs/struc v0.0.0-20200707160740-784aaebc1d40 // indirect
