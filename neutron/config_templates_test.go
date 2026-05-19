@@ -80,7 +80,7 @@ func TestExecuteTaskAndResultHelpers(t *testing.T) {
 	matched := &ExecuteResult{
 		success:  true,
 		template: &templates.Template{Id: "demo"},
-		result:   &operators.Result{Matched: true},
+		data:     &NeutronResult{Result: &operators.Result{Matched: true}},
 	}
 	if !matched.Success() || !matched.Matched() || matched.Template().Id != "demo" || matched.Data() != matched.Result() {
 		t.Fatalf("unexpected matched result helpers: %+v", matched)

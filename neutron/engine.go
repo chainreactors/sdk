@@ -139,7 +139,7 @@ func (e *Engine) executeTemplates(ctx *Context, templates []*templates.Template,
 		}
 
 		for _, t := range templates {
-			result, err := t.Execute(target, payload)
+			result, events, err := t.ExecuteWithEvents(target, payload)
 			if err != nil {
 				if err == protocols.OpsecError {
 					continue
@@ -149,7 +149,7 @@ func (e *Engine) executeTemplates(ctx *Context, templates []*templates.Template,
 					success:  false,
 					err:      err,
 					template: t,
-					result:   result,
+					data:     &NeutronResult{Result: result, Events: events},
 				}:
 				case <-ctx.Context().Done():
 					return
@@ -160,9 +160,8 @@ func (e *Engine) executeTemplates(ctx *Context, templates []*templates.Template,
 			select {
 			case resultCh <- &ExecuteResult{
 				success:  true,
-				err:      nil,
 				template: t,
-				result:   result,
+				data:     &NeutronResult{Result: result, Events: events},
 			}:
 			case <-ctx.Context().Done():
 				return
