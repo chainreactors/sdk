@@ -12,7 +12,7 @@ require (
 	github.com/chainreactors/spray v1.2.4-0.20260121025911-4f08ee9640d7
 	github.com/chainreactors/utils v0.0.0-20260507101628-fd69d955ae21
 	github.com/chainreactors/zombie v1.2.3-0.20260509062300-b10f008fb8a5
-	github.com/panjf2000/ants/v2 v2.9.1
+	github.com/panjf2000/ants/v2 v2.12.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
