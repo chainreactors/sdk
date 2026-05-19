@@ -620,29 +620,64 @@ func TestSpray(t *testing.T) {
 	engine := NewEngine(nil)
 
 	// 2. 初始化（加载指纹库等）
-	engine.Init()
+	if err := engine.Init(); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte("home"))
+		case "/admin":
+			_, _ = w.Write([]byte("admin panel"))
+		case "/api":
+			_, _ = w.Write([]byte("api"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
 
 	// 3. 使用
-	ctx := NewContext()
+	ctx := NewContext().SetThreads(2).SetTimeout(2)
 
 	// URL 检测
-	urls := []string{"http://example.com", "http://httpbin.org"}
-	resultCh1, _ := engine.CheckStream(ctx, urls)
+	urls := []string{server.URL, server.URL + "/admin"}
+	resultCh1, err := engine.CheckStream(ctx, urls)
+	if err != nil {
+		t.Fatalf("CheckStream() error = %v", err)
+	}
+	var checkCount int
 	for result := range resultCh1 {
-		fmt.Printf("%s [%d]\n", result.UrlString, result.Status)
+		if result.Status == http.StatusOK {
+			checkCount++
+		}
+	}
+	if checkCount != len(urls) {
+		t.Fatalf("CheckStream() status 200 count = %d, want %d", checkCount, len(urls))
 	}
 
 	// 路径暴力破解
-	wordlist := []string{"admin", "api", "test", ".git"}
-	resultCh2, _ := engine.BruteStream(ctx, "http://example.com", wordlist)
+	wordlist := []string{"admin", "api", "missing"}
+	bruteCtx := NewContext().SetThreads(2).SetTimeout(2).SetMatch(`current.Path == "/admin"`)
+	resultCh2, err := engine.BruteStream(bruteCtx, server.URL, wordlist)
+	if err != nil {
+		t.Fatalf("BruteStream() error = %v", err)
+	}
+	bruteHits := make(map[string]int)
 	for result := range resultCh2 {
-		fmt.Printf("%s [%d] %d bytes\n",
-			result.UrlString, result.Status, result.BodyLength)
+		bruteHits[result.UrlString] = result.Status
+	}
+	if bruteHits[server.URL+"/admin"] != http.StatusOK {
+		t.Fatalf("expected admin brute hit, got %+v", bruteHits)
 	}
 
 	// 同步检测（等待所有结果）
-	results, _ := engine.Check(ctx, urls)
-	for _, result := range results {
-		fmt.Printf("%s [%d]\n", result.UrlString, result.Status)
+	results, err := engine.Check(ctx, urls)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if len(results) != len(urls) {
+		t.Fatalf("Check() results = %d, want %d", len(results), len(urls))
 	}
 }
