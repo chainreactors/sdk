@@ -14,19 +14,19 @@ import (
 
 // ExportFilter 通用导出筛选选项
 type ExportFilter struct {
-	// 标签筛选（多个标签为 OR 关系）
-	Tags []string
+	Names        []string // 按名称过滤
+	Tags         []string // 标签筛选（多个标签为 OR 关系）
+	Sources      []string // 来源筛选（多个来源为 OR 关系）
+	Severities   []string // 严重程度过滤
+	POCType      string   // POC 类型过滤
+	Statuses     []string // 生命周期状态过滤
+	ReviewStatus string   // 审核状态过滤
 
-	// 来源筛选（多个来源为 OR 关系）
-	Sources []string
-
-	// 时间范围筛选
 	CreatedAfter  *time.Time // 创建时间起始
 	CreatedBefore *time.Time // 创建时间截止
 	UpdatedAfter  *time.Time // 更新时间起始
 	UpdatedBefore *time.Time // 更新时间截止
 
-	// 数量限制
 	Limit int // 最大返回数量（映射为 page=1&page_size=limit）
 }
 
@@ -74,6 +74,36 @@ func (f *ExportFilter) WithUpdatedBefore(t time.Time) *ExportFilter {
 // WithLimit 设置数量限制
 func (f *ExportFilter) WithLimit(limit int) *ExportFilter {
 	f.Limit = limit
+	return f
+}
+
+// WithNames 设置名称过滤
+func (f *ExportFilter) WithNames(names ...string) *ExportFilter {
+	f.Names = names
+	return f
+}
+
+// WithSeverities 设置严重程度过滤
+func (f *ExportFilter) WithSeverities(severities ...string) *ExportFilter {
+	f.Severities = severities
+	return f
+}
+
+// WithPOCType 设置 POC 类型过滤
+func (f *ExportFilter) WithPOCType(pocType string) *ExportFilter {
+	f.POCType = pocType
+	return f
+}
+
+// WithStatuses 设置生命周期状态过滤
+func (f *ExportFilter) WithStatuses(statuses ...string) *ExportFilter {
+	f.Statuses = statuses
+	return f
+}
+
+// WithReviewStatus 设置审核状态过滤
+func (f *ExportFilter) WithReviewStatus(status string) *ExportFilter {
+	f.ReviewStatus = status
 	return f
 }
 
@@ -128,11 +158,6 @@ func (r *FingerprintResponse) GetFinger() *fingers.Finger {
 // GetAlias 获取 Alias 对象
 func (r *FingerprintResponse) GetAlias() *alias.Alias {
 	return r.Alias
-}
-
-// IsActive 检查是否为激活状态（Export API 只返回 active 状态的指纹）
-func (r *FingerprintResponse) IsActive() bool {
-	return true // Export API 默认只导出 active 状态
 }
 
 // GetTemplate 获取 Template 对象（直接返回嵌入的 Template）

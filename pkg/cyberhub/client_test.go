@@ -60,12 +60,68 @@ func TestApplyFilterParams_DedupSources(t *testing.T) {
 	}
 }
 
-func TestApplyFilterParams_LimitOnly(t *testing.T) {
+func TestApplyFilterParams_Names(t *testing.T) {
 	params := url.Values{}
 	filter := &ExportFilter{
-		Limit: 10,
+		Names: []string{"poc-1", "poc-2", "poc-1"},
 	}
+	applyFilterParams(params, filter)
 
+	got := params["names"]
+	if len(got) != 2 {
+		t.Fatalf("expected 2 names, got %d: %v", len(got), got)
+	}
+}
+
+func TestApplyFilterParams_Severities(t *testing.T) {
+	params := url.Values{}
+	filter := &ExportFilter{
+		Severities: []string{"critical", "high"},
+	}
+	applyFilterParams(params, filter)
+
+	got := params["severities"]
+	if len(got) != 2 {
+		t.Fatalf("expected 2 severities, got %d: %v", len(got), got)
+	}
+}
+
+func TestApplyFilterParams_POCType(t *testing.T) {
+	params := url.Values{}
+	filter := &ExportFilter{POCType: "nuclei"}
+	applyFilterParams(params, filter)
+
+	if params.Get("type") != "nuclei" {
+		t.Fatalf("expected type=nuclei, got %q", params.Get("type"))
+	}
+}
+
+func TestApplyFilterParams_Statuses(t *testing.T) {
+	params := url.Values{}
+	filter := &ExportFilter{
+		Statuses: []string{"active", "pending"},
+	}
+	applyFilterParams(params, filter)
+
+	got := params["statuses"]
+	if len(got) != 2 {
+		t.Fatalf("expected 2 statuses, got %d: %v", len(got), got)
+	}
+}
+
+func TestApplyFilterParams_ReviewStatus(t *testing.T) {
+	params := url.Values{}
+	filter := &ExportFilter{ReviewStatus: "approved"}
+	applyFilterParams(params, filter)
+
+	if params.Get("review_status") != "approved" {
+		t.Fatalf("expected review_status=approved, got %q", params.Get("review_status"))
+	}
+}
+
+func TestApplyFilterParams_Limit(t *testing.T) {
+	params := url.Values{}
+	filter := &ExportFilter{Limit: 10}
 	applyFilterParams(params, filter)
 
 	if params.Get("page") != "1" {
@@ -73,5 +129,34 @@ func TestApplyFilterParams_LimitOnly(t *testing.T) {
 	}
 	if params.Get("page_size") != "10" {
 		t.Fatalf("expected page_size=10, got %q", params.Get("page_size"))
+	}
+}
+
+func TestApplyDefaultPOCStatus_NoStatuses(t *testing.T) {
+	params := url.Values{}
+	applyDefaultPOCStatus(params)
+
+	if params.Get("status") != "active" {
+		t.Fatalf("expected default status=active, got %q", params.Get("status"))
+	}
+}
+
+func TestApplyDefaultPOCStatus_WithStatuses(t *testing.T) {
+	params := url.Values{}
+	params.Add("statuses", "pending")
+	applyDefaultPOCStatus(params)
+
+	if params.Get("status") != "" {
+		t.Fatalf("expected no default status when statuses set, got %q", params.Get("status"))
+	}
+}
+
+func TestApplyDefaultPOCStatus_WithReviewStatus(t *testing.T) {
+	params := url.Values{}
+	params.Set("review_status", "approved")
+	applyDefaultPOCStatus(params)
+
+	if params.Get("status") != "" {
+		t.Fatalf("expected no default status when review_status set, got %q", params.Get("status"))
 	}
 }

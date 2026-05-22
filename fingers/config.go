@@ -121,7 +121,7 @@ func (c *Config) Load(ctx context.Context) error {
 	}
 	if c.IsRemoteEnabled() {
 		client := cyberhub.NewClient(c.CyberhubURL, c.APIKey, c.Timeout)
-		fingersData, aliases, err := client.ExportFingers(ctx, "", c.ExportFilter)
+		fingersData, aliases, err := client.ExportFingers(ctx, c.ExportFilter)
 		if err != nil {
 			return err
 		}

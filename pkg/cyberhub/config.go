@@ -78,6 +78,46 @@ func (c *Config) SetSources(sources ...string) *Config {
 	return c
 }
 
+func (c *Config) SetNames(names ...string) *Config {
+	if c.ExportFilter == nil {
+		c.ExportFilter = NewExportFilter()
+	}
+	c.ExportFilter.Names = names
+	return c
+}
+
+func (c *Config) SetSeverities(severities ...string) *Config {
+	if c.ExportFilter == nil {
+		c.ExportFilter = NewExportFilter()
+	}
+	c.ExportFilter.Severities = severities
+	return c
+}
+
+func (c *Config) SetPOCType(pocType string) *Config {
+	if c.ExportFilter == nil {
+		c.ExportFilter = NewExportFilter()
+	}
+	c.ExportFilter.POCType = pocType
+	return c
+}
+
+func (c *Config) SetStatuses(statuses ...string) *Config {
+	if c.ExportFilter == nil {
+		c.ExportFilter = NewExportFilter()
+	}
+	c.ExportFilter.Statuses = statuses
+	return c
+}
+
+func (c *Config) SetReviewStatus(status string) *Config {
+	if c.ExportFilter == nil {
+		c.ExportFilter = NewExportFilter()
+	}
+	c.ExportFilter.ReviewStatus = status
+	return c
+}
+
 func (c *Config) SetLimit(limit int) *Config {
 	if c.ExportFilter == nil {
 		c.ExportFilter = NewExportFilter()

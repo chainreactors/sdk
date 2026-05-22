@@ -45,44 +45,23 @@ func NewClient(baseURL, apiKey string, timeout time.Duration) *Client {
 	}
 }
 
-// ExportFingerprints 导出所有指纹（使用 export API）
-// withFingerprint: 是否返回完整的指纹规则数据
-// source: 指纹来源过滤（可选，如 "github", "local" 等）
-// filters: 筛选条件（可选，传 nil 表示不筛选）
-func (c *Client) ExportFingerprints(ctx context.Context, withFingerprint bool, source string, filters ...*ExportFilter) ([]FingerprintResponse, error) {
+// ExportFingers 导出指纹与别名
+func (c *Client) ExportFingers(ctx context.Context, filters ...*ExportFilter) (fingers.Fingers, []*alias.Alias, error) {
 	params := url.Values{}
-	if withFingerprint {
-		params.Set("with_fingerprint", "true")
-	}
-	if source != "" {
-		params.Add("sources", source)
-	}
+	params.Set("with_fingerprint", "true")
 
-	// 添加筛选参数
 	applyFilterParams(params, firstFilter(filters))
 
 	endpoint := fmt.Sprintf("%s/fingerprints/export?%s", c.baseURL, params.Encode())
 
 	var response FingerprintListResponse
 	if err := c.doRequest(ctx, "GET", endpoint, nil, &response); err != nil {
-		return nil, fmt.Errorf("export fingerprints failed: %w", err)
-	}
-
-	return response.Fingerprints, nil
-}
-
-// ExportFingers 导出指纹与别名（仅保留 fingers.Finger 与 alias.Alias）
-// source: 指纹来源过滤（可选，如 "github", "local" 等）
-// filters: 筛选条件（可选，传 nil 表示不筛选）
-func (c *Client) ExportFingers(ctx context.Context, source string, filters ...*ExportFilter) (fingers.Fingers, []*alias.Alias, error) {
-	responses, err := c.ExportFingerprints(ctx, true, source, filters...)
-	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("export fingers failed: %w", err)
 	}
 
 	var allFingers fingers.Fingers
 	var allAliases []*alias.Alias
-	for _, resp := range responses {
+	for _, resp := range response.Fingerprints {
 		if resp.Finger != nil {
 			allFingers = append(allFingers, resp.Finger)
 		}
@@ -94,68 +73,18 @@ func (c *Client) ExportFingers(ctx context.Context, source string, filters ...*E
 	return allFingers, allAliases, nil
 }
 
-// ExportPOCs 导出所有 POC（使用 export API）
-// tags: 标签过滤（可选）
-// severities: 严重程度过滤（可选）
-// pocType: POC 类型过滤（可选）
-// source: POC 来源过滤（可选，如 "github", "local" 等）
-// filters: 筛选条件（可选，传 nil 表示不筛选）
-func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []string, pocType string, source string, filters ...*ExportFilter) ([]POCResponse, error) {
+// ExportPOCs 导出 POC
+func (c *Client) ExportPOCs(ctx context.Context, filters ...*ExportFilter) ([]POCResponse, error) {
 	params := url.Values{}
 
-	// 添加标签过滤
-	for _, tag := range tags {
-		params.Add("tags", tag)
-	}
-
-	// 添加严重程度过滤
-	for _, severity := range severities {
-		params.Add("severities", severity)
-	}
-
-	// 添加类型过滤
-	if pocType != "" {
-		params.Set("type", pocType)
-	}
-
-	// 添加来源过滤
-	if source != "" {
-		params.Add("sources", source)
-	}
-
-	// 只导出激活状态的 POC
-	params.Set("status", "active")
-
-	// 添加筛选参数
 	applyFilterParams(params, firstFilter(filters))
+	applyDefaultPOCStatus(params)
 
 	endpoint := fmt.Sprintf("%s/pocs/export?%s", c.baseURL, params.Encode())
 
 	var response POCListResponse
 	if err := c.doRequest(ctx, "GET", endpoint, nil, &response); err != nil {
 		return nil, fmt.Errorf("export pocs failed: %w", err)
-	}
-
-	return response.POCs, nil
-}
-
-// ExportPOCsByNames 按名称列表导出 POC
-func (c *Client) ExportPOCsByNames(ctx context.Context, names []string) ([]POCResponse, error) {
-	if len(names) == 0 {
-		return nil, nil
-	}
-
-	params := url.Values{}
-	for _, name := range names {
-		params.Add("names", name)
-	}
-	params.Set("status", "active")
-
-	endpoint := fmt.Sprintf("%s/pocs/export?%s", c.baseURL, params.Encode())
-
-	var response POCListResponse
-	if err := c.doRequest(ctx, "GET", endpoint, nil, &response); err != nil {
-		return nil, fmt.Errorf("export pocs by names failed: %w", err)
 	}
 
 	return response.POCs, nil
@@ -177,44 +106,37 @@ func applyFilterParams(params url.Values, filter *ExportFilter) {
 		return
 	}
 
-	if len(filter.Tags) > 0 {
-		existingTags := make(map[string]struct{})
-		for _, tag := range params["tags"] {
-			if tag == "" {
-				continue
+	addDedup := func(params url.Values, key string, values []string) {
+		existing := make(map[string]struct{})
+		for _, v := range params[key] {
+			if v != "" {
+				existing[v] = struct{}{}
 			}
-			existingTags[tag] = struct{}{}
 		}
-		for _, tag := range filter.Tags {
-			if tag == "" {
+		for _, v := range values {
+			if v == "" {
 				continue
 			}
-			if _, exists := existingTags[tag]; exists {
+			if _, exists := existing[v]; exists {
 				continue
 			}
-			params.Add("tags", tag)
-			existingTags[tag] = struct{}{}
+			params.Add(key, v)
+			existing[v] = struct{}{}
 		}
 	}
 
-	if len(filter.Sources) > 0 {
-		existingSources := make(map[string]struct{})
-		for _, source := range params["sources"] {
-			if source == "" {
-				continue
-			}
-			existingSources[source] = struct{}{}
-		}
-		for _, source := range filter.Sources {
-			if source == "" {
-				continue
-			}
-			if _, exists := existingSources[source]; exists {
-				continue
-			}
-			params.Add("sources", source)
-			existingSources[source] = struct{}{}
-		}
+	addDedup(params, "names", filter.Names)
+	addDedup(params, "tags", filter.Tags)
+	addDedup(params, "sources", filter.Sources)
+	addDedup(params, "severities", filter.Severities)
+	addDedup(params, "statuses", filter.Statuses)
+
+	if filter.POCType != "" {
+		params.Set("type", filter.POCType)
+	}
+
+	if filter.ReviewStatus != "" {
+		params.Set("review_status", filter.ReviewStatus)
 	}
 
 	if filter.CreatedAfter != nil {
@@ -237,6 +159,14 @@ func applyFilterParams(params url.Values, filter *ExportFilter) {
 		params.Set("page", "1")
 		params.Set("page_size", strconv.Itoa(filter.Limit))
 	}
+}
+
+// applyDefaultPOCStatus 在没有显式指定状态时默认注入 status=active
+func applyDefaultPOCStatus(params url.Values) {
+	if len(params["statuses"]) > 0 || params.Get("review_status") != "" {
+		return
+	}
+	params.Set("status", "active")
 }
 
 type requestBodyProvider struct {

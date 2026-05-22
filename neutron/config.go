@@ -96,7 +96,7 @@ func (c *Config) Load(ctx context.Context) error {
 	}
 	if c.IsRemoteEnabled() {
 		client := cyberhub.NewClient(c.CyberhubURL, c.APIKey, c.Timeout)
-		responses, err := client.ExportPOCs(ctx, nil, nil, "", "", c.ExportFilter)
+		responses, err := client.ExportPOCs(ctx, c.ExportFilter)
 		if err != nil {
 			return err
 		}
