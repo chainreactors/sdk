@@ -7,6 +7,7 @@ import (
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/templates"
 	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
 )
 
 func TestConfigSourcesAndTemplateFiltering(t *testing.T) {
@@ -29,18 +30,14 @@ func TestConfigSourcesAndTemplateFiltering(t *testing.T) {
 		t.Fatalf("expected critical template, got %q", got)
 	}
 
-	cfg.WithCyberhub("https://cyberhub.test", "key")
-	if !cfg.IsRemoteEnabled() || cfg.LocalPath != "" || cfg.Templates.Len() != 0 {
-		t.Fatalf("WithCyberhub did not reset local source: %+v", cfg)
+	cfg.Provider = cyberhub.NewProvider("https://cyberhub.test", "key")
+	if cfg.Provider == nil || cfg.LocalPath != "" {
+		t.Fatalf("Provider assignment did not work: %+v", cfg)
 	}
 
 	cfg.WithLocalFile("pocs")
-	if cfg.IsRemoteEnabled() || cfg.LocalPath != "pocs" || cfg.Templates.Len() != 0 {
-		t.Fatalf("WithLocalFile did not reset remote source: %+v", cfg)
-	}
-
-	if err := NewConfig().WithCyberhub("https://cyberhub.test", "").Validate(); err == nil {
-		t.Fatal("expected missing api key to fail validation")
+	if cfg.Provider != nil || cfg.LocalPath != "pocs" {
+		t.Fatalf("WithLocalFile did not reset provider: %+v", cfg)
 	}
 }
 

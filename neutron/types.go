@@ -3,6 +3,7 @@ package neutron
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/chainreactors/neutron/operators"
 	"github.com/chainreactors/neutron/protocols"
@@ -17,12 +18,11 @@ import (
 
 // Config Neutron SDK 配置
 type Config struct {
-	cyberhub.Config
-
-	// 加载配置
+	Provider  *cyberhub.Provider
 	LocalPath string
 	Templates Templates
 	Capacity  int
+	Timeout   time.Duration
 }
 
 // ========================================

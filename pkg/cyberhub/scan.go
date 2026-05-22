@@ -79,7 +79,7 @@ type fingerprintListPage struct {
 }
 
 // ScanFingerprints executes CyberHub fingerprint scan and normalizes the result for correlation use.
-func (c *Client) ScanFingerprints(ctx context.Context, req *FingerprintScanRequest) (*FingerprintScanResponse, error) {
+func (c *client) ScanFingerprints(ctx context.Context, req *FingerprintScanRequest) (*FingerprintScanResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("scan request is required")
 	}
@@ -142,7 +142,7 @@ func normalizeScanTimeout(timeout int) int {
 	return timeout
 }
 
-func (c *Client) resolveFingerprintRuleIDs(ctx context.Context, ruleIDs []uint, rawContent string) ([]uint, error) {
+func (c *client) resolveFingerprintRuleIDs(ctx context.Context, ruleIDs []uint, rawContent string) ([]uint, error) {
 	if trimmed := strings.TrimSpace(rawContent); trimmed != "" {
 		return normalizeRuleIDs(ruleIDs), nil
 	}

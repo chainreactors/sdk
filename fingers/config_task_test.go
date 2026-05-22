@@ -10,6 +10,7 @@ import (
 	"github.com/chainreactors/fingers/alias"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
 )
 
 func TestConfigSourceSelectionAndFiltering(t *testing.T) {
@@ -31,18 +32,14 @@ func TestConfigSourceSelectionAndFiltering(t *testing.T) {
 		t.Fatalf("expected alias to be preserved after filter: %+v", item)
 	}
 
-	cfg.WithCyberhub("https://cyberhub.test", "key")
-	if !cfg.IsRemoteEnabled() || cfg.Filename != "" || cfg.FullFingers.Len() != 0 {
-		t.Fatalf("WithCyberhub did not reset local source: %+v", cfg)
+	cfg.Provider = cyberhub.NewProvider("https://cyberhub.test", "key")
+	if cfg.Provider == nil || cfg.Filename != "" {
+		t.Fatalf("Provider assignment did not work: %+v", cfg)
 	}
 
 	cfg.WithLocalFile("fingers.yaml")
-	if cfg.IsRemoteEnabled() || cfg.Filename != "fingers.yaml" || cfg.FullFingers.Len() != 0 {
-		t.Fatalf("WithLocalFile did not reset remote source: %+v", cfg)
-	}
-
-	if err := NewConfig().WithCyberhub("https://cyberhub.test", "").Validate(); err == nil {
-		t.Fatal("expected missing api key to fail validation")
+	if cfg.Provider != nil || cfg.Filename != "fingers.yaml" {
+		t.Fatalf("WithLocalFile did not reset provider: %+v", cfg)
 	}
 }
 

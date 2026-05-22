@@ -5,14 +5,6 @@ import (
 	"testing"
 )
 
-func TestFirstFilter(t *testing.T) {
-	filter := &ExportFilter{}
-	got := firstFilter([]*ExportFilter{nil, filter})
-	if got != filter {
-		t.Fatalf("expected first non-nil filter")
-	}
-}
-
 func TestApplyFilterParams_DedupTags(t *testing.T) {
 	params := url.Values{}
 	params.Add("tags", "foo")

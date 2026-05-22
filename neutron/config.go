@@ -3,37 +3,21 @@ package neutron
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/chainreactors/neutron/templates"
-	"github.com/chainreactors/sdk/pkg/cyberhub"
 )
 
 // NewConfig 创建默认配置
 func NewConfig() *Config {
-	base := cyberhub.NewConfig()
 	return &Config{
-		Config:    *base,
-		LocalPath: "",
-		Templates: Templates{},
+		Timeout: 10 * time.Second,
 	}
 }
 
 // Validate 验证配置
 func (c *Config) Validate() error {
-	// 如果配置了 Cyberhub URL，必须提供 API Key
-	if c.CyberhubURL != "" && c.APIKey == "" {
-		return fmt.Errorf("api_key is required when cyberhub_url is set")
-	}
-
-	if err := c.Config.Validate(); err != nil {
-		return err
-	}
 	return nil
-}
-
-// IsRemoteEnabled 是否启用远程加载
-func (c *Config) IsRemoteEnabled() bool {
-	return c.CyberhubURL != "" && c.APIKey != ""
 }
 
 // WithTemplates 设置已加载的模板
@@ -42,23 +26,11 @@ func (c *Config) WithTemplates(tpls []*templates.Template) *Config {
 	return c
 }
 
-// WithCyberhub 设置远程加载配置（不立即拉取）
-func (c *Config) WithCyberhub(url, apiKey string) *Config {
-	c.CyberhubURL = url
-	c.APIKey = apiKey
-	c.LocalPath = ""
-	c.Templates = Templates{}
-	c.Filename = ""
-	return c
-}
-
-// WithLocalFile 设置本地加载配置（不立即读取）
+// WithLocalFile 设置本地加载配置
 func (c *Config) WithLocalFile(path string) *Config {
 	c.LocalPath = path
-	c.CyberhubURL = ""
-	c.APIKey = ""
+	c.Provider = nil
 	c.Templates = Templates{}
-	c.Filename = ""
 	return c
 }
 
@@ -72,7 +44,6 @@ func (c *Config) WithFilter(predicate func(*templates.Template) bool) *Config {
 }
 
 // WithCapacity sets the total capacity for concurrent Execute calls.
-// When set, each Execute call acquires 1 unit and blocks if capacity is exhausted.
 func (c *Config) WithCapacity(total int) *Config {
 	c.Capacity = total
 	return c
@@ -94,22 +65,15 @@ func (c *Config) Load(ctx context.Context) error {
 		c.Templates = (Templates{}).Merge(loaded)
 		return nil
 	}
-	if c.IsRemoteEnabled() {
-		client := cyberhub.NewClient(c.CyberhubURL, c.APIKey, c.Timeout)
-		responses, err := client.ExportPOCs(ctx, c.ExportFilter)
+	if c.Provider != nil {
+		tpls, err := c.Provider.POCs(ctx)
 		if err != nil {
 			return err
 		}
-
-		loaded := make([]*templates.Template, 0, len(responses))
-		for _, resp := range responses {
-			loaded = append(loaded, resp.GetTemplate())
-		}
-		c.Templates = (Templates{}).Merge(loaded)
+		c.Templates = (Templates{}).Merge(tpls)
 		return nil
 	}
 
-	// 尝试从默认路径加载模板
 	defaultPaths := []string{
 		"templates",
 		"pocs",
@@ -125,6 +89,5 @@ func (c *Config) Load(ctx context.Context) error {
 		}
 	}
 
-	// 如果所有默认路径都失败，返回友好的错误信息
-	return fmt.Errorf("no data source configured: please use WithLocalFile(), WithCyberhub(), or WithTemplates() to configure template data")
+	return fmt.Errorf("no data source configured: please use WithLocalFile(), Provider, or WithTemplates() to configure template data")
 }

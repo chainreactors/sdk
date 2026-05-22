@@ -11,23 +11,13 @@ import (
 
 // NewConfig 创建默认配置
 func NewConfig() *Config {
-	base := cyberhub.NewConfig()
-	return &Config{
-		Config:        *base,
-		EnableEngines: nil,
-		FullFingers:   FullFingers{},
-	}
+	return &Config{}
 }
-
-// ========================================
-// Config 配置
-// ========================================
 
 // Config Fingers SDK 配置
 type Config struct {
-	cyberhub.Config
-
-	// 引擎配置
+	Provider      *cyberhub.Provider
+	Filename      string
 	EnableEngines []string
 	FullFingers   FullFingers
 	MatchDetail   bool
@@ -35,19 +25,7 @@ type Config struct {
 
 // Validate 验证配置
 func (c *Config) Validate() error {
-	// 如果配置了 Cyberhub URL，必须提供 API Key
-	if c.CyberhubURL != "" && c.APIKey == "" {
-		return fmt.Errorf("api_key is required when cyberhub_url is set")
-	}
-	if err := c.Config.Validate(); err != nil {
-		return err
-	}
 	return nil
-}
-
-// IsRemoteEnabled 是否启用远程加载
-func (c *Config) IsRemoteEnabled() bool {
-	return c.CyberhubURL != "" && c.APIKey != ""
 }
 
 // SetEnableEngines 设置启用的引擎列表
@@ -56,20 +34,10 @@ func (c *Config) SetEnableEngines(engines []string) *Config {
 	return c
 }
 
-// WithCyberhub 设置远程加载配置（不立即拉取）
-func (c *Config) WithCyberhub(url, apiKey string) *Config {
-	c.CyberhubURL = url
-	c.APIKey = apiKey
-	c.Filename = ""
-	c.FullFingers = FullFingers{}
-	return c
-}
-
-// WithLocalFile 设置本地文件加载（不立即读取）
+// WithLocalFile 设置本地文件加载
 func (c *Config) WithLocalFile(filename string) *Config {
 	c.Filename = filename
-	c.CyberhubURL = ""
-	c.APIKey = ""
+	c.Provider = nil
 	c.FullFingers = FullFingers{}
 	return c
 }
@@ -119,9 +87,8 @@ func (c *Config) Load(ctx context.Context) error {
 		c.FullFingers = (FullFingers{}).Merge(fingers, nil)
 		return nil
 	}
-	if c.IsRemoteEnabled() {
-		client := cyberhub.NewClient(c.CyberhubURL, c.APIKey, c.Timeout)
-		fingersData, aliases, err := client.ExportFingers(ctx, c.ExportFilter)
+	if c.Provider != nil {
+		fingersData, aliases, err := c.Provider.Fingers(ctx)
 		if err != nil {
 			return err
 		}
@@ -129,7 +96,6 @@ func (c *Config) Load(ctx context.Context) error {
 		return nil
 	}
 
-	// 尝试从默认路径加载指纹库
 	defaultPaths := []string{
 		"fingers.json",
 		"data/fingers.json",
@@ -145,8 +111,7 @@ func (c *Config) Load(ctx context.Context) error {
 		}
 	}
 
-	// 如果所有默认路径都失败，返回友好的错误信息
-	return fmt.Errorf("no data source configured: please use WithLocalFile(), WithCyberhub(), or WithFingers() to configure fingerprint data")
+	return fmt.Errorf("no data source configured: please use WithLocalFile(), Provider, or WithFingers() to configure fingerprint data")
 }
 
 type FullFinger struct {

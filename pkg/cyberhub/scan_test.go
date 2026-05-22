@@ -66,7 +66,7 @@ func TestScanFingerprints_StandardResult(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-key", 5*time.Second)
+	client := newClient(server.URL, "test-key", 5*time.Second)
 	resp, err := client.ScanFingerprints(context.Background(), &FingerprintScanRequest{
 		TargetURL: "https://example.test",
 		RuleIDs:   []uint{9770},
@@ -184,7 +184,7 @@ func TestScanFingerprints_AutoFetchActiveRuleIDs(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-key", 5*time.Second)
+	client := newClient(server.URL, "test-key", 5*time.Second)
 	resp, err := client.ScanFingerprints(context.Background(), &FingerprintScanRequest{
 		TargetURL: "https://example.test",
 		// No RuleIDs — should auto-fetch
@@ -269,7 +269,7 @@ func TestScanFingerprints_RawContentSkipsListing(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-key", 5*time.Second)
+	client := newClient(server.URL, "test-key", 5*time.Second)
 	resp, err := client.ScanFingerprints(context.Background(), &FingerprintScanRequest{
 		TargetURL:  "https://example.test",
 		RawContent: "name: custom-app\nrules:\n  - body: custom",
@@ -315,7 +315,7 @@ func TestScanFingerprints_LegacyFrameworksFallback(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "test-key", 5*time.Second)
+	client := newClient(server.URL, "test-key", 5*time.Second)
 	resp, err := client.ScanFingerprints(context.Background(), &FingerprintScanRequest{
 		TargetURL: "https://example.test",
 		RuleIDs:   []uint{1},

@@ -17,26 +17,18 @@ import (
 	"github.com/chainreactors/fingers/fingers"
 )
 
-// ========================================
-// Cyberhub API 客户端
-// ========================================
-
-// Client Cyberhub API 客户端
-type Client struct {
+type client struct {
 	baseURL    string
 	apiKey     string
 	httpClient *http.Client
 }
 
-// NewClient 创建 Cyberhub 客户端
-func NewClient(baseURL, apiKey string, timeout time.Duration) *Client {
-	// 确保 baseURL 以 /api/v1 结尾
+func newClient(baseURL, apiKey string, timeout time.Duration) *client {
 	baseURL = strings.TrimSuffix(baseURL, "/")
 	if !strings.HasSuffix(baseURL, "/api/v1") {
 		baseURL = baseURL + "/api/v1"
 	}
-
-	return &Client{
+	return &client{
 		baseURL: baseURL,
 		apiKey:  apiKey,
 		httpClient: &http.Client{
@@ -45,16 +37,14 @@ func NewClient(baseURL, apiKey string, timeout time.Duration) *Client {
 	}
 }
 
-// ExportFingers 导出指纹与别名
-func (c *Client) ExportFingers(ctx context.Context, filters ...*ExportFilter) (fingers.Fingers, []*alias.Alias, error) {
+func (c *client) exportFingers(ctx context.Context, filter *ExportFilter) (fingers.Fingers, []*alias.Alias, error) {
 	params := url.Values{}
 	params.Set("with_fingerprint", "true")
-
-	applyFilterParams(params, firstFilter(filters))
+	applyFilterParams(params, filter)
 
 	endpoint := fmt.Sprintf("%s/fingerprints/export?%s", c.baseURL, params.Encode())
 
-	var response FingerprintListResponse
+	var response fingerprintListResponse
 	if err := c.doRequest(ctx, "GET", endpoint, nil, &response); err != nil {
 		return nil, nil, fmt.Errorf("export fingers failed: %w", err)
 	}
@@ -69,35 +59,21 @@ func (c *Client) ExportFingers(ctx context.Context, filters ...*ExportFilter) (f
 			allAliases = append(allAliases, resp.Alias)
 		}
 	}
-
 	return allFingers, allAliases, nil
 }
 
-// ExportPOCs 导出 POC
-func (c *Client) ExportPOCs(ctx context.Context, filters ...*ExportFilter) ([]POCResponse, error) {
+func (c *client) exportPOCs(ctx context.Context, filter *ExportFilter) ([]pocResponse, error) {
 	params := url.Values{}
-
-	applyFilterParams(params, firstFilter(filters))
+	applyFilterParams(params, filter)
 	applyDefaultPOCStatus(params)
 
 	endpoint := fmt.Sprintf("%s/pocs/export?%s", c.baseURL, params.Encode())
 
-	var response POCListResponse
+	var response pocListResponse
 	if err := c.doRequest(ctx, "GET", endpoint, nil, &response); err != nil {
 		return nil, fmt.Errorf("export pocs failed: %w", err)
 	}
-
 	return response.POCs, nil
-}
-
-// firstFilter 返回第一个非 nil 的筛选器
-func firstFilter(filters []*ExportFilter) *ExportFilter {
-	for _, filter := range filters {
-		if filter != nil {
-			return filter
-		}
-	}
-	return nil
 }
 
 // applyFilterParams 将筛选条件应用到 URL 参数
@@ -208,8 +184,7 @@ func readResponseBody(resp *http.Response) ([]byte, error) {
 	return io.ReadAll(reader)
 }
 
-// doRequest 执行 HTTP 请求（带重试）
-func (c *Client) doRequest(ctx context.Context, method, endpoint string, body io.Reader, result interface{}) error {
+func (c *client) doRequest(ctx context.Context, method, endpoint string, body io.Reader, result interface{}) error {
 	bodyProvider, err := newRequestBodyProvider(body)
 	if err != nil {
 		return err
@@ -242,7 +217,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body io
 	}
 
 	// 解析标准响应格式: { code, message, data }
-	var apiResp APIResponse
+	var apiResp apiResponse
 	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		return fmt.Errorf("parse response failed: %w", err)
 	}
@@ -265,8 +240,3 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body io
 	return nil
 }
 
-// Close 关闭客户端
-func (c *Client) Close() error {
-	// HTTP client 不需要显式关闭
-	return nil
-}
