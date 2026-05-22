@@ -20,6 +20,18 @@ type ExportFilter struct {
 	// 来源筛选（多个来源为 OR 关系）
 	Sources []string
 
+	// 生命周期状态筛选（多个状态为 OR 关系，POC / 指纹导出均会透传）
+	// POC 留空时 SDK 默认仅导出 active 状态，保持向后兼容；
+	// 指纹留空时走后端默认语义。
+	// POC 显式指定后默认 active 行为被覆盖，可用于加载待审核 / 草稿 / 未启用规则。
+	// 合法值：active / pending / draft / inactive / deprecated。
+	Statuses []string
+
+	// 审核流程状态筛选（POC / 指纹导出均会透传）。
+	// 对 POC 而言，显式指定后默认 active 行为被覆盖。
+	// 留空表示不按审核状态过滤；合法值：pending / approved / rejected / draft / none。
+	ReviewStatus string
+
 	// 时间范围筛选
 	CreatedAfter  *time.Time // 创建时间起始
 	CreatedBefore *time.Time // 创建时间截止
@@ -44,6 +56,22 @@ func (f *ExportFilter) WithTags(tags ...string) *ExportFilter {
 // WithSources 设置来源筛选
 func (f *ExportFilter) WithSources(sources ...string) *ExportFilter {
 	f.Sources = sources
+	return f
+}
+
+// WithStatuses 设置生命周期状态筛选（POC / 指纹导出均会透传）。
+// POC 调用此方法将覆盖 SDK 默认仅导出 active 的行为，可用于加载待审核 / 草稿 / 未启用规则。
+// 合法值：active / pending / draft / inactive / deprecated。
+func (f *ExportFilter) WithStatuses(statuses ...string) *ExportFilter {
+	f.Statuses = statuses
+	return f
+}
+
+// WithReviewStatus 设置审核流程状态筛选（POC / 指纹导出均会透传）。
+// POC 调用此方法将覆盖 SDK 默认仅导出 active 的行为。
+// 留空表示不过滤；合法值：pending / approved / rejected / draft / none。
+func (f *ExportFilter) WithReviewStatus(status string) *ExportFilter {
+	f.ReviewStatus = status
 	return f
 }
 
@@ -130,9 +158,14 @@ func (r *FingerprintResponse) GetAlias() *alias.Alias {
 	return r.Alias
 }
 
-// IsActive 检查是否为激活状态（Export API 只返回 active 状态的指纹）
+// 注：Cyberhub 后端的 Fingerprint.Status（active/pending/draft/inactive 等）
+// 不在 export payload 里序列化，因此 FingerprintResponse 无法仅凭返回数据判断
+// "是否激活"。如需按状态筛选，使用 ExportFilter.WithStatuses(...) 在请求侧过滤。
+//
+// Deprecated: ExportFingerprints 的响应体不包含 Fingerprint.Status，返回值只能表示旧版
+// SDK 的历史假设，不能用于判断显式状态筛选后的真实生命周期状态。
 func (r *FingerprintResponse) IsActive() bool {
-	return true // Export API 默认只导出 active 状态
+	return true
 }
 
 // GetTemplate 获取 Template 对象（直接返回嵌入的 Template）

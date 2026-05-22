@@ -123,11 +123,11 @@ func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []str
 		params.Add("sources", source)
 	}
 
-	// 只导出激活状态的 POC
-	params.Set("status", "active")
-
-	// 添加筛选参数
+	// 添加筛选参数（包括 Statuses / ReviewStatus，调用方未显式指定时下方再回退 active）
 	applyFilterParams(params, firstFilter(filters))
+
+	// 向后兼容：调用方未显式指定 POC 状态时，默认仅导出 active
+	applyDefaultPOCStatus(params)
 
 	endpoint := fmt.Sprintf("%s/pocs/export?%s", c.baseURL, params.Encode())
 
@@ -141,6 +141,11 @@ func (c *Client) ExportPOCs(ctx context.Context, tags []string, severities []str
 
 // ExportPOCsByNames 按名称列表导出 POC
 func (c *Client) ExportPOCsByNames(ctx context.Context, names []string) ([]POCResponse, error) {
+	return c.ExportPOCsByNamesWithFilter(ctx, names, nil)
+}
+
+// ExportPOCsByNamesWithFilter 按名称列表导出 POC，并应用额外筛选条件。
+func (c *Client) ExportPOCsByNamesWithFilter(ctx context.Context, names []string, filter *ExportFilter) ([]POCResponse, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
@@ -149,7 +154,12 @@ func (c *Client) ExportPOCsByNames(ctx context.Context, names []string) ([]POCRe
 	for _, name := range names {
 		params.Add("names", name)
 	}
-	params.Set("status", "active")
+
+	// 添加筛选参数；调用方未显式指定状态时下方再回退 active，保持旧调用行为。
+	applyFilterParams(params, filter)
+
+	// 按名称导出沿用默认行为：仅导出 active 状态。
+	applyDefaultPOCStatus(params)
 
 	endpoint := fmt.Sprintf("%s/pocs/export?%s", c.baseURL, params.Encode())
 
@@ -237,6 +247,50 @@ func applyFilterParams(params url.Values, filter *ExportFilter) {
 		params.Set("page", "1")
 		params.Set("page_size", strconv.Itoa(filter.Limit))
 	}
+
+	// 生命周期状态：透传为 statuses=...（多值），后端走 IN(...) 分支。
+	// 用 dedup 逻辑避免重复透传。
+	if len(filter.Statuses) > 0 {
+		existingStatuses := make(map[string]struct{})
+		for _, s := range params["statuses"] {
+			if s == "" {
+				continue
+			}
+			existingStatuses[s] = struct{}{}
+		}
+		for _, s := range filter.Statuses {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			if _, exists := existingStatuses[s]; exists {
+				continue
+			}
+			params.Add("statuses", s)
+			existingStatuses[s] = struct{}{}
+		}
+	}
+
+	// 审核流程状态：单值，存在即覆盖。
+	if rs := strings.TrimSpace(filter.ReviewStatus); rs != "" {
+		params.Set("review_status", rs)
+	}
+}
+
+// applyDefaultPOCStatus 在调用方未显式指定任何 POC 状态相关参数时，
+// 把请求收敛回"仅导出 active"，保持与旧版 SDK 一致的行为。
+// 显式 statuses= / status= / review_status= 任一存在时，不再注入默认值。
+func applyDefaultPOCStatus(params url.Values) {
+	if len(params["statuses"]) > 0 {
+		return
+	}
+	if params.Get("status") != "" {
+		return
+	}
+	if params.Get("review_status") != "" {
+		return
+	}
+	params.Set("status", "active")
 }
 
 type requestBodyProvider struct {

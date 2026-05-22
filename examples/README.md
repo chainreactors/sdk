@@ -10,6 +10,8 @@ examples/
 ├── neutron/    # POC 扫描工具
 ├── gogo/       # 端口扫描和指纹识别工具
 ├── spray/      # HTTP 批量探测工具
+├── pending_pocs/          # 加载待审核 / 未启用的 POC
+├── pending_fingerprints/  # 加载待审核 / 未启用的指纹
 └── cases/      # 小颗粒度使用案例（cookbook）
     ├── match_detail/  # 获取 fingers matcher 详情（cmd + test）
     └── spray_crawl_finger/  # 单 URL 爬虫 + 深度指纹探测（cmd + test）
@@ -291,6 +293,79 @@ go test ./cases/spray_crawl_finger -v
 ```
 
 要点：`spray.NewConfig().WithMatchDetail()` 负责把 matcher 细节带进 `common.Framework`，随后在 `spray.Context` 上打开 `SetCrawlPlugin(true)` 和 `SetFinger(true)` 即可。
+
+### pending_pocs - 加载待审核 / 未启用的 POC
+
+默认 SDK 只导出 `status=active` 的 POC（向后兼容老用户）。如果客户端需要把
+**待审核(`pending`)**、**草稿(`draft`)**、**已禁用(`inactive`)** 等规则也一起拉下来，
+通过 `cyberhub.NewExportFilter().WithStatuses(...)` 显式声明即可：
+
+```go
+filter := cyberhub.NewExportFilter().
+    WithStatuses("active", "pending", "draft")
+config := neutron.NewConfig().WithCyberhub(url, key)
+config.ExportFilter = filter
+engine, _ := neutron.NewEngine(config)
+```
+
+如需按审核工单状态过滤（如只看正在待审核工单的规则），再加：
+
+```go
+filter.WithReviewStatus("pending")
+```
+
+合法值：
+
+- `WithStatuses(...)`：`active` / `pending` / `draft` / `inactive` / `deprecated`
+- `WithReviewStatus(...)`：`pending` / `approved` / `rejected` / `draft` / `none`
+
+完整示例：
+
+```bash
+# 默认 active
+go run ./pending_pocs -url http://127.0.0.1:8080 -key your_api_key
+
+# 加载 active + pending + draft
+go run ./pending_pocs -url ... -key ... -statuses active,pending,draft
+
+# 只看正在待审核工单的规则
+go run ./pending_pocs -url ... -key ... -review pending
+```
+
+注意：未显式调用 `WithStatuses(...)` / `WithReviewStatus(...)` 的旧客户端不会受影响 ——
+SDK 仍只导出 active 状态的 POC。
+
+### pending_fingerprints - 加载待审核 / 未启用的指纹
+
+和 POC 不同，**SDK 拉取指纹时不会强制 `status=active`**，后端默认就会返回
+`active + 非空 pending + inactive + deprecated`。但 `draft` 和"`raw_content` 为空的 pending"
+仍会被后端 `shouldHideDraftOnlyFingerprints` 规则隐掉。如果需要拿到这部分"空壳"
+待审核指纹，仍要显式声明：
+
+```go
+filter := cyberhub.NewExportFilter().
+    WithStatuses("active", "pending", "draft", "inactive")
+config := fingers.NewConfig().WithCyberhub(url, key)
+config.ExportFilter = filter
+engine, _ := fingers.NewEngine(config)
+```
+
+CLI 演示：
+
+```bash
+# 走后端默认（不含 draft 和空 pending）
+go run ./pending_fingerprints -url http://127.0.0.1:8080 -key your_api_key
+
+# 显式拉全部非删除态（含 draft / 空 pending）
+go run ./pending_fingerprints -url ... -key ... -statuses active,pending,draft,inactive
+
+# 只看正在待审核工单的指纹
+go run ./pending_fingerprints -url ... -key ... -review pending
+```
+
+> 提示：`ExportFilter` 是 POC 和指纹共用的，`WithStatuses(...)` / `WithReviewStatus(...)`
+> 在 `fingers.Engine` 和 `neutron.Engine` 上的语义一致；只是默认行为不同
+> （POC 默认 active，指纹默认非 deleted）。
 
 ---
 
