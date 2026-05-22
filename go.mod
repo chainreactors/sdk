@@ -1,17 +1,17 @@
 module github.com/chainreactors/sdk
 
-go 1.24.0
+go 1.25.4
 
 require (
-	github.com/chainreactors/fingers v1.2.1-0.20260518103258-7a88bfa946ff
-	github.com/chainreactors/gogo/v2 v2.14.2-0.20260110190827-a2c3000f54be
+	github.com/chainreactors/fingers v1.2.1-0.20260520134035-7da0cd9e9b30
+	github.com/chainreactors/gogo/v2 v2.14.2-0.20260518120413-769f82fc91a6
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/neutron v0.0.0-20260519044735-cbf13373034a
+	github.com/chainreactors/neutron v0.0.0-20260521180819-72e24154b02f
 	github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68
 	github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0
-	github.com/chainreactors/spray v1.2.4-0.20260121025911-4f08ee9640d7
-	github.com/chainreactors/utils v0.0.0-20260507101628-fd69d955ae21
-	github.com/chainreactors/zombie v1.2.3-0.20260509062300-b10f008fb8a5
+	github.com/chainreactors/spray v1.2.6-0.20260520032431-e945556997b5
+	github.com/chainreactors/utils v0.0.0-20260520090033-cfefcb28cc6f
+	github.com/chainreactors/zombie v1.2.3-0.20260519174828-007508851ffd
 	github.com/panjf2000/ants/v2 v2.9.1
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -23,11 +23,11 @@ require (
 	github.com/M09ic/go-ntlmssp v0.0.0-20230312133735-dcccd454dfe0 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
-	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20230905024940-24af94b03874 // indirect
 	github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 // indirect
-	github.com/chainreactors/words v0.0.0-20241002061906-25d8893158d9 // indirect
+	github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect
 	github.com/charmbracelet/lipgloss v1.1.0 // indirect
 	github.com/charmbracelet/x/ansi v0.8.0 // indirect
@@ -62,7 +62,7 @@ require (
 	github.com/icodeface/tls v0.0.0-20190904083142-17aec93c60e5 // indirect
 	github.com/jessevdk/go-flags v1.6.1 // indirect
 	github.com/jlaffaye/ftp v0.0.0-20201112195030-9aae4d151126 // indirect
-	github.com/klauspost/compress v1.17.8 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/knadh/go-pop3 v0.3.0 // indirect
 	github.com/lib/pq v1.9.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
@@ -82,10 +82,13 @@ require (
 	github.com/sijms/go-ora/v2 v2.2.15 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/streadway/amqp v1.1.0 // indirect
+	github.com/tetratelabs/wazero v1.9.0 // indirect
 	github.com/twmb/murmur3 v1.1.8 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.53.0 // indirect
 	github.com/vbauerster/mpb/v8 v8.7.3 // indirect
+	github.com/wasilibs/go-re2 v1.10.0 // indirect
+	github.com/wasilibs/wazero-helpers v0.0.0-20240620070341-3dff1577cd52 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
@@ -93,6 +96,7 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d // indirect
 	go.mongodb.org/mongo-driver v1.12.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.3 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
@@ -100,17 +104,5 @@ require (
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-	sigs.k8s.io/yaml v1.4.0 // indirect
-)
-
-replace (
-	github.com/chainreactors/fingers => ../fingers
-	github.com/chainreactors/gogo/v2 => ../gogo/v2
-	github.com/chainreactors/logs => ../logs
-	github.com/chainreactors/neutron => ../neutron
-	github.com/chainreactors/parsers => ../parsers
-	github.com/chainreactors/proxyclient => ../proxyclient
-	github.com/chainreactors/spray => ../spray
-	github.com/chainreactors/utils => ../utils
-	github.com/chainreactors/zombie => ../zombie
+	sigs.k8s.io/yaml v1.6.0 // indirect
 )
