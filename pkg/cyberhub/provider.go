@@ -2,6 +2,7 @@ package cyberhub
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/chainreactors/fingers/alias"
@@ -15,6 +16,9 @@ type Provider struct {
 	apiKey  string
 	timeout time.Duration
 	filter  *ExportFilter
+
+	once sync.Once
+	cli  *client
 }
 
 // NewProvider 创建 cyberhub 数据源
@@ -38,16 +42,21 @@ func (p *Provider) WithTimeout(d time.Duration) *Provider {
 	return p
 }
 
+func (p *Provider) client() *client {
+	p.once.Do(func() {
+		p.cli = newClient(p.url, p.apiKey, p.timeout)
+	})
+	return p.cli
+}
+
 // Fingers 导出指纹与别名数据
 func (p *Provider) Fingers(ctx context.Context) (fingers.Fingers, []*alias.Alias, error) {
-	c := newClient(p.url, p.apiKey, p.timeout)
-	return c.exportFingers(ctx, p.filter)
+	return p.client().exportFingers(ctx, p.filter)
 }
 
 // POCs 导出 POC 模板数据
 func (p *Provider) POCs(ctx context.Context) ([]*templates.Template, error) {
-	c := newClient(p.url, p.apiKey, p.timeout)
-	responses, err := c.exportPOCs(ctx, p.filter)
+	responses, err := p.client().exportPOCs(ctx, p.filter)
 	if err != nil {
 		return nil, err
 	}

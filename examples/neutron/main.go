@@ -10,6 +10,7 @@ import (
 	"github.com/chainreactors/neutron/protocols"
 	neutronTemplates "github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/sdk/neutron"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
 )
 
 var (
@@ -62,10 +63,11 @@ func main() {
 			fmt.Println("Error: -key is required when using -url")
 			os.Exit(1)
 		}
-		config.WithCyberhub(*cyberhubURL, *apiKey)
+		filter := cyberhub.NewExportFilter()
 		if *source != "" {
-			config.SetSources(*source)
+			filter.WithSources(*source)
 		}
+		config.Provider = cyberhub.NewProvider(*cyberhubURL, *apiKey).WithFilter(filter)
 		fmt.Printf("Loading POCs from Cyberhub (%s)...\n", *cyberhubURL)
 	} else if *localPath != "" {
 		config.WithLocalFile(*localPath)

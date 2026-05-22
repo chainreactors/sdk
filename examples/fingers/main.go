@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/chainreactors/sdk/fingers"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/utils/httputils"
 )
 
@@ -52,10 +53,11 @@ func main() {
 			fmt.Println("Error: -key is required when using -url")
 			os.Exit(1)
 		}
-		config.WithCyberhub(*cyberhubURL, *apiKey)
+		provider := cyberhub.NewProvider(*cyberhubURL, *apiKey)
 		if *source != "" {
-			config.SetSources(*source)
+			provider.WithFilter(cyberhub.NewExportFilter().WithSources(*source))
 		}
+		config.Provider = provider
 		fmt.Printf("Loading fingerprints from Cyberhub (%s)...\n", *cyberhubURL)
 	} else {
 		if *localEngines != "" {
