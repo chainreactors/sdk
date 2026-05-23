@@ -10,6 +10,8 @@ Chainreactors SDK 为多个安全扫描工具提供统一接口：
 - **Neutron**: POC/漏洞扫描
 - **GoGo**: 集成指纹识别和 POC 检测的端口扫描
 - **Spray**: HTTP 批量检测和路径爆破
+- **Cyberhub Provider**: 统一远程数据源，导出指纹、alias 和 POC
+- **Association**: 统一关联查询，从 finger、alias、template、CVE 等条件互相查找
 
 ## 安装
 
@@ -218,6 +220,8 @@ go build -o fingers/fingers.exe ./fingers/main.go
 go build -o neutron/neutron.exe ./neutron/main.go
 go build -o gogo/gogo.exe ./gogo/main.go
 go build -o spray/spray.exe ./spray/main.go
+go build -o cyberhub/cyberhub.exe ./cyberhub/main.go
+go build -o association/association.exe ./association/main.go
 ```
 
 详细使用方法参见 [examples/README.md](examples/README.md)。
@@ -256,11 +260,16 @@ sdk/
 │
 ├── pkg/
 │   ├── cyberhub/        # 统一 API 客户端
+│   │   ├── api.go       # Cyberhub 响应结构
 │   │   ├── client.go    # HTTP 客户端（支持 gzip）
-│   │   ├── config.go    # 客户端配置
-│   │   └── types.go     # API 类型
+│   │   ├── provider.go  # Provider 数据源
+│   │   ├── types.go     # ExportFilter 兼容入口
+│   │   └── README.md    # Provider 文档
 │   ├── association/     # 关联索引
-│   │   └── index.go     # 指纹-POC 关联索引
+│   │   ├── index.go     # 指纹-alias-POC 关联索引
+│   │   ├── query.go     # 统一 Query/Lookup
+│   │   └── README.md    # 关联查询文档
+│   ├── types/           # SDK 对外统一类型入口
 │   └── interface.go     # 核心 SDK 接口
 │
 └── examples/            # CLI 工具实现
@@ -268,6 +277,8 @@ sdk/
     ├── neutron/
     ├── gogo/
     ├── spray/
+    ├── cyberhub/
+    ├── association/
     └── README.md
 ```
 
@@ -277,8 +288,11 @@ sdk/
 
 所有引擎都支持从 Cyberhub 加载数据：
 - Gzip 压缩处理
-- 基于 sources 的过滤
+- 基于 `types.ExportFilter` 的 name、tag、source、severity、status 等过滤
 - API Key 认证
+- `cyberhub.Provider` 可被 Fingers、Neutron、GoGo 和 Association 复用
+
+[pkg/cyberhub/README.md](pkg/cyberhub/README.md) / [examples/cyberhub](examples/cyberhub)
 
 ### POC 自动编译
 
@@ -290,8 +304,15 @@ Neutron 引擎在加载时自动编译 POC：
 ### GoGo 集成
 
 GoGo 可以同时集成 Fingers 和 Neutron：
-- 模板按指纹、ID、标签建立索引
-- 9,444 个 POC 生成 61,267 条索引（多重索引）
+- `WithProvider` 自动加载指纹和 POC
+- 扫描结果通过 `types.GOGOResult` 暴露
+- 需要跨 finger、alias、template 的通用关联时，使用 `pkg/association`
+
+### 关联查询
+
+`pkg/association` 通过 `association.NewQuery()` + `idx.Lookup(query)` 统一查询 finger、alias、template、tag、service、CPE、CVE 和属性关联。
+
+[pkg/association/README.md](pkg/association/README.md) / [examples/association](examples/association)
 
 ### 数据筛选
 

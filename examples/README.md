@@ -1,6 +1,6 @@
 # Chainreactors SDK Examples
 
-这个目录包含了四个基于 Chainreactors SDK 构建的命令行工具。
+这个目录包含了四个基于 Chainreactors SDK 构建的命令行工具，以及若干面向 SDK 包的最小示例。
 
 ## 目录结构
 
@@ -10,6 +10,8 @@ examples/
 ├── neutron/    # POC 扫描工具
 ├── gogo/       # 端口扫描和指纹识别工具
 ├── spray/      # HTTP 批量探测工具
+├── cyberhub/   # Cyberhub Provider 数据加载示例
+├── association/ # 统一关联查询示例
 └── cases/      # 小颗粒度使用案例（cookbook）
     ├── match_detail/  # 获取 fingers matcher 详情（cmd + test）
     └── spray_crawl_finger/  # 单 URL 爬虫 + 深度指纹探测（cmd + test）
@@ -25,6 +27,8 @@ go build -o fingers/fingers.exe ./fingers/main.go
 go build -o neutron/neutron.exe ./neutron/main.go
 go build -o gogo/gogo.exe ./gogo/main.go
 go build -o spray/spray.exe ./spray/main.go
+go build -o cyberhub/cyberhub.exe ./cyberhub/main.go
+go build -o association/association.exe ./association/main.go
 ```
 
 ---
@@ -212,53 +216,35 @@ go build -o spray/spray.exe ./spray/main.go
 
 ---
 
-## 测试示例
+## 5. Cyberhub - Provider 数据加载示例
 
-### Fingers
-
-```bash
-# 测试本地服务（仍需 Cyberhub）
-./fingers/fingers.exe -url http://127.0.0.1:8080 -key your_key -target http://127.0.0.1:3000
-
-# 测试远程服务（仍需 Cyberhub）
-./fingers/fingers.exe -url http://127.0.0.1:8080 -key your_key -target http://127.0.0.1:8080
-```
-
-### Neutron
+直接使用 `pkg/cyberhub.Provider` 拉取指纹、alias 和 POC；筛选条件从 `types.NewExportFilter()` 创建。
 
 ```bash
-# 扫描本地服务
-./neutron/neutron.exe -url http://127.0.0.1:8080 -key your_key -target http://127.0.0.1:3000 -max 5
+# 拉取远程数据并打印样例
+go run ./cyberhub -url http://127.0.0.1:8080 -key your_api_key -source github -limit 20
 
-# 列出 critical 级别的 POC
-./neutron/neutron.exe -url http://127.0.0.1:8080 -key your_key -list -severity critical
-```
-
-### GoGo
-
-```bash
-# 扫描本地端口
-./gogo/gogo.exe -url http://127.0.0.1:8080 -key your_key -target 127.0.0.1 -ports 3000,8080
-
-# 使用 Cyberhub 数据
-./gogo/gogo.exe -url http://127.0.0.1:8080 -key your_key -target 127.0.0.1 -ports 80,443,3000,8080
-```
-
-### Spray
-
-```bash
-# 创建测试文件
-echo "http://127.0.0.1:3000" > test_urls.txt
-echo "http://127.0.0.1:8080" >> test_urls.txt
-
-# 批量探测
-./spray/spray.exe -f test_urls.txt
-
-# 只显示 200 状态的 URL
-./spray/spray.exe -f test_urls.txt -mc 200 -q
+# 同时按 name/tag/severity 过滤
+go run ./cyberhub -url http://127.0.0.1:8080 -key your_api_key -names tomcat -tags cve -severity high,critical
 ```
 
 ---
+
+## 6. Association - 统一关联查询示例
+
+通过 `pkg/association.Index` 在 finger、alias、template、CVE、tag、service、severity 等条件之间做统一关联。默认使用 inline 数据，不依赖 Cyberhub。
+
+```bash
+# 离线演示 alias 作为关联桥梁
+go run ./association
+go run ./association -finger "apache tomcat"
+go run ./association -template CVE-2022-0001
+
+# 从 Cyberhub 构建索引并查询
+go run ./association -url http://127.0.0.1:8080 -key your_api_key -finger tomcat
+go run ./association -url http://127.0.0.1:8080 -key your_api_key -template CVE-2022-0001
+go run ./association -url http://127.0.0.1:8080 -key your_api_key -cve CVE-2021-44228
+```
 
 ## Cases - 小颗粒度使用案例
 
@@ -294,39 +280,7 @@ go test ./cases/spray_crawl_finger -v
 
 ---
 
-## 常见问题
-
-### Q: 如何获取 Cyberhub API Key?
-
-A: 在 Cyberhub 管理界面的设置页面生成 API Key。
-
-### Q: 支持哪些数据源?
-
-A:
-- **Fingers**: CLI 仅支持 Cyberhub
-- **Neutron**: 支持本地目录/文件和 Cyberhub
-- **GoGo**: CLI 仅支持 Cyberhub
-
-### Q: JSON 输出格式是什么?
-
-A: 所有工具都支持 `-json` 参数，输出标准 JSON 格式，方便集成到自动化工作流。
-
-### Q: 如何提高扫描速度?
-
-A:
-- 增加 `-threads` 参数值
-- 减少 `-timeout` 时间
-- 使用 `-max` 限制扫描数量
-
----
-
 ## 开发说明
-
-这些工具都是基于 Chainreactors SDK 开发的简单封装。如果你需要更复杂的功能，可以：
-
-1. 直接使用 SDK 编写自定义代码
-2. 修改这些示例工具的源码
-3. 参考 SDK 文档创建新工具
 
 完整 SDK 文档: [Chainreactors SDK](https://github.com/chainreactors/sdk)
 
