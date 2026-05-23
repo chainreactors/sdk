@@ -266,7 +266,7 @@ echo "http://127.0.0.1:8080" >> test_urls.txt
 
 ### match_detail - 获取 matcher 详情
 
-演示如何通过 `fingers.NewConfig().WithMatchDetail()` 打开底层 matcher detail，然后从 `common.Framework.MatchDetail` 读取 matcher 类型/值、rule_index、matcher_index 和 send_data。
+演示如何通过 `fingers.NewConfig().WithMatchDetail()` 打开底层 matcher detail，然后从 `types.Framework.MatchDetail` 读取 matcher 类型/值、rule_index、matcher_index 和 send_data。
 
 ```bash
 # 跑命令行版（被动匹配真实 target）
@@ -290,7 +290,7 @@ go run ./cases/spray_crawl_finger -target http://127.0.0.1:3000
 go test ./cases/spray_crawl_finger -v
 ```
 
-要点：`spray.NewConfig().WithMatchDetail()` 负责把 matcher 细节带进 `common.Framework`，随后在 `spray.Context` 上打开 `SetCrawlPlugin(true)` 和 `SetFinger(true)` 即可。
+要点：`spray.NewConfig().WithMatchDetail()` 负责把 matcher 细节带进 `types.Framework`，随后在 `spray.Context` 上打开 `SetCrawlPlugin(true)` 和 `SetFinger(true)` 即可。
 
 ---
 

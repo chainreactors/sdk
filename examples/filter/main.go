@@ -32,7 +32,7 @@ func main() {
 }
 
 func testExportFilter() {
-	filter := cyberhub.NewExportFilter().
+	filter := types.NewExportFilter().
 		WithTags("cms", "framework").
 		WithSources("github").
 		WithLimit(100).
@@ -74,7 +74,7 @@ func testWithRealData(ctx context.Context, url, key string) {
 
 	engine2, err := fingers.NewEngine(fingers.NewConfig().
 		WithProvider(cyberhub.NewProvider(url, key).
-			WithFilter(cyberhub.NewExportFilter().WithTags("cms"))))
+			WithFilter(types.NewExportFilter().WithTags("cms"))))
 	if err != nil {
 		fmt.Printf("Fingers filter failed: %v\n", err)
 		return
@@ -92,7 +92,7 @@ func testWithRealData(ctx context.Context, url, key string) {
 
 	nEngine2, err := neutron.NewEngine(neutron.NewConfig().
 		WithProvider(cyberhub.NewProvider(url, key).
-			WithFilter(cyberhub.NewExportFilter().WithTags("rce"))))
+			WithFilter(types.NewExportFilter().WithTags("rce"))))
 	if err != nil {
 		fmt.Printf("Neutron filter failed: %v\n", err)
 		return

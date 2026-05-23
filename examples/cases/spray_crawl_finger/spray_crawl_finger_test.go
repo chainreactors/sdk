@@ -62,7 +62,7 @@ func TestSprayCrawlAndDeepFinger(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	opt := spray.NewDefaultOption()
+	opt := types.NewDefaultSprayOption()
 	opt.Fuzzy = true
 	ctx := spray.NewContext().
 		SetOption(opt).

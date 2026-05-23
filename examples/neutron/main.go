@@ -62,7 +62,7 @@ func main() {
 			fmt.Println("Error: -key is required when using -url")
 			os.Exit(1)
 		}
-		filter := cyberhub.NewExportFilter()
+		filter := types.NewExportFilter()
 		if *source != "" {
 			filter.WithSources(*source)
 		}

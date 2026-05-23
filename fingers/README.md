@@ -6,7 +6,7 @@
 
 - **统一入口**: `NewEngine` 负责加载，`Match` 负责匹配（也可 `Get()` 取底层引擎）
 - **本地/远程**: 支持从本地 YAML/目录或 Cyberhub 加载
-- **零冗余**: Cyberhub 响应使用 `json:",inline"` 直接嵌入 `fingers.Finger`
+- **零冗余**: Cyberhub 响应使用 `json:",inline"` 直接嵌入 `types.Finger`
 - **无侵入集成**: gogo/spray 等通过注入引擎完成集成
 
 ## 📦 安装
@@ -35,7 +35,8 @@ Fingers SDK 提供两类 API：
 ### 被动匹配示例
 
 ```go
-config := fingers.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+config := fingers.NewConfig().
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
 engine, _ := fingers.NewEngine(config)
 
 // 匹配原始字节数据
@@ -55,7 +56,8 @@ frameworks, _ := engine.MatchFavicon(faviconData)
 #### 单目标扫描
 
 ```go
-config := fingers.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+config := fingers.NewConfig().
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
 engine, _ := fingers.NewEngine(config)
 
 // 创建上下文（配置 timeout、level 等）
@@ -64,8 +66,8 @@ ctx := fingers.NewContext().WithTimeout(10).WithLevel(1)
 // HTTP 主动探测
 results, _ := engine.HTTPMatch(ctx, []string{"https://example.com"})
 for _, targetResult := range results {
-    if targetResult.Error != nil {
-        fmt.Printf("Error scanning %s: %v\n", targetResult.Target, targetResult.Error)
+    if targetResult.Err != nil {
+        fmt.Printf("Error scanning %s: %v\n", targetResult.Target, targetResult.Err)
         continue
     }
 
@@ -135,7 +137,7 @@ ctx := fingers.NewContext().
 
 ```go
 config := fingers.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+config.WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
 
 engine, _ := fingers.NewEngine(config)
 frameworks, _ := engine.Match(httpResponseBytes)
@@ -156,11 +158,12 @@ engine, _ := fingers.NewEngine(config)
 import (
     "github.com/chainreactors/sdk/fingers"
     "github.com/chainreactors/sdk/gogo"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
 )
 
 // 1. 加载完整引擎
 config := fingers.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+config.WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
 
 fingersEngine, _ := fingers.NewEngine(config)
 
@@ -175,12 +178,13 @@ gogoEngine.Init()
 ```go
 import (
     "github.com/chainreactors/sdk/fingers"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
     "github.com/chainreactors/sdk/spray"
 )
 
 // 1. 加载完整引擎
 config := fingers.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+config.WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
 
 fingersEngine, _ := fingers.NewEngine(config)
 
@@ -201,11 +205,12 @@ import (
 
     rootsdk "github.com/chainreactors/sdk"
     "github.com/chainreactors/sdk/fingers"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
 )
 
 // 通过全局工厂创建
 config := fingers.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+config.WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
 engine, _ := rootsdk.NewEngine("fingers", config)
 defer engine.Close()
 
@@ -231,9 +236,11 @@ for result := range resultCh {
 
 ```go
 config := fingers.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
-config.SetSources("github")
-config.SetTimeout(30 * time.Second)
+config.WithProvider(
+    cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key").
+        WithFilter(types.NewExportFilter().WithSources("github")).
+        WithTimeout(30 * time.Second),
+)
 
 // 选择本地加载时使用 WithLocalFile，会覆盖 Cyberhub 配置
 // config.WithLocalFile("./fingers.yaml")
@@ -258,7 +265,7 @@ engine, _ := fingers.NewEngine(config)
 ```go
 // pkg/cyberhub/types.go
 type FingerprintResponse struct {
-    *fingers.Finger `json:",inline" yaml:",inline"`
+    *types.Finger `json:",inline" yaml:",inline"`
     Alias           *types.Alias `json:"alias,omitempty" yaml:"alias,omitempty"`
 }
 ```
@@ -302,7 +309,7 @@ sdk/
 type TargetResult struct {
     Target  string                    // 扫描的目标 URL 或 target
     Results []*types.ServiceResult    // 指纹识别结果
-    Error   error                     // 错误信息（如果有）
+    Err     error                     // 错误信息（如果有）
 }
 
 // 方法

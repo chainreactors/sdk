@@ -16,12 +16,13 @@ Neutron SDK 为 [chainreactors/neutron](https://github.com/chainreactors/neutron
 
 ```go
 import (
+    "github.com/chainreactors/sdk/pkg/cyberhub"
     "github.com/chainreactors/sdk/neutron"
 )
 
 // 最简单的方式
 config := neutron.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+config.WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
 engine, err := neutron.NewEngine(config)
 if err != nil {
     log.Fatal(err)
@@ -48,9 +49,11 @@ templates := engine.Get()
 
 ```go
 config := neutron.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
-config.SetTags("cve", "rce")               // 按标签过滤
-config.SetTimeout(30 * time.Second)
+config.WithProvider(
+    cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key").
+        WithFilter(types.NewExportFilter().WithTags("cve", "rce")),
+)
+config.Timeout = 30 * time.Second
 
 engine, err := neutron.NewEngine(config)
 if err != nil {
@@ -75,7 +78,7 @@ engine, _ := neutron.NewEngine(config)
 
 ```go
 config := neutron.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+config.WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
 
 engine, err := neutron.NewEngine(config)
 if err != nil {
@@ -88,11 +91,12 @@ templates := engine.Get()
 
 ```go
 type Config struct {
-    cyberhub.Config // CyberhubURL / APIKey / Timeout / ExportFilter 等
+    Provider *cyberhub.Provider
 
     // 本地配置
     LocalPath string           // 本地 POC 文件/目录路径
     Templates neutron.Templates // 已加载的 POC
+    Timeout time.Duration       // 模板执行超时
 }
 ```
 
@@ -105,13 +109,14 @@ package main
 
 import (
     "fmt"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
     "github.com/chainreactors/sdk/neutron"
 )
 
 func main() {
     // 1. 加载 POC
     config := neutron.NewConfig()
-    config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+    config.WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
     engine, err := neutron.NewEngine(config)
     if err != nil {
         panic(err)
@@ -141,6 +146,7 @@ package main
 import (
     "fmt"
     "sync"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
     "github.com/chainreactors/sdk/neutron"
     "github.com/chainreactors/sdk/pkg/types"
 )
@@ -148,7 +154,7 @@ import (
 func main() {
     // 1. 加载并编译 POC
     config := neutron.NewConfig()
-    config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+    config.WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
     engine, _ := neutron.NewEngine(config)
     compiledPOCs := engine.Get()
 
@@ -213,7 +219,7 @@ func main() {
 
 ```go
 config := neutron.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your-api-key")
+config.WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key"))
 
 engine, err := neutron.NewEngine(config)
 if err != nil {

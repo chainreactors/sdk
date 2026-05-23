@@ -62,7 +62,9 @@ engine := spray.NewEngine(nil)
 ### 自定义配置
 
 ```go
-opt := spray.DefaultConfig()
+import "github.com/chainreactors/sdk/pkg/types"
+
+opt := types.NewDefaultSprayOption()
 opt.Threads = 200
 opt.Timeout = 10
 opt.Method = "POST"
@@ -238,7 +240,7 @@ for _, result := range results {
 ### 自定义请求头和方法
 
 ```go
-opt := spray.DefaultConfig()
+opt := types.NewDefaultSprayOption()
 opt.Method = "POST"
 opt.Headers = []string{
     "Authorization: Bearer your-token",
@@ -289,7 +291,7 @@ for _, host := range hosts {
 ### 使用过滤器
 
 ```go
-opt := spray.DefaultConfig()
+opt := types.NewDefaultSprayOption()
 opt.Filter = "current.Status != 404"  // 过滤掉 404
 
 ctx := spray.NewContext().SetOption(opt)
@@ -313,15 +315,15 @@ results, _ := engine.Check(ctx, urls)
 ## 结果字段
 
 ```go
-type SprayResult struct {
-    UrlString    string    // 完整 URL
-    Status       int       // HTTP 状态码
-    Title        string    // 页面标题
-    BodyLength   int       // 响应体长度
-    Frameworks   []string  // 识别的框架
-    Extracts     []string  // 提取的信息
-    // ... 更多字段请参考 types.SprayResult
-}
+type SprayResult = types.SprayResult
+
+// 常用字段:
+// UrlString  完整 URL
+// Status     HTTP 状态码
+// Title      页面标题
+// BodyLength 响应体长度
+// Frameworks 识别的框架
+// Extracts   提取的信息
 ```
 
 ## 常见问题

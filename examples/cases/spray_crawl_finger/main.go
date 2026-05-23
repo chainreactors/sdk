@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 
+	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/sdk/spray"
 )
 
@@ -26,7 +27,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	opt := spray.NewDefaultOption()
+	opt := types.NewDefaultSprayOption()
 	opt.Fuzzy = true
 	ctx := spray.NewContext().
 		SetOption(opt).

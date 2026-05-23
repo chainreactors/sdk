@@ -9,6 +9,7 @@ import (
 
 	"github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/utils/httputils"
 )
 
@@ -55,7 +56,7 @@ func main() {
 		}
 		provider := cyberhub.NewProvider(*cyberhubURL, *apiKey)
 		if *source != "" {
-			provider.WithFilter(cyberhub.NewExportFilter().WithSources(*source))
+			provider.WithFilter(types.NewExportFilter().WithSources(*source))
 		}
 		config.WithProvider(provider)
 		fmt.Printf("Loading fingerprints from Cyberhub (%s)...\n", *cyberhubURL)

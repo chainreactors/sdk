@@ -44,11 +44,12 @@ SDK 采用简单的四组件架构：
 ```go
 import (
     "github.com/chainreactors/sdk/fingers"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
 )
 
 // 创建并加载引擎
-config := fingers.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your_key")
+config := fingers.NewConfig().
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
 
 engine, _ := fingers.NewEngine(config)
 
@@ -65,11 +66,12 @@ frameworks, _ = libEngine.DetectContent(httpResponseBytes)
 ```go
 import (
     "github.com/chainreactors/sdk/neutron"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
 )
 
 // 创建并加载引擎
-config := neutron.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your_key")
+config := neutron.NewConfig().
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
 
 engine, _ := neutron.NewEngine(config)
 templates := engine.Get()  // 自动编译
@@ -88,20 +90,12 @@ for _, t := range templates {
 ```go
 import (
     "github.com/chainreactors/sdk/gogo"
-    "github.com/chainreactors/sdk/fingers"
-    "github.com/chainreactors/sdk/neutron"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
 )
 
-// 加载指纹库
-fingersEngine, _ := fingers.NewEngine(fingersConfig)
-
-// 加载 POC
-neutronEngine, _ := neutron.NewEngine(neutronConfig)
-
-// 创建集成扫描器
+// 创建集成扫描器，Provider 会自动加载 Fingers 和 Neutron 数据
 gogoConfig := gogo.NewConfig().
-    WithFingersEngine(fingersEngine).
-    WithNeutronEngine(neutronEngine)
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
 gogoEngine := gogo.NewEngine(gogoConfig)
 gogoEngine.Init()
 
@@ -124,6 +118,7 @@ for result := range resultCh {
 ```go
 import (
     "github.com/chainreactors/sdk/spray"
+    "github.com/chainreactors/sdk/pkg/types"
 )
 
 engine := spray.NewEngine(nil)
@@ -147,21 +142,24 @@ for result := range resultCh {
 ### Fingers 配置
 
 ```go
-config := fingers.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your_key")
-config.SetSources("github")       // 可选：按来源过滤
-config.WithLocalFile("fingers.yaml") // 可选：从导出的 YAML 加载
-config.SetTimeout(10 * time.Second)
+remoteConfig := fingers.NewConfig().WithProvider(
+    cyberhub.NewProvider("http://127.0.0.1:8080", "your_key").
+        WithFilter(types.NewExportFilter().WithSources("github")),
+)
+
+localConfig := fingers.NewConfig().WithLocalFile("fingers.yaml") // 从导出的 YAML 加载
 ```
 
 ### Neutron 配置
 
 ```go
-config := neutron.NewConfig()
-config.WithCyberhub("http://127.0.0.1:8080", "your_key")
-config.SetSources("github")       // 可选：按来源过滤
-config.WithLocalFile("./pocs") // 可选：本地 POC 目录
-config.SetTimeout(10 * time.Second)
+remoteConfig := neutron.NewConfig().WithProvider(
+    cyberhub.NewProvider("http://127.0.0.1:8080", "your_key").
+        WithFilter(types.NewExportFilter().WithSources("github")),
+)
+
+localConfig := neutron.NewConfig().WithLocalFile("./pocs") // 本地 POC 目录
+localConfig.Timeout = 10 * time.Second
 ```
 
 ### GoGo 配置
@@ -309,30 +307,29 @@ import (
     "github.com/chainreactors/sdk/fingers"
     "github.com/chainreactors/sdk/neutron"
     "github.com/chainreactors/sdk/pkg/cyberhub"
+    "github.com/chainreactors/sdk/pkg/types"
 )
 
 // 指纹筛选
-filter := cyberhub.NewExportFilter().
+filter := types.NewExportFilter().
     WithTags("cms", "framework").            // 按标签筛选
     WithSources("github").                   // 按来源筛选
     WithLimit(100).                          // 限制数量
     WithUpdatedAfter(time.Now().AddDate(0, -1, 0)) // 最近一个月更新的
 
 config := fingers.NewConfig().
-    WithCyberhub("http://127.0.0.1:8080", "your_key")
-config.ExportFilter = filter
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key").WithFilter(filter))
 
 engine, _ := fingers.NewEngine(config)
 
 // POC 筛选
-pocFilter := cyberhub.NewExportFilter().
+pocFilter := types.NewExportFilter().
     WithTags("cve", "rce").                  // 按标签筛选
     WithSources("nuclei").                   // 按来源筛选
     WithCreatedAfter(time.Now().AddDate(-1, 0, 0)) // 最近一年创建的
 
 nConfig := neutron.NewConfig().
-    WithCyberhub("http://127.0.0.1:8080", "your_key")
-nConfig.ExportFilter = pocFilter
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key").WithFilter(pocFilter))
 
 nEngine, _ := neutron.NewEngine(nConfig)
 ```
@@ -345,11 +342,13 @@ nEngine, _ := neutron.NewEngine(nConfig)
 import (
     "github.com/chainreactors/sdk/fingers"
     "github.com/chainreactors/sdk/neutron"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
     "github.com/chainreactors/sdk/pkg/types"
 )
 
 // 加载指纹后筛选
-fConfig := fingers.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
+fConfig := fingers.NewConfig().
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
 fEngine, _ := fingers.NewEngine(fConfig)
 
 // 获取并过滤指纹（按协议筛选）
@@ -359,7 +358,8 @@ httpFingers := allFingers.Filter(func(f *fingers.FullFinger) bool {
 })
 
 // 加载 POC 后筛选
-nConfig := neutron.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
+nConfig := neutron.NewConfig().
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
 nEngine, _ := neutron.NewEngine(nConfig)
 
 // 使用 Templates.Filter 筛选
@@ -394,12 +394,14 @@ import (
 
 	"github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func main() {
 	// 1) 指纹识别
-	fConfig := fingers.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
+	fConfig := fingers.NewConfig().
+		WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
 	fEngine, _ := fingers.NewEngine(fConfig)
 
 	// 使用 Match API 直接匹配
@@ -412,7 +414,8 @@ func main() {
 	}
 
 	// 2) 加载 POC 并使用 Filter 筛选
-	nConfig := neutron.NewConfig().WithCyberhub("http://127.0.0.1:8080", "your_key")
+	nConfig := neutron.NewConfig().
+		WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
 	nEngine, _ := neutron.NewEngine(nConfig)
 
 	// 使用 Templates.Filter 按指纹/标签筛选
@@ -444,7 +447,7 @@ func main() {
 }
 ```
 
-也可以使用 `pkg/association` 包中的 `FingerPOCIndex` 进行更高效的关联查询。
+也可以使用 `pkg/association` 包中的 `Index` 进行更高效的关联查询。
 
 ### 动态扩展
 

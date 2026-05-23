@@ -277,16 +277,16 @@ for _, result := range results {
 ## 结果字段
 
 ```go
-type GOGOResult struct {
-    Ip       string    // IP 地址
-    Port     string    // 端口
-    Status   string    // 状态 (open/closed)
-    Title    string    // HTTP 标题
-    Uri      string    // URI
-    Frameworks []string // 识别的框架
-    Extracts []string  // 漏洞信息
-    // ... 更多字段请参考 types.GOGOResult
-}
+type GOGOResult = types.GOGOResult
+
+// 常用字段:
+// Ip         IP 地址
+// Port       端口
+// Status     状态 (open/closed)
+// Title      HTTP 标题
+// Uri        URI
+// Frameworks 识别的框架
+// Extracts   漏洞信息
 ```
 
 ## 常见问题
