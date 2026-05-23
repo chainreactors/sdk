@@ -156,22 +156,26 @@ ctx := gogo.NewContext().
     })
 ```
 
-## 关联索引
+## 关联查询
 
-GoGo 在 Init 时如果同时加载了 Fingers 和 Neutron，会自动构建关联索引：
+GoGo 的扫描结果可以通过 Client 的关联索引查询关联 POC。详见 [Association 关联查询](association.md)。
 
 ```go
-engine.Init()
-idx := engine.Index()  // *association.Index
+c := client.New(
+    client.WithProvider(provider),
+    client.WithIndex(nil),
+)
+defer c.Close()
 
-// 查询指纹关联的 POC
-result := idx.Lookup(association.NewQuery().WithFingers("tomcat"))
-for _, t := range result.Templates {
-    fmt.Printf("poc: %s\n", t.Id)
+gogoEng, _ := c.Gogo()
+resultCh, _ := gogoEng.ScanStream(ctx, ip, ports)
+for result := range resultCh {
+    related, _ := c.LookupResult(result)
+    for _, t := range related.Templates {
+        fmt.Printf("related POC: %s\n", t.Id)
+    }
 }
 ```
-
-更多关联查询用法见 [Association 关联查询](association.md)。
 
 ## 端口格式
 

@@ -79,14 +79,17 @@ result := idx.Lookup(q)
 扫描结果可以直接转为查询条件：
 
 ```go
-// 从 GoGo 结果
+// 方式一：通过 Client 便捷方法（推荐）
 for result := range resultCh {
-    q := association.QueryFromResult(result)
-    related := idx.Lookup(q)
+    related, _ := c.LookupResult(result)
     for _, t := range related.Templates {
         fmt.Printf("related POC: %s\n", t.Id)
     }
 }
+
+// 方式二：手动构建查询
+q := association.QueryFromResult(result)
+related := idx.Lookup(q)
 
 // 从 Frameworks 构建查询
 q := association.NewQuery().WithFrameworks(gogoResult.Frameworks)
@@ -120,24 +123,28 @@ q1.Merge(q2)
 result := idx.Lookup(q1)
 ```
 
-## 与 GoGo 集成
+## 通过 Client 使用
 
-GoGo 引擎在 Init 时会自动构建关联索引（如果同时加载了 Fingers 和 Neutron）：
+Client 的 `WithIndex` 开启关联索引，各引擎产出的结果可以直接关联查询：
 
 ```go
-engine := gogo.NewEngine(gogo.NewConfig().WithProvider(provider))
-engine.Init()
+c := client.New(
+    client.WithProvider(provider),
+    client.WithIndex(nil),  // 开启关联索引
+)
+defer c.Close()
 
-idx := engine.Index()  // 直接获取已构建的索引
+// 便捷查询
+result, _ := c.LookupByFinger("tomcat")
+result, _ := c.LookupByCVE("CVE-2021-44228")
 
-// 扫描后查询关联 POC
-resultCh, _ := engine.ScanStream(ctx, ip, ports)
-for result := range resultCh {
-    if data, ok := types.ResultData[*types.GOGOResult](result); ok {
-        q := association.NewQuery().WithFrameworks(data.Frameworks)
-        related := idx.Lookup(q)
-        // ...
-    }
+// 扫描结果直接关联
+gogoEng, _ := c.Gogo()
+resultCh, _ := gogoEng.ScanStream(ctx, ip, ports)
+for r := range resultCh {
+    related, _ := c.LookupResult(r)
+    // related.Templates — 关联的 POC
+    // related.Aliases   — 关联的别名
 }
 ```
 

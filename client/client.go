@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/association"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/sdk/spray"
 	"github.com/chainreactors/sdk/zombie"
 )
@@ -19,6 +21,7 @@ type Option func(*options)
 type options struct {
 	provider         *cyberhub.Provider
 	resourceProvider func(string) []byte
+	indexOptions     *association.IndexOptions
 
 	fingersConfig *fingers.Config
 	neutronConfig *neutron.Config
@@ -33,6 +36,17 @@ func WithProvider(p *cyberhub.Provider) Option {
 
 func WithResourceProvider(rp func(string) []byte) Option {
 	return func(o *options) { o.resourceProvider = rp }
+}
+
+// WithIndex enables the association index on this client.
+// Pass nil to use default IndexOptions; pass a pointer to customize.
+func WithIndex(opts *association.IndexOptions) Option {
+	return func(o *options) {
+		if opts == nil {
+			opts = &association.IndexOptions{}
+		}
+		o.indexOptions = opts
+	}
 }
 
 func WithFingersConfig(cfg *fingers.Config) Option {
@@ -64,6 +78,7 @@ type Client struct {
 	gogo    *gogo.GogoEngine
 	spray   *spray.SprayEngine
 	zombie  *zombie.Engine
+	index   *association.Index
 }
 
 func New(opts ...Option) *Client {
@@ -117,6 +132,27 @@ func (c *Client) ensureNeutron() error {
 		return fmt.Errorf("create neutron engine: %w", err)
 	}
 	c.neutron = eng
+	return nil
+}
+
+func (c *Client) ensureIndex() error {
+	if c.index != nil {
+		return nil
+	}
+	if c.opts.indexOptions == nil {
+		return nil
+	}
+
+	if err := c.ensureFingers(); err != nil {
+		return fmt.Errorf("index requires fingers: %w", err)
+	}
+	if err := c.ensureNeutron(); err != nil {
+		return fmt.Errorf("index requires neutron: %w", err)
+	}
+
+	idx := association.NewIndexWithOptions(*c.opts.indexOptions)
+	idx.BuildWithFingers(c.fingers.Fingers(), c.fingers.Aliases(), c.neutron.Get())
+	c.index = idx
 	return nil
 }
 
@@ -207,7 +243,7 @@ func (c *Client) ensureZombie() error {
 }
 
 // ========================================
-// 类型安全的访问方法
+// 引擎访问
 // ========================================
 
 func (c *Client) Fingers() (*fingers.Engine, error) {
@@ -259,21 +295,52 @@ func (c *Client) Zombie() (*zombie.Engine, error) {
 // 关联索引
 // ========================================
 
-// Index returns the association index from the GoGo engine.
-// Returns nil if GoGo has not been initialized yet.
-func (c *Client) Index() *association.Index {
+// Index returns the association index, initializing it if WithIndex
+// was set. Returns nil if the index is not enabled.
+func (c *Client) Index() (*association.Index, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.gogo != nil {
-		return c.gogo.Index()
+	if err := c.ensureIndex(); err != nil {
+		return nil, err
 	}
-	return nil
+	return c.index, nil
 }
 
-// BuildIndex constructs an association index from the fingers and neutron
-// engines, initializing them if needed. Unlike Index(), this does not
-// require GoGo to be initialized.
-func (c *Client) BuildIndex() (*association.Index, error) {
+// Lookup queries the association index with the given query.
+// Shorthand for c.Index() + idx.Lookup(q).
+func (c *Client) Lookup(q *association.Query) (*association.QueryResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensureIndex(); err != nil {
+		return nil, err
+	}
+	if c.index == nil {
+		return nil, fmt.Errorf("index not enabled: use WithIndex() when creating client")
+	}
+	return c.index.Lookup(q), nil
+}
+
+// LookupResult extracts association terms from an engine result and
+// queries the index. Accepts GOGOResult, SprayResult, or ZombieResult
+// wrapped in a types.Result.
+func (c *Client) LookupResult(r types.Result) (*association.QueryResult, error) {
+	return c.Lookup(association.QueryFromResult(r))
+}
+
+// LookupByFinger queries the index by fingerprint names.
+func (c *Client) LookupByFinger(names ...string) (*association.QueryResult, error) {
+	return c.Lookup(association.NewQuery().WithFingers(names...))
+}
+
+// LookupByCVE queries the index by CVE IDs.
+func (c *Client) LookupByCVE(cves ...string) (*association.QueryResult, error) {
+	return c.Lookup(association.NewQuery().WithCVEs(cves...))
+}
+
+// BuildIndex constructs a standalone association index from the
+// Provider, independent of the client's index lifecycle. Useful when
+// you need an index with different options than the client's.
+func (c *Client) BuildIndex(ctx context.Context, opts ...association.IndexOption) (*association.Index, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -284,7 +351,7 @@ func (c *Client) BuildIndex() (*association.Index, error) {
 		return nil, err
 	}
 
-	idx := association.NewIndex()
+	idx := association.NewIndex(opts...)
 	idx.BuildWithFingers(c.fingers.Fingers(), c.fingers.Aliases(), c.neutron.Get())
 	return idx, nil
 }
@@ -319,6 +386,7 @@ func (c *Client) Close() error {
 	c.neutron = nil
 	c.fingers = nil
 	c.zombie = nil
+	c.index = nil
 
 	return errors.Join(errs...)
 }

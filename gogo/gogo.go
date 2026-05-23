@@ -13,7 +13,6 @@ import (
 	"github.com/chainreactors/logs"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
-	"github.com/chainreactors/sdk/pkg/association"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/panjf2000/ants/v2"
@@ -30,7 +29,6 @@ type GogoEngine struct {
 	provider         *cyberhub.Provider
 	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
 	neutronEngine    *neutron.Engine    // 可选的 neutron 引擎
-	index            *association.Index
 	resourceProvider func(string) []byte
 	capacity         *types.Capacity
 }
@@ -46,7 +44,6 @@ func NewGogoEngine(config *Config) *GogoEngine {
 		provider:         config.Provider,
 		fingersEngine:    config.FingersEngine,
 		neutronEngine:    config.NeutronEngine,
-		index:            config.Index,
 		resourceProvider: config.ResourceProvider,
 	}
 	if config.Capacity > 0 {
@@ -146,13 +143,6 @@ func (e *GogoEngine) Init() error {
 		}
 	}
 
-	// 自动构建关联索引
-	if e.index == nil && e.fingersEngine != nil && e.neutronEngine != nil {
-		idx := association.NewIndex()
-		idx.BuildWithFingers(e.fingersEngine.Fingers(), e.fingersEngine.Aliases(), e.neutronEngine.Get())
-		e.index = idx
-	}
-
 	e.inited = true
 	return nil
 }
@@ -227,11 +217,6 @@ func (e *GogoEngine) SetCapacity(total int) {
 // Capacity returns the engine's capacity bucket, or nil if unconfigured.
 func (e *GogoEngine) Capacity() *types.Capacity {
 	return e.capacity
-}
-
-// Index returns the association index, or nil if not built.
-func (e *GogoEngine) Index() *association.Index {
-	return e.index
 }
 
 func (e *GogoEngine) Execute(ctx types.Context, task types.Task) (<-chan types.Result, error) {

@@ -103,6 +103,33 @@ Spray → 自动注入 Fingers
 
 调用 `c.Gogo()` 时，如果 Fingers 和 Neutron 尚未创建，Client 会先自动创建它们。
 
+## 关联查询（可选）
+
+通过 `WithIndex` 开启关联索引，将各引擎产出的数据进行关联：
+
+```go
+c := client.New(
+    client.WithProvider(provider),
+    client.WithIndex(nil),  // 开启关联索引
+)
+
+// 按指纹查关联 POC
+result, _ := c.LookupByFinger("tomcat")
+for _, t := range result.Templates {
+    fmt.Println(t.Id)
+}
+
+// 扫描结果直接关联
+gogoEng, _ := c.Gogo()
+resultCh, _ := gogoEng.ScanStream(gogo.NewContext(), "192.168.1.1", "80")
+for r := range resultCh {
+    related, _ := c.LookupResult(r)
+    // related.Templates, related.Aliases, related.Fingers
+}
+```
+
+详见 [Association 关联查询](association.md)。
+
 ## 直接创建引擎
 
 如果只需要单个引擎且需要完全控制配置，可以跳过 Client：

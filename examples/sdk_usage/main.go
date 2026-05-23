@@ -19,12 +19,15 @@ func main() {
 	c := client.New()
 	defer c.Close()
 
-	// 方式二：通过 Provider 共享数据源（取消下方注释即可使用）
+	// 方式二：通过 Provider 共享数据源 + 开启关联索引
 	// provider := cyberhub.NewProvider("http://127.0.0.1:8080", "your-api-key")
-	// c := client.New(client.WithProvider(provider))
+	// c := client.New(
+	//     client.WithProvider(provider),
+	//     client.WithIndex(nil),
+	// )
 	// defer c.Close()
 
-	// 方式三：共享 Provider + 单引擎自定义配置
+	// 方式三：从环境变量自动配置
 	if os.Getenv("CYBERHUB_URL") != "" {
 		provider := cyberhub.NewProvider(
 			os.Getenv("CYBERHUB_URL"),
@@ -32,6 +35,7 @@ func main() {
 		)
 		c = client.New(
 			client.WithProvider(provider),
+			client.WithIndex(nil),
 			client.WithGogoConfig(gogo.NewConfig().WithCapacity(5000)),
 		)
 		defer c.Close()
@@ -43,6 +47,8 @@ func main() {
 	testGogo(c)
 	fmt.Println()
 	testSpray(c)
+	fmt.Println()
+	testLookup(c)
 }
 
 func testFingers(c *client.Client) {
@@ -115,4 +121,21 @@ func testSpray(c *client.Client) {
 	}
 
 	fmt.Printf("检测完成，收到 %d 个响应\n", len(results))
+}
+
+func testLookup(c *client.Client) {
+	fmt.Println("4. 关联查询")
+	fmt.Println("----------------------------------------")
+
+	result, err := c.LookupByFinger("nginx")
+	if err != nil {
+		fmt.Println("关联索引未开启（使用 WithIndex 开启）")
+		return
+	}
+
+	fmt.Printf("nginx 关联: %d 个别名, %d 个 POC\n",
+		len(result.Aliases), len(result.Templates))
+	for _, t := range result.Templates {
+		fmt.Printf("   - %s [%s]\n", t.Id, t.Info.Severity)
+	}
 }

@@ -6,7 +6,6 @@ import (
 
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
-	"github.com/chainreactors/sdk/pkg/association"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
 )
@@ -109,7 +108,6 @@ type Config struct {
 	Provider         *cyberhub.Provider
 	FingersEngine    *sdkfingers.Engine
 	NeutronEngine    *neutron.Engine
-	Index            *association.Index
 	ResourceProvider func(string) []byte
 	Capacity         int
 }
@@ -126,12 +124,6 @@ func (c *Config) Validate() error {
 // WithProvider 设置远程数据源（自动创建 fingers + neutron 引擎）
 func (c *Config) WithProvider(p *cyberhub.Provider) *Config {
 	c.Provider = p
-	return c
-}
-
-// WithIndex 设置关联索引
-func (c *Config) WithIndex(idx *association.Index) *Config {
-	c.Index = idx
 	return c
 }
 
