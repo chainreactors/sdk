@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/chainreactors/fingers/common"
 	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/utils/httputils"
 )
 
@@ -167,7 +167,7 @@ func (c *Context) GetLevel() int {
 type MatchResult struct {
 	success    bool
 	err        error
-	frameworks common.Frameworks
+	frameworks types.Frameworks
 }
 
 func (r *MatchResult) Success() bool {
@@ -183,7 +183,7 @@ func (r *MatchResult) Data() interface{} {
 }
 
 // Frameworks 获取匹配到的指纹
-func (r *MatchResult) Frameworks() common.Frameworks {
+func (r *MatchResult) Frameworks() types.Frameworks {
 	return r.frameworks
 }
 
@@ -199,9 +199,9 @@ func (r *MatchResult) Count() int {
 
 // TargetResult 目标扫描结果（用于批量扫描）
 type TargetResult struct {
-	Target  string                  // 扫描的目标 URL 或 target
-	Results []*common.ServiceResult // 指纹识别结果
-	Err     error                   // 错误信息（如果有）
+	Target  string                 // 扫描的目标 URL 或 target
+	Results []*types.ServiceResult // 指纹识别结果
+	Err     error                  // 错误信息（如果有）
 }
 
 // Success 是否成功（无错误）

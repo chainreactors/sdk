@@ -15,8 +15,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/sdk/neutron"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func main() {
@@ -42,7 +43,7 @@ func main() {
 			fmt.Println("Error: -key is required when using -url")
 			os.Exit(1)
 		}
-		config.WithCyberhub(*cyberhubURL, *apiKey)
+		config.WithProvider(cyberhub.NewProvider(*cyberhubURL, *apiKey))
 	} else {
 		config.WithLocalFile(*localPath)
 	}
@@ -67,7 +68,7 @@ func main() {
 
 		result, events, err := t.ExecuteWithEvents(*target, nil)
 		if err != nil {
-			if err == protocols.OpsecError {
+			if err == types.OpsecError {
 				continue
 			}
 			fmt.Printf("[%s] error: %v\n", t.Id, err)

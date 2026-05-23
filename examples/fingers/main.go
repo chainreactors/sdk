@@ -57,7 +57,7 @@ func main() {
 		if *source != "" {
 			provider.WithFilter(cyberhub.NewExportFilter().WithSources(*source))
 		}
-		config.Provider = provider
+		config.WithProvider(provider)
 		fmt.Printf("Loading fingerprints from Cyberhub (%s)...\n", *cyberhubURL)
 	} else {
 		if *localEngines != "" {

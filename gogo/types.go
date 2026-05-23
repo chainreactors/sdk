@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/chainreactors/gogo/v2/pkg"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
 	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/association"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // ========================================
@@ -18,7 +20,7 @@ import (
 type Context struct {
 	ctx          context.Context
 	threads      int
-	opt          *pkg.RunnerOption
+	opt          *types.GogoOption
 	statsHandler func(sdk.Stats)
 }
 
@@ -29,7 +31,7 @@ func NewContext() *Context {
 	return &Context{
 		ctx:     context.Background(),
 		threads: 1000,
-		opt:     cloneRunnerOption(pkg.DefaultRunnerOption),
+		opt:     types.NewDefaultGogoOption(),
 	}
 }
 
@@ -38,7 +40,7 @@ func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
 		ctx:          ctx,
 		threads:      c.threads,
-		opt:          cloneRunnerOption(c.opt),
+		opt:          types.CloneGogoOption(c.opt),
 		statsHandler: c.statsHandler,
 	}
 }
@@ -56,8 +58,8 @@ func (c *Context) SetThreads(threads int) *Context {
 }
 
 // SetOption 设置运行选项
-func (c *Context) SetOption(opt *pkg.RunnerOption) *Context {
-	c.opt = cloneRunnerOption(opt)
+func (c *Context) SetOption(opt *types.GogoOption) *Context {
+	c.opt = types.CloneGogoOption(opt)
 	return c
 }
 
@@ -75,7 +77,7 @@ func (c *Context) emitStats(stats sdk.Stats) {
 // SetVersionLevel 设置指纹识别级别
 func (c *Context) SetVersionLevel(level int) *Context {
 	if c.opt == nil {
-		c.opt = cloneRunnerOption(pkg.DefaultRunnerOption)
+		c.opt = types.NewDefaultGogoOption()
 	}
 	c.opt.VersionLevel = level
 	return c
@@ -84,7 +86,7 @@ func (c *Context) SetVersionLevel(level int) *Context {
 // SetExploit 设置漏洞检测模式
 func (c *Context) SetExploit(exploit string) *Context {
 	if c.opt == nil {
-		c.opt = cloneRunnerOption(pkg.DefaultRunnerOption)
+		c.opt = types.NewDefaultGogoOption()
 	}
 	c.opt.Exploit = exploit
 	return c
@@ -93,27 +95,10 @@ func (c *Context) SetExploit(exploit string) *Context {
 // SetDelay 设置超时时间（秒）
 func (c *Context) SetDelay(delay int) *Context {
 	if c.opt == nil {
-		c.opt = cloneRunnerOption(pkg.DefaultRunnerOption)
+		c.opt = types.NewDefaultGogoOption()
 	}
 	c.opt.Delay = delay
 	return c
-}
-
-func cloneRunnerOption(opt *pkg.RunnerOption) *pkg.RunnerOption {
-	if opt == nil {
-		opt = pkg.DefaultRunnerOption
-	}
-	clone := *opt
-	if opt.ScanFilters != nil {
-		clone.ScanFilters = make([][]string, len(opt.ScanFilters))
-		for i, filter := range opt.ScanFilters {
-			clone.ScanFilters[i] = append([]string(nil), filter...)
-		}
-	}
-	if opt.ExcludeCIDRs != nil {
-		clone.ExcludeCIDRs = append(clone.ExcludeCIDRs[:0:0], opt.ExcludeCIDRs...)
-	}
-	return &clone
 }
 
 // ========================================
@@ -122,8 +107,10 @@ func cloneRunnerOption(opt *pkg.RunnerOption) *pkg.RunnerOption {
 
 // Config GoGo 配置
 type Config struct {
+	Provider         *cyberhub.Provider
 	FingersEngine    *sdkfingers.Engine
 	NeutronEngine    *neutron.Engine
+	Index            *association.Index
 	ResourceProvider func(string) []byte
 	Capacity         int
 }
@@ -135,6 +122,18 @@ func NewConfig() *Config {
 
 func (c *Config) Validate() error {
 	return nil
+}
+
+// WithProvider 设置远程数据源（自动创建 fingers + neutron 引擎）
+func (c *Config) WithProvider(p *cyberhub.Provider) *Config {
+	c.Provider = p
+	return c
+}
+
+// WithIndex 设置关联索引
+func (c *Config) WithIndex(idx *association.Index) *Config {
+	c.Index = idx
+	return c
 }
 
 // WithFingersEngine 设置自定义 fingers 引擎
@@ -194,11 +193,11 @@ func (t *ScanTask) Validate() error {
 
 // WorkflowTask 工作流任务
 type WorkflowTask struct {
-	Workflow *pkg.Workflow
+	Workflow *types.Workflow
 }
 
 // NewWorkflowTask 创建工作流任务
-func NewWorkflowTask(workflow *pkg.Workflow) *WorkflowTask {
+func NewWorkflowTask(workflow *types.Workflow) *WorkflowTask {
 	return &WorkflowTask{Workflow: workflow}
 }
 

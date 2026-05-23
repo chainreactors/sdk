@@ -1,3 +1,5 @@
+//go:build hostspray
+
 package main
 
 import (
@@ -6,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/sdk/spray"
 )
 
@@ -46,9 +49,9 @@ func main() {
 	// 配置上下文 - 关键：设置 Mod 为 "host"
 	fmt.Println("⚙️  Configuring spray context...")
 	ctx := spray.NewContext().
-		SetThreads(100).        // 并发线程数
-		SetTimeout(5).          // 超时时间
-		SetMod("host")          // 设置为 host 模式（关键！）
+		SetThreads(100). // 并发线程数
+		SetTimeout(5).   // 超时时间
+		SetMod("host")   // 设置为 host 模式（关键！）
 
 	fmt.Printf("   Mode: host\n")
 	fmt.Printf("   Threads: 100\n")
@@ -82,8 +85,8 @@ func main() {
 			continue
 		}
 
-		sprayResult := result.(*spray.Result).SprayResult()
-		if sprayResult == nil {
+		sprayResult, ok := types.ResultData[*types.SprayResult](result)
+		if !ok || sprayResult == nil {
 			continue
 		}
 

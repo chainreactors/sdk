@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/neutron/templates"
 	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // ========================================
@@ -15,7 +15,7 @@ import (
 
 // Engine Neutron 加载引擎，支持本地和远程数据源
 type Engine struct {
-	templates []*templates.Template
+	templates []*types.Template
 	config    *Config
 	capacity  *sdk.Capacity
 }
@@ -41,8 +41,8 @@ func NewEngine(config *Config) (*Engine, error) {
 		}, nil
 	}
 
-	templates := config.Templates.Templates()
-	if len(templates) == 0 {
+	tpls := config.Templates.Templates()
+	if len(tpls) == 0 {
 		// 返回空引擎，允许后续配置
 		return &Engine{
 			config:    config,
@@ -57,25 +57,25 @@ func NewEngine(config *Config) (*Engine, error) {
 		e.capacity = sdk.NewCapacity(config.Capacity)
 	}
 
-	e.templates = e.compileTemplates(templates)
+	e.templates = e.compileTemplates(tpls)
 
 	return e, nil
 }
 
 // NewEngineWithTemplates creates an Engine using Templates directly.
-func NewEngineWithTemplates(templates Templates) (*Engine, error) {
-	if templates.Len() == 0 {
+func NewEngineWithTemplates(tpls Templates) (*Engine, error) {
+	if tpls.Len() == 0 {
 		return nil, fmt.Errorf("templates data is empty")
 	}
 
 	config := NewConfig()
-	config.Templates = templates
+	config.Templates = tpls
 
 	e := &Engine{
 		config: config,
 	}
 
-	e.templates = e.compileTemplates(templates.Templates())
+	e.templates = e.compileTemplates(tpls.Templates())
 	return e, nil
 }
 
@@ -123,7 +123,7 @@ func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, err
 	return e.executeTemplates(runCtx, templates, execTask.Target, execTask.Payload)
 }
 
-func (e *Engine) executeTemplates(ctx *Context, templates []*templates.Template, target string, payload map[string]interface{}) (<-chan sdk.Result, error) {
+func (e *Engine) executeTemplates(ctx *Context, templates []*types.Template, target string, payload map[string]interface{}) (<-chan sdk.Result, error) {
 	if e.capacity != nil {
 		if err := e.capacity.Acquire(ctx.Context(), 1); err != nil {
 			return nil, err
@@ -141,7 +141,7 @@ func (e *Engine) executeTemplates(ctx *Context, templates []*templates.Template,
 		for _, t := range templates {
 			result, events, err := t.ExecuteWithEvents(target, payload)
 			if err != nil {
-				if err == protocols.OpsecError {
+				if err == types.OpsecError {
 					continue
 				}
 				select {
@@ -173,7 +173,7 @@ func (e *Engine) executeTemplates(ctx *Context, templates []*templates.Template,
 }
 
 // Get 获取已加载的 templates
-func (e *Engine) Get() []*templates.Template {
+func (e *Engine) Get() []*types.Template {
 	return e.templates
 }
 
@@ -213,8 +213,8 @@ func (e *Engine) compileOptions() *protocols.ExecuterOptions {
 	}
 }
 
-func (e *Engine) compileTemplates(allTemplates []*templates.Template) []*templates.Template {
-	compiledTemplates := make([]*templates.Template, 0, len(allTemplates))
+func (e *Engine) compileTemplates(allTemplates []*types.Template) []*types.Template {
+	compiledTemplates := make([]*types.Template, 0, len(allTemplates))
 	options := e.compileOptions()
 
 	for _, t := range allTemplates {

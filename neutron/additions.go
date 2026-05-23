@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/chainreactors/neutron/templates"
+	"github.com/chainreactors/sdk/pkg/types"
 	"gopkg.in/yaml.v3"
 )
 
 // AddPocs adds templates to the current engine and compiles them.
-func (e *Engine) AddPocs(pocs []*templates.Template) error {
+func (e *Engine) AddPocs(pocs []*types.Template) error {
 	if len(pocs) == 0 {
 		return fmt.Errorf("pocs cannot be empty")
 	}
@@ -41,7 +41,7 @@ func (e *Engine) AddPocsFile(path string) error {
 	return e.AddPocs(pocs)
 }
 
-func loadTemplatesFromPath(path string) ([]*templates.Template, error) {
+func loadTemplatesFromPath(path string) ([]*types.Template, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to access path %s: %w", path, err)
@@ -66,20 +66,20 @@ func loadTemplatesFromPath(path string) ([]*templates.Template, error) {
 		yamlFiles = []string{path}
 	}
 
-	var loaded []*templates.Template
+	var loaded []*types.Template
 	for _, yamlFile := range yamlFiles {
 		content, readErr := os.ReadFile(yamlFile)
 		if readErr != nil {
 			return nil, fmt.Errorf("read %s: %w", yamlFile, readErr)
 		}
 
-		var list []*templates.Template
+		var list []*types.Template
 		if err := yaml.Unmarshal(content, &list); err == nil && len(list) > 0 {
 			loaded = append(loaded, list...)
 			continue
 		}
 
-		tpl := &templates.Template{}
+		tpl := &types.Template{}
 		if err := yaml.Unmarshal(content, tpl); err != nil {
 			return nil, fmt.Errorf("parse %s: %w", yamlFile, err)
 		}

@@ -10,7 +10,8 @@ import (
 )
 
 func main() {
-	fmt.Println("=== SDK 新架构使用示例 ===\n")
+	fmt.Println("=== SDK 新架构使用示例 ===")
+	fmt.Println()
 
 	// 创建 SDK 客户端
 	c := client.New()

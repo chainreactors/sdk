@@ -5,17 +5,17 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	fingersEngine "github.com/chainreactors/fingers/fingers"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func TestMatchDetailUsage(t *testing.T) {
 	eng, err := sdkfingers.NewEngine(
-		sdkfingers.NewConfig().WithMatchDetail().WithFingers(fingersEngine.Fingers{{
+		sdkfingers.NewConfig().WithMatchDetail().WithFingers(types.Fingers{{
 			Name:     "demo-app",
 			Protocol: "http",
-			Rules: fingersEngine.Rules{{
-				Regexps: &fingersEngine.Regexps{Body: []string{"DemoMarker"}},
+			Rules: types.FingerRules{{
+				Regexps: &types.FingerRegexps{Body: []string{"DemoMarker"}},
 			}},
 		}}),
 	)

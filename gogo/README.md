@@ -57,9 +57,9 @@ engine := gogo.NewEngine(nil)
 ### 运行时配置
 
 ```go
-import "github.com/chainreactors/gogo/v2/pkg"
+import "github.com/chainreactors/sdk/pkg/types"
 
-opt := pkg.DefaultRunnerOption
+opt := types.NewDefaultGogoOption()
 opt.VersionLevel = 2      // 深度指纹识别
 opt.Exploit = "auto"      // 启用漏洞检测
 opt.Delay = 5             // 超时时间（秒）
@@ -151,9 +151,9 @@ engine.Scan(ctx, "192.168.1.1-192.168.1.254", "80")
 工作流提供了更复杂的扫描配置：
 
 ```go
-import "github.com/chainreactors/gogo/v2/pkg"
+import "github.com/chainreactors/sdk/pkg/types"
 
-workflow := &pkg.Workflow{
+workflow := &types.Workflow{
     Name:        "security-scan",
     IP:          "example.com",
     Ports:       "top1000",
@@ -244,9 +244,9 @@ for _, result := range results {
 ### 深度扫描（指纹识别 + 漏洞检测）
 
 ```go
-import "github.com/chainreactors/gogo/v2/pkg"
+import "github.com/chainreactors/sdk/pkg/types"
 
-opt := pkg.DefaultRunnerOption
+opt := types.NewDefaultGogoOption()
 opt.VersionLevel = 3      // 最深度的指纹识别
 opt.Exploit = "auto"      // 自动漏洞检测
 
@@ -285,7 +285,7 @@ type GOGOResult struct {
     Uri      string    // URI
     Frameworks []string // 识别的框架
     Extracts []string  // 漏洞信息
-    // ... 更多字段请参考 parsers.GOGOResult
+    // ... 更多字段请参考 types.GOGOResult
 }
 ```
 

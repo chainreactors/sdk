@@ -7,19 +7,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chainreactors/fingers/alias"
-	fingersEngine "github.com/chainreactors/fingers/fingers"
 	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func TestConfigSourceSelectionAndFiltering(t *testing.T) {
 	cfg := NewConfig().
-		WithFingers(fingersEngine.Fingers{
+		WithFingers(types.Fingers{
 			{Name: "web-app", Protocol: "http"},
 			{Name: "service-app", Protocol: "tcp"},
 		}).
-		WithAliases([]*alias.Alias{{Name: "web-app", Pocs: []string{"CVE-1"}}}).
+		WithAliases([]*types.Alias{{Name: "web-app", Pocs: []string{"CVE-1"}}}).
 		WithFilter(func(item *FullFinger) bool {
 			return item != nil && item.Finger != nil && item.Finger.Protocol == "http"
 		})
@@ -44,11 +43,11 @@ func TestConfigSourceSelectionAndFiltering(t *testing.T) {
 }
 
 func TestExecuteMatchTaskUsesSDKResult(t *testing.T) {
-	eng := newDetailTestEngine(t, NewConfig(), &fingersEngine.Finger{
+	eng := newDetailTestEngine(t, NewConfig(), &types.Finger{
 		Name:     "execute-app",
 		Protocol: "http",
-		Rules: fingersEngine.Rules{{
-			Regexps: &fingersEngine.Regexps{Body: []string{"ExecuteMarker"}},
+		Rules: types.FingerRules{{
+			Regexps: &types.FingerRegexps{Body: []string{"ExecuteMarker"}},
 		}},
 	})
 
@@ -70,11 +69,11 @@ func TestExecuteMatchTaskUsesSDKResult(t *testing.T) {
 }
 
 func TestExecuteRejectsInvalidTaskAndContext(t *testing.T) {
-	eng := newDetailTestEngine(t, NewConfig(), &fingersEngine.Finger{
+	eng := newDetailTestEngine(t, NewConfig(), &types.Finger{
 		Name:     "task-app",
 		Protocol: "http",
-		Rules: fingersEngine.Rules{{
-			Regexps: &fingersEngine.Regexps{Body: []string{"TaskMarker"}},
+		Rules: types.FingerRules{{
+			Regexps: &types.FingerRegexps{Body: []string{"TaskMarker"}},
 		}},
 	})
 

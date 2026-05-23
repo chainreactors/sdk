@@ -7,7 +7,7 @@ Neutron SDK 为 [chainreactors/neutron](https://github.com/chainreactors/neutron
 **SDK = Loader，用户 = Composer**
 
 - 提供加载/编译入口，用户自行组装复杂功能
-- 不过度封装，返回原生 `*templates.Template`
+- 不过度封装，通过 `types.Template` 暴露模板数据
 - 支持本地与 Cyberhub 数据源
 
 ## 快速开始
@@ -141,8 +141,8 @@ package main
 import (
     "fmt"
     "sync"
-    neutronTemplates "github.com/chainreactors/neutron/templates"
     "github.com/chainreactors/sdk/neutron"
+    "github.com/chainreactors/sdk/pkg/types"
 )
 
 func main() {
@@ -155,7 +155,7 @@ func main() {
     // 2. 用户自己组装流式扫描
     type ScanTask struct {
         Target string
-        POC    *neutronTemplates.Template
+        POC    *types.Template
     }
 
     targets := []string{"http://example.com", "http://test.com"}
@@ -260,7 +260,7 @@ neutron/
 
 pkg/cyberhub/
 ├── client.go       # ExportPOCs() API
-└── types.go        # POCResponse (inline templates.Template)
+└── types.go        # ExportFilter compatibility alias
 ```
 
 ## 依赖项
@@ -274,7 +274,7 @@ pkg/cyberhub/
 1. **Cyberhub 必须运行** - 使用远程配置前确保 Cyberhub 服务可访问
 2. **编译 POC** - 初始化引擎时自动完成
 3. **变量支持** - 某些 POC 需要 wordlist、BaseDNS 等变量，通过 `Execute(target, payload)` 的 payload 参数传递
-4. **错误处理** - POC 执行可能返回 `protocols.OpsecError`，表示 opsec 模式跳过
+4. **错误处理** - POC 执行可能返回 `types.OpsecError`，表示 opsec 模式跳过
 
 ## License
 

@@ -8,10 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chainreactors/fingers/common"
-	fingersEngine "github.com/chainreactors/fingers/fingers"
-	"github.com/chainreactors/parsers"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
+	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/sdk/spray"
 )
 
@@ -33,23 +31,23 @@ func TestSprayCrawlAndDeepFinger(t *testing.T) {
 	defer srv.Close()
 
 	fingersEng, err := sdkfingers.NewEngine(
-		sdkfingers.NewConfig().WithFingers(fingersEngine.Fingers{
+		sdkfingers.NewConfig().WithFingers(types.Fingers{
 			{
 				Name:     "admin-app",
 				Protocol: "http",
-				Rules: fingersEngine.Rules{
+				Rules: types.FingerRules{
 					{
-						Regexps: &fingersEngine.Regexps{Body: []string{"adminmarker"}},
+						Regexps: &types.FingerRegexps{Body: []string{"adminmarker"}},
 					},
 				},
 			},
 			{
 				Name:     "deep-probe",
 				Protocol: "http",
-				Rules: fingersEngine.Rules{
+				Rules: types.FingerRules{
 					{
 						SendDataStr: "/deep/finger",
-						Regexps:     &fingersEngine.Regexps{Body: []string{"probemarker"}},
+						Regexps:     &types.FingerRegexps{Body: []string{"probemarker"}},
 					},
 				},
 			},
@@ -67,7 +65,7 @@ func TestSprayCrawlAndDeepFinger(t *testing.T) {
 	opt := spray.NewDefaultOption()
 	opt.Fuzzy = true
 	ctx := spray.NewContext().
-		SetOption(opt.Option).
+		SetOption(opt).
 		SetThreads(4).
 		SetTimeout(2).
 		SetCrawlPlugin(true).
@@ -79,7 +77,7 @@ func TestSprayCrawlAndDeepFinger(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	byPath := map[string]*parsers.SprayResult{}
+	byPath := map[string]*types.SprayResult{}
 	for _, result := range results {
 		if result == nil {
 			continue
@@ -95,7 +93,7 @@ func TestSprayCrawlAndDeepFinger(t *testing.T) {
 	if admin == nil {
 		t.Fatalf("missing /admin result: %+v", byPath)
 	}
-	if admin.Source != parsers.CrawlSource {
+	if admin.Source != types.CrawlSource {
 		t.Fatalf("expected /admin source crawl, got %s", admin.Source.Name())
 	}
 	if got := admin.Frameworks["admin-app"]; got == nil {
@@ -108,7 +106,7 @@ func TestSprayCrawlAndDeepFinger(t *testing.T) {
 	if deep == nil {
 		t.Fatalf("missing /deep/finger result: %+v", byPath)
 	}
-	if deep.Source != parsers.FingerSource {
+	if deep.Source != types.FingerSource {
 		t.Fatalf("expected /deep/finger source finger, got %s", deep.Source.Name())
 	}
 	if !strings.HasSuffix(deep.UrlString, "/deep/finger") {
@@ -129,7 +127,7 @@ func urlPath(rawURL string) string {
 	return parsed.Path
 }
 
-func assertDetail(t *testing.T, detail *common.MatchDetail, matcherType, sendData, matcherValue string) {
+func assertDetail(t *testing.T, detail *types.MatchDetail, matcherType, sendData, matcherValue string) {
 	t.Helper()
 
 	if detail == nil {

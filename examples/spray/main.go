@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/sdk/spray"
 )
 
@@ -153,8 +154,8 @@ func main() {
 			continue
 		}
 
-		sprayResult := result.(*spray.Result).SprayResult()
-		if sprayResult == nil {
+		sprayResult, ok := types.ResultData[*types.SprayResult](result)
+		if !ok || sprayResult == nil {
 			continue
 		}
 

@@ -5,15 +5,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	fingersEngine "github.com/chainreactors/fingers/fingers"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func TestWithMatchDetailPassiveMatch(t *testing.T) {
-	eng := newDetailTestEngine(t, NewConfig().WithMatchDetail(), &fingersEngine.Finger{
+	eng := newDetailTestEngine(t, NewConfig().WithMatchDetail(), &types.Finger{
 		Name:     "passive-app",
 		Protocol: "http",
-		Rules: fingersEngine.Rules{{
-			Regexps: &fingersEngine.Regexps{Body: []string{"PassiveMarker"}},
+		Rules: types.FingerRules{{
+			Regexps: &types.FingerRegexps{Body: []string{"PassiveMarker"}},
 		}},
 	})
 
@@ -34,12 +34,12 @@ func TestWithMatchDetailPassiveMatch(t *testing.T) {
 }
 
 func TestWithMatchDetailActiveHTTPMatch(t *testing.T) {
-	eng := newDetailTestEngine(t, NewConfig().WithMatchDetail(), &fingersEngine.Finger{
+	eng := newDetailTestEngine(t, NewConfig().WithMatchDetail(), &types.Finger{
 		Name:        "active-app",
 		Protocol:    "http",
 		SendDataStr: "/probe",
-		Rules: fingersEngine.Rules{{
-			Regexps: &fingersEngine.Regexps{Body: []string{"ActiveMarker"}},
+		Rules: types.FingerRules{{
+			Regexps: &types.FingerRegexps{Body: []string{"ActiveMarker"}},
 		}},
 	})
 
@@ -69,11 +69,11 @@ func TestWithMatchDetailActiveHTTPMatch(t *testing.T) {
 }
 
 func TestMatchDetailDisabledByDefault(t *testing.T) {
-	eng := newDetailTestEngine(t, NewConfig(), &fingersEngine.Finger{
+	eng := newDetailTestEngine(t, NewConfig(), &types.Finger{
 		Name:     "plain-app",
 		Protocol: "http",
-		Rules: fingersEngine.Rules{{
-			Regexps: &fingersEngine.Regexps{Body: []string{"PlainMarker"}},
+		Rules: types.FingerRules{{
+			Regexps: &types.FingerRegexps{Body: []string{"PlainMarker"}},
 		}},
 	})
 
@@ -86,12 +86,12 @@ func TestMatchDetailDisabledByDefault(t *testing.T) {
 	}
 }
 
-func newDetailTestEngine(t *testing.T, config *Config, finger *fingersEngine.Finger) *Engine {
+func newDetailTestEngine(t *testing.T, config *Config, finger *types.Finger) *Engine {
 	t.Helper()
 	if config == nil {
 		config = NewConfig()
 	}
-	eng, err := NewEngine(config.WithFingers(fingersEngine.Fingers{finger}))
+	eng, err := NewEngine(config.WithFingers(types.Fingers{finger}))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -137,7 +137,7 @@ task := spray.NewCheckTask(urls)
 resultCh, _ := engine.Execute(sprayCtx, task)
 
 for result := range resultCh {
-    sprayResult := result.(*spray.Result).SprayResult()
+    sprayResult, _ := types.ResultData[*types.SprayResult](result)
     // 处理结果
 }
 ```
@@ -345,7 +345,7 @@ nEngine, _ := neutron.NewEngine(nConfig)
 import (
     "github.com/chainreactors/sdk/fingers"
     "github.com/chainreactors/sdk/neutron"
-    neutronTemplates "github.com/chainreactors/neutron/templates"
+    "github.com/chainreactors/sdk/pkg/types"
 )
 
 // 加载指纹后筛选
@@ -366,13 +366,13 @@ nEngine, _ := neutron.NewEngine(nConfig)
 allTemplates := (neutron.Templates{}).Merge(nEngine.Get())
 
 // 按严重级别筛选
-highSeverity := allTemplates.Filter(func(t *neutronTemplates.Template) bool {
+highSeverity := allTemplates.Filter(func(t *types.Template) bool {
     severity := t.Info.Severity
     return severity == "critical" || severity == "high"
 })
 
 // 按标签筛选
-rceTemplates := allTemplates.Filter(func(t *neutronTemplates.Template) bool {
+rceTemplates := allTemplates.Filter(func(t *types.Template) bool {
     for _, tag := range t.GetTags() {
         if tag == "rce" {
             return true
@@ -394,7 +394,7 @@ import (
 
 	"github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
-	neutronTemplates "github.com/chainreactors/neutron/templates"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func main() {
@@ -416,7 +416,7 @@ func main() {
 	nEngine, _ := neutron.NewEngine(nConfig)
 
 	// 使用 Templates.Filter 按指纹/标签筛选
-	filtered := (neutron.Templates{}).Merge(nEngine.Get()).Filter(func(t *neutronTemplates.Template) bool {
+	filtered := (neutron.Templates{}).Merge(nEngine.Get()).Filter(func(t *types.Template) bool {
 		// 按 Fingers 字段匹配
 		for _, finger := range t.Fingers {
 			if _, ok := fingerNames[strings.ToLower(finger)]; ok {

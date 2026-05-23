@@ -1,16 +1,5 @@
 package sdk
 
-import "time"
+import "github.com/chainreactors/sdk/pkg/types"
 
-// Stats is a compact, engine-neutral execution counter emitted by SDK engines
-// through context callbacks.
-type Stats struct {
-	Engine   string
-	Task     string
-	Targets  int64
-	Tasks    int64
-	Requests int64
-	Results  int64
-	Errors   int64
-	Duration time.Duration
-}
+type Stats = types.Stats

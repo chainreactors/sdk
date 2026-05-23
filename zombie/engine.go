@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/chainreactors/parsers"
 	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 	zombiecore "github.com/chainreactors/zombie/core"
 	zombiepkg "github.com/chainreactors/zombie/pkg"
 	"github.com/panjf2000/ants/v2"
@@ -22,6 +22,10 @@ type Engine struct {
 	config   *Config
 	capacity *sdk.Capacity
 	mu       sync.Mutex
+}
+
+func newResult(success bool, err error, data *types.ZombieResult) sdk.Result {
+	return types.NewResult(success, err, data)
 }
 
 func NewEngine(config *Config) *Engine {
@@ -135,11 +139,7 @@ func (e *Engine) executeWeakpass(ctx *Context, task *WeakpassTask) (<-chan sdk.R
 		}
 
 		select {
-		case resultCh <- &Result{
-			success: result.OK,
-			err:     result.Err,
-			data:    result.ZombieResult,
-		}:
+		case resultCh <- newResult(result.OK, result.Err, result.ZombieResult):
 		case <-item.ctx.Done():
 		}
 	})
@@ -188,11 +188,7 @@ func (e *Engine) executeWeakpass(ctx *Context, task *WeakpassTask) (<-chan sdk.R
 				atomic.AddInt64(&errors, 1)
 				wg.Done()
 				select {
-				case resultCh <- &Result{
-					success: false,
-					err:     err,
-					data:    ztask.ZombieResult,
-				}:
+				case resultCh <- newResult(false, err, ztask.ZombieResult):
 				case <-ctx.Context().Done():
 					return
 				}
@@ -228,7 +224,7 @@ func runTask(ctx context.Context, task *zombiepkg.Task) *zombiepkg.Result {
 			}
 		}()
 
-		if task.Mod == parsers.ZombieModUnauth {
+		if task.Mod == types.ZombieModUnauth {
 			resultCh <- zombiecore.Unauth(task)
 			return
 		}
@@ -275,12 +271,12 @@ func expandTasks(ctx *Context, task *WeakpassTask) []*zombiepkg.Task {
 
 		targetCtx, cancel := context.WithCancel(ctx.Context())
 		if !ctx.noUnauth {
-			tasks = append(tasks, newZombieTask(targetCtx, cancel, ctx.timeout, target, "", "", parsers.ZombieModUnauth))
+			tasks = append(tasks, newZombieTask(targetCtx, cancel, ctx.timeout, target, "", "", types.ZombieModUnauth))
 		}
 
 		auths := authPairs(ctx, task, target)
 		for _, auth := range auths {
-			tasks = append(tasks, newZombieTask(targetCtx, cancel, ctx.timeout, target, auth.Username, auth.Password, parsers.ZombieModBrute))
+			tasks = append(tasks, newZombieTask(targetCtx, cancel, ctx.timeout, target, auth.Username, auth.Password, types.ZombieModBrute))
 			if ctx.firstOnly && target.Username != "" && target.Password != "" {
 				break
 			}
@@ -333,9 +329,9 @@ func normalizeTarget(target Target) Target {
 	return target
 }
 
-func newZombieTask(ctx context.Context, cancel context.CancelFunc, timeout int, target Target, username, password string, mod parsers.ZombieTaskMod) *zombiepkg.Task {
+func newZombieTask(ctx context.Context, cancel context.CancelFunc, timeout int, target Target, username, password string, mod types.ZombieTaskMod) *zombiepkg.Task {
 	return &zombiepkg.Task{
-		ZombieResult: &parsers.ZombieResult{
+		ZombieResult: &types.ZombieResult{
 			IP:       target.IP,
 			Port:     target.Port,
 			Service:  target.Service,
@@ -351,31 +347,31 @@ func newZombieTask(ctx context.Context, cancel context.CancelFunc, timeout int, 
 	}
 }
 
-func (e *Engine) Weakpass(ctx *Context, task *WeakpassTask) ([]*parsers.ZombieResult, error) {
+func (e *Engine) Weakpass(ctx *Context, task *WeakpassTask) ([]*types.ZombieResult, error) {
 	resultCh, err := e.WeakpassStream(ctx, task)
 	if err != nil {
 		return nil, err
 	}
 
-	var results []*parsers.ZombieResult
+	var results []*types.ZombieResult
 	for result := range resultCh {
 		results = append(results, result)
 	}
 	return results, nil
 }
 
-func (e *Engine) WeakpassStream(ctx *Context, task *WeakpassTask) (<-chan *parsers.ZombieResult, error) {
+func (e *Engine) WeakpassStream(ctx *Context, task *WeakpassTask) (<-chan *types.ZombieResult, error) {
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
 		return nil, err
 	}
 
-	zombieResultCh := make(chan *parsers.ZombieResult, 100)
+	zombieResultCh := make(chan *types.ZombieResult, 100)
 	go func() {
 		defer close(zombieResultCh)
 		for result := range resultCh {
-			if result.Success() {
-				zombieResultCh <- result.(*Result).ZombieResult()
+			if data, ok := types.ResultData[*types.ZombieResult](result); result.Success() && ok && data != nil {
+				zombieResultCh <- data
 			}
 		}
 	}()

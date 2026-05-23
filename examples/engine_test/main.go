@@ -8,7 +8,8 @@ import (
 )
 
 func main() {
-	fmt.Println("=== 测试 Fingers 引擎功能 ===\n")
+	fmt.Println("=== 测试 Fingers 引擎功能 ===")
+	fmt.Println()
 
 	// 创建配置（使用本地测试数据）
 	config := fingers.NewConfig().WithLocalFile("test_fingers.yaml")

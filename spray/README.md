@@ -320,7 +320,7 @@ type SprayResult struct {
     BodyLength   int       // 响应体长度
     Frameworks   []string  // 识别的框架
     Extracts     []string  // 提取的信息
-    // ... 更多字段请参考 parsers.SprayResult
+    // ... 更多字段请参考 types.SprayResult
 }
 ```
 

@@ -259,7 +259,7 @@ engine, _ := fingers.NewEngine(config)
 // pkg/cyberhub/types.go
 type FingerprintResponse struct {
     *fingers.Finger `json:",inline" yaml:",inline"`
-    Alias           *alias.Alias `json:"alias,omitempty" yaml:"alias,omitempty"`
+    Alias           *types.Alias `json:"alias,omitempty" yaml:"alias,omitempty"`
 }
 ```
 
@@ -301,7 +301,7 @@ sdk/
 ```go
 type TargetResult struct {
     Target  string                    // 扫描的目标 URL 或 target
-    Results []*common.ServiceResult   // 指纹识别结果
+    Results []*types.ServiceResult    // 指纹识别结果
     Error   error                     // 错误信息（如果有）
 }
 

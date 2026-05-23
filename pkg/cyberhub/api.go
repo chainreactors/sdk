@@ -1,14 +1,10 @@
 package cyberhub
 
-import (
-	"github.com/chainreactors/fingers/alias"
-	"github.com/chainreactors/fingers/fingers"
-	"github.com/chainreactors/neutron/templates"
-)
+import "github.com/chainreactors/sdk/pkg/types"
 
 type fingerprintResponse struct {
-	*fingers.Finger `json:",inline" yaml:",inline"`
-	Alias           *alias.Alias `json:"alias,omitempty" yaml:"alias,omitempty"`
+	*types.Finger `json:",inline" yaml:",inline"`
+	Alias         *types.Alias `json:"alias,omitempty" yaml:"alias,omitempty"`
 }
 
 type fingerprintListResponse struct {
@@ -19,7 +15,7 @@ type fingerprintListResponse struct {
 }
 
 type pocResponse struct {
-	*templates.Template `json:",inline" yaml:",inline"`
+	*types.Template `json:",inline" yaml:",inline"`
 }
 
 type pocListResponse struct {

@@ -5,9 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chainreactors/fingers/alias"
-	"github.com/chainreactors/fingers/fingers"
-	"github.com/chainreactors/neutron/templates"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // Provider 是 cyberhub 数据源
@@ -50,17 +48,17 @@ func (p *Provider) client() *client {
 }
 
 // Fingers 导出指纹与别名数据
-func (p *Provider) Fingers(ctx context.Context) (fingers.Fingers, []*alias.Alias, error) {
+func (p *Provider) Fingers(ctx context.Context) (types.Fingers, []*types.Alias, error) {
 	return p.client().exportFingers(ctx, p.filter)
 }
 
 // POCs 导出 POC 模板数据
-func (p *Provider) POCs(ctx context.Context) ([]*templates.Template, error) {
+func (p *Provider) POCs(ctx context.Context) ([]*types.Template, error) {
 	responses, err := p.client().exportPOCs(ctx, p.filter)
 	if err != nil {
 		return nil, err
 	}
-	tpls := make([]*templates.Template, 0, len(responses))
+	tpls := make([]*types.Template, 0, len(responses))
 	for _, resp := range responses {
 		if resp.Template != nil {
 			tpls = append(tpls, resp.Template)

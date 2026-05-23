@@ -4,22 +4,21 @@ import (
 	"context"
 	"testing"
 
-	"github.com/chainreactors/neutron/operators"
-	"github.com/chainreactors/neutron/templates"
 	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func TestConfigSourcesAndTemplateFiltering(t *testing.T) {
-	tpls := []*templates.Template{
-		{Id: "low-id", Info: templates.Info{Name: "Low Template", Severity: "low", Tags: "info"}},
-		{Id: "critical-id", Info: templates.Info{Name: "Critical Template", Severity: "critical", Tags: "rce,cve"}},
-		{Id: "critical-id", Info: templates.Info{Name: "Critical Template", Severity: "critical", Tags: "duplicate"}},
+	tpls := []*types.Template{
+		{Id: "low-id", Info: types.TemplateInfo{Name: "Low Template", Severity: "low", Tags: "info"}},
+		{Id: "critical-id", Info: types.TemplateInfo{Name: "Critical Template", Severity: "critical", Tags: "rce,cve"}},
+		{Id: "critical-id", Info: types.TemplateInfo{Name: "Critical Template", Severity: "critical", Tags: "duplicate"}},
 	}
 
 	cfg := NewConfig().
 		WithTemplates(tpls).
-		WithFilter(func(tpl *templates.Template) bool {
+		WithFilter(func(tpl *types.Template) bool {
 			return tpl.Info.Severity == "critical"
 		})
 
@@ -42,10 +41,10 @@ func TestConfigSourcesAndTemplateFiltering(t *testing.T) {
 }
 
 func TestTemplatesAppendMergeAndFilter(t *testing.T) {
-	first := &templates.Template{Id: "first", Info: templates.Info{Severity: "low"}}
-	second := &templates.Template{Id: "second", Info: templates.Info{Name: "second-name", Severity: "high"}}
+	first := &types.Template{Id: "first", Info: types.TemplateInfo{Severity: "low"}}
+	second := &types.Template{Id: "second", Info: types.TemplateInfo{Name: "second-name", Severity: "high"}}
 
-	collection := (Templates{}).Append(first).Append(nil).Merge([]*templates.Template{second})
+	collection := (Templates{}).Append(first).Append(nil).Merge([]*types.Template{second})
 	if collection.Len() != 2 {
 		t.Fatalf("collection len = %d, want 2", collection.Len())
 	}
@@ -56,7 +55,7 @@ func TestTemplatesAppendMergeAndFilter(t *testing.T) {
 		t.Fatalf("template should prefer info.name key: %+v", collection.Items)
 	}
 
-	filtered := collection.Filter(func(tpl *templates.Template) bool {
+	filtered := collection.Filter(func(tpl *types.Template) bool {
 		return tpl.Info.Severity == "high"
 	})
 	if filtered.Len() != 1 || filtered.Items["second-name"] != second {
@@ -69,15 +68,15 @@ func TestExecuteTaskAndResultHelpers(t *testing.T) {
 		t.Fatal("expected empty target to fail validation")
 	}
 	task := NewExecuteTask("http://127.0.0.1")
-	task.Templates = []*templates.Template{}
+	task.Templates = []*types.Template{}
 	if err := task.Validate(); err == nil {
 		t.Fatal("expected explicit empty templates to fail validation")
 	}
 
 	matched := &ExecuteResult{
 		success:  true,
-		template: &templates.Template{Id: "demo"},
-		data:     &NeutronResult{Result: &operators.Result{Matched: true}},
+		template: &types.Template{Id: "demo"},
+		data:     &NeutronResult{Result: &types.OperatorResult{Matched: true}},
 	}
 	if !matched.Success() || !matched.Matched() || matched.Template().Id != "demo" || matched.Data() != matched.Result() {
 		t.Fatalf("unexpected matched result helpers: %+v", matched)
@@ -98,7 +97,7 @@ func TestExecuteEmptyEngineReturnsClosedChannel(t *testing.T) {
 func TestExecuteRejectsUnsupportedContextAndTask(t *testing.T) {
 	eng := &Engine{
 		config:    NewConfig(),
-		templates: []*templates.Template{{Id: "demo"}},
+		templates: []*types.Template{{Id: "demo"}},
 	}
 	if _, err := eng.Execute(fakeContext{ctx: context.Background()}, NewExecuteTask("http://127.0.0.1")); err == nil {
 		t.Fatal("expected unsupported context type")

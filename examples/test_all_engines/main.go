@@ -8,7 +8,8 @@ import (
 )
 
 func main() {
-	fmt.Println("=== 测试所有引擎 ===\n")
+	fmt.Println("=== 测试所有引擎 ===")
+	fmt.Println()
 
 	// 创建 SDK 客户端
 	c := client.New()

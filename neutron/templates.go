@@ -1,18 +1,18 @@
 package neutron
 
-import "github.com/chainreactors/neutron/templates"
+import "github.com/chainreactors/sdk/pkg/types"
 
 // Templates wraps neutron templates with helper APIs.
 type Templates struct {
-	Items map[string]*templates.Template
+	Items map[string]*types.Template
 }
 
 // Templates returns template list.
-func (t Templates) Templates() []*templates.Template {
+func (t Templates) Templates() []*types.Template {
 	if len(t.Items) == 0 {
 		return nil
 	}
-	out := make([]*templates.Template, 0, len(t.Items))
+	out := make([]*types.Template, 0, len(t.Items))
 	for _, item := range t.Items {
 		out = append(out, item)
 	}
@@ -25,12 +25,12 @@ func (t Templates) Len() int {
 }
 
 // Append adds a single template.
-func (t Templates) Append(item *templates.Template) Templates {
+func (t Templates) Append(item *types.Template) Templates {
 	if item == nil {
 		return t
 	}
 	if t.Items == nil {
-		t.Items = make(map[string]*templates.Template)
+		t.Items = make(map[string]*types.Template)
 	}
 	key := templateKey(item)
 	if key != "" {
@@ -40,12 +40,12 @@ func (t Templates) Append(item *templates.Template) Templates {
 }
 
 // Merge appends templates into Templates.
-func (t Templates) Merge(other []*templates.Template) Templates {
+func (t Templates) Merge(other []*types.Template) Templates {
 	if len(other) == 0 {
 		return t
 	}
 	if t.Items == nil {
-		t.Items = make(map[string]*templates.Template)
+		t.Items = make(map[string]*types.Template)
 	}
 	for _, item := range other {
 		t = t.Append(item)
@@ -54,12 +54,12 @@ func (t Templates) Merge(other []*templates.Template) Templates {
 }
 
 // Filter returns a filtered copy of Templates using predicate.
-func (t Templates) Filter(predicate func(*templates.Template) bool) Templates {
+func (t Templates) Filter(predicate func(*types.Template) bool) Templates {
 	if predicate == nil || len(t.Items) == 0 {
 		return t
 	}
 	filtered := Templates{
-		Items: make(map[string]*templates.Template),
+		Items: make(map[string]*types.Template),
 	}
 	for key, item := range t.Items {
 		if predicate(item) {
@@ -69,7 +69,7 @@ func (t Templates) Filter(predicate func(*templates.Template) bool) Templates {
 	return filtered
 }
 
-func templateKey(item *templates.Template) string {
+func templateKey(item *types.Template) string {
 	if item == nil {
 		return ""
 	}

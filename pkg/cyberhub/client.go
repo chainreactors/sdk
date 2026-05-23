@@ -13,8 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chainreactors/fingers/alias"
-	"github.com/chainreactors/fingers/fingers"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 type client struct {
@@ -37,7 +36,7 @@ func newClient(baseURL, apiKey string, timeout time.Duration) *client {
 	}
 }
 
-func (c *client) exportFingers(ctx context.Context, filter *ExportFilter) (fingers.Fingers, []*alias.Alias, error) {
+func (c *client) exportFingers(ctx context.Context, filter *ExportFilter) (types.Fingers, []*types.Alias, error) {
 	params := url.Values{}
 	params.Set("with_fingerprint", "true")
 	applyFilterParams(params, filter)
@@ -49,8 +48,8 @@ func (c *client) exportFingers(ctx context.Context, filter *ExportFilter) (finge
 		return nil, nil, fmt.Errorf("export fingers failed: %w", err)
 	}
 
-	var allFingers fingers.Fingers
-	var allAliases []*alias.Alias
+	var allFingers types.Fingers
+	var allAliases []*types.Alias
 	for _, resp := range response.Fingerprints {
 		if resp.Finger != nil {
 			allFingers = append(allFingers, resp.Finger)
@@ -239,4 +238,3 @@ func (c *client) doRequest(ctx context.Context, method, endpoint string, body io
 
 	return nil
 }
-

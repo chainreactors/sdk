@@ -11,11 +11,12 @@ import (
 	"github.com/chainreactors/gogo/v2/engine"
 	"github.com/chainreactors/gogo/v2/pkg"
 	"github.com/chainreactors/logs"
-	neutronTemplates "github.com/chainreactors/neutron/templates"
-	"github.com/chainreactors/parsers"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
 	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/association"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/panjf2000/ants/v2"
 )
 
@@ -27,8 +28,10 @@ import (
 type GogoEngine struct {
 	mu               sync.Mutex
 	inited           bool
+	provider         *cyberhub.Provider
 	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
 	neutronEngine    *neutron.Engine    // 可选的 neutron 引擎
+	index            *association.Index
 	resourceProvider func(string) []byte
 	capacity         *sdk.Capacity
 }
@@ -41,8 +44,10 @@ func NewGogoEngine(config *Config) *GogoEngine {
 
 	e := &GogoEngine{
 		inited:           false,
+		provider:         config.Provider,
 		fingersEngine:    config.FingersEngine,
 		neutronEngine:    config.NeutronEngine,
+		index:            config.Index,
 		resourceProvider: config.ResourceProvider,
 	}
 	if config.Capacity > 0 {
@@ -52,8 +57,8 @@ func NewGogoEngine(config *Config) *GogoEngine {
 }
 
 // buildTemplateMap 构建 template map（按 finger、id、tag 分类）
-func buildTemplateMap(templates []*neutronTemplates.Template) map[string][]*neutronTemplates.Template {
-	templateMap := make(map[string][]*neutronTemplates.Template)
+func buildTemplateMap(templates []*types.Template) map[string][]*types.Template {
+	templateMap := make(map[string][]*types.Template)
 
 	for _, template := range templates {
 		// 按 fingers 归类
@@ -98,6 +103,22 @@ func (e *GogoEngine) Init() error {
 		return nil
 	}
 
+	// 自动从 Provider 创建 fingers/neutron 引擎
+	if e.provider != nil {
+		if e.fingersEngine == nil {
+			fc := sdkfingers.NewConfig().WithProvider(e.provider)
+			if eng, err := sdkfingers.NewEngine(fc); err == nil {
+				e.fingersEngine = eng
+			}
+		}
+		if e.neutronEngine == nil {
+			nc := neutron.NewConfig().WithProvider(e.provider)
+			if eng, err := neutron.NewEngine(nc); err == nil {
+				e.neutronEngine = eng
+			}
+		}
+	}
+
 	// 尝试加载端口配置，失败时使用默认配置
 	if err := pkg.LoadPortConfig(""); err != nil {
 		// 使用默认端口配置，不阻止初始化
@@ -124,6 +145,13 @@ func (e *GogoEngine) Init() error {
 		if err := pkg.LoadNeutron(""); err != nil {
 			logs.Log.Debugf("load neutron failed, using built-in: %v", err)
 		}
+	}
+
+	// 自动构建关联索引
+	if e.index == nil && e.fingersEngine != nil && e.neutronEngine != nil {
+		idx := association.NewIndex()
+		idx.BuildWithFingers(e.fingersEngine.Fingers(), e.fingersEngine.Aliases(), e.neutronEngine.Get())
+		e.index = idx
 	}
 
 	e.inited = true
@@ -202,6 +230,11 @@ func (e *GogoEngine) Capacity() *sdk.Capacity {
 	return e.capacity
 }
 
+// Index returns the association index, or nil if not built.
+func (e *GogoEngine) Index() *association.Index {
+	return e.index
+}
+
 func (e *GogoEngine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
 	if err := e.Init(); err != nil {
 		return nil, err
@@ -240,28 +273,8 @@ func (e *GogoEngine) Close() error {
 // Result 实现
 // ========================================
 
-// Result GoGo 扫描结果
-type Result struct {
-	success bool
-	err     error
-	data    *parsers.GOGOResult
-}
-
-func (r *Result) Success() bool {
-	return r.success
-}
-
-func (r *Result) Error() error {
-	return r.err
-}
-
-func (r *Result) Data() interface{} {
-	return r.data
-}
-
-// GOGOResult 获取原始结果（便捷方法）
-func (r *Result) GOGOResult() *parsers.GOGOResult {
-	return r.data
+func newResult(success bool, err error, data *types.GOGOResult) sdk.Result {
+	return types.NewResult(success, err, data)
 }
 
 // ========================================
@@ -274,7 +287,7 @@ func (e *GogoEngine) executeScan(ctx *Context, task *ScanTask) (<-chan sdk.Resul
 	}
 	runCtx := ctx
 
-	workflow := &pkg.Workflow{
+	workflow := &types.Workflow{
 		IP:    task.IP,
 		Ports: task.Ports,
 	}
@@ -290,10 +303,10 @@ func (e *GogoEngine) executeWorkflow(ctx *Context, task *WorkflowTask) (<-chan s
 	return e.workflowStream(runCtx.Context(), task.Workflow, runCtx)
 }
 
-func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow, runCtx *Context) (<-chan sdk.Result, error) {
+func (e *GogoEngine) workflowStream(ctx context.Context, workflow *types.Workflow, runCtx *Context) (<-chan sdk.Result, error) {
 	// 创建基础配置
 	if runCtx.opt == nil {
-		runCtx.opt = cloneRunnerOption(pkg.DefaultRunnerOption)
+		runCtx.opt = types.NewDefaultGogoOption()
 	}
 	baseConfig := pkg.NewDefaultConfig(runCtx.opt)
 	preparedConfig := workflow.PrepareConfig(baseConfig)
@@ -371,10 +384,7 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow,
 				atomic.AddInt32(&aliveCount, 1)
 				// 发送结果到 channel
 				select {
-				case resultCh <- &Result{
-					success: true,
-					data:    result.GOGOResult,
-				}:
+				case resultCh <- newResult(true, nil, result.GOGOResult):
 				case <-ctx.Done():
 					return
 				default:
@@ -425,7 +435,7 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *pkg.Workflow,
 // ========================================
 
 // ScanOne 单目标扫描
-func (e *GogoEngine) ScanOne(ctx *Context, ip, port string) *parsers.GOGOResult {
+func (e *GogoEngine) ScanOne(ctx *Context, ip, port string) *types.GOGOResult {
 	result := pkg.NewResult(ip, port)
 	if ctx == nil {
 		ctx = NewContext()
@@ -448,7 +458,7 @@ func (e *GogoEngine) ScanOne(ctx *Context, ip, port string) *parsers.GOGOResult 
 }
 
 // Scan 批量端口扫描（同步）
-func (e *GogoEngine) Scan(ctx *Context, ip, ports string) ([]*parsers.GOGOResult, error) {
+func (e *GogoEngine) Scan(ctx *Context, ip, ports string) ([]*types.GOGOResult, error) {
 	if err := e.Init(); err != nil {
 		return nil, err
 	}
@@ -463,10 +473,10 @@ func (e *GogoEngine) Scan(ctx *Context, ip, ports string) ([]*parsers.GOGOResult
 		return nil, err
 	}
 
-	var gogoResults []*parsers.GOGOResult
+	var gogoResults []*types.GOGOResult
 	for r := range resultCh {
-		if r.Success() {
-			gogoResults = append(gogoResults, r.(*Result).GOGOResult())
+		if result, ok := types.ResultData[*types.GOGOResult](r); r.Success() && ok && result != nil {
+			gogoResults = append(gogoResults, result)
 		}
 	}
 
@@ -474,7 +484,7 @@ func (e *GogoEngine) Scan(ctx *Context, ip, ports string) ([]*parsers.GOGOResult
 }
 
 // ScanStream 批量端口扫描（流式）
-func (e *GogoEngine) ScanStream(ctx *Context, ip, ports string) (<-chan *parsers.GOGOResult, error) {
+func (e *GogoEngine) ScanStream(ctx *Context, ip, ports string) (<-chan *types.GOGOResult, error) {
 	if err := e.Init(); err != nil {
 		return nil, err
 	}
@@ -490,12 +500,12 @@ func (e *GogoEngine) ScanStream(ctx *Context, ip, ports string) (<-chan *parsers
 	}
 
 	// 转换为 GOGOResult channel
-	gogoResultCh := make(chan *parsers.GOGOResult, 100)
+	gogoResultCh := make(chan *types.GOGOResult, 100)
 	go func() {
 		defer close(gogoResultCh)
 		for result := range resultCh {
-			if result.Success() {
-				gogoResultCh <- result.(*Result).GOGOResult()
+			if data, ok := types.ResultData[*types.GOGOResult](result); result.Success() && ok && data != nil {
+				gogoResultCh <- data
 			}
 		}
 	}()
@@ -504,7 +514,7 @@ func (e *GogoEngine) ScanStream(ctx *Context, ip, ports string) (<-chan *parsers
 }
 
 // Workflow 工作流扫描（同步）
-func (e *GogoEngine) Workflow(ctx *Context, workflow *pkg.Workflow) ([]*parsers.GOGOResult, error) {
+func (e *GogoEngine) Workflow(ctx *Context, workflow *types.Workflow) ([]*types.GOGOResult, error) {
 	if err := e.Init(); err != nil {
 		return nil, err
 	}
@@ -519,10 +529,10 @@ func (e *GogoEngine) Workflow(ctx *Context, workflow *pkg.Workflow) ([]*parsers.
 		return nil, err
 	}
 
-	var gogoResults []*parsers.GOGOResult
+	var gogoResults []*types.GOGOResult
 	for r := range resultCh {
-		if r.Success() {
-			gogoResults = append(gogoResults, r.(*Result).GOGOResult())
+		if result, ok := types.ResultData[*types.GOGOResult](r); r.Success() && ok && result != nil {
+			gogoResults = append(gogoResults, result)
 		}
 	}
 
@@ -530,7 +540,7 @@ func (e *GogoEngine) Workflow(ctx *Context, workflow *pkg.Workflow) ([]*parsers.
 }
 
 // WorkflowStream 工作流扫描（流式）
-func (e *GogoEngine) WorkflowStream(ctx *Context, workflow *pkg.Workflow) (<-chan *parsers.GOGOResult, error) {
+func (e *GogoEngine) WorkflowStream(ctx *Context, workflow *types.Workflow) (<-chan *types.GOGOResult, error) {
 	if err := e.Init(); err != nil {
 		return nil, err
 	}
@@ -546,12 +556,12 @@ func (e *GogoEngine) WorkflowStream(ctx *Context, workflow *pkg.Workflow) (<-cha
 	}
 
 	// 转换为 GOGOResult channel
-	gogoResultCh := make(chan *parsers.GOGOResult, 100)
+	gogoResultCh := make(chan *types.GOGOResult, 100)
 	go func() {
 		defer close(gogoResultCh)
 		for result := range resultCh {
-			if result.Success() {
-				gogoResultCh <- result.(*Result).GOGOResult()
+			if data, ok := types.ResultData[*types.GOGOResult](result); result.Success() && ok && data != nil {
+				gogoResultCh <- data
 			}
 		}
 	}()

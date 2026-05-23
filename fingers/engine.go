@@ -16,6 +16,7 @@ import (
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/resources"
 	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/utils/httputils"
 )
 
@@ -27,7 +28,7 @@ import (
 type Engine struct {
 	engine  *fingersLib.Engine
 	config  *Config
-	aliases []*alias.Alias // 原始别名数据
+	aliases []*types.Alias // 原始别名数据
 }
 
 // NewEngine 创建一个新的 Engine 实例
@@ -96,12 +97,25 @@ func NewEngineWithFingers(fingers FullFingers) (*Engine, error) {
 // ========================================
 
 // Get 获取底层的 fingers.Engine
-func (e *Engine) Get() *fingersLib.Engine {
+func (e *Engine) Get() *types.FingersLibEngine {
 	return e.engine
 }
 
+// Aliases 获取原始别名数据
+func (e *Engine) Aliases() []*types.Alias {
+	return e.aliases
+}
+
+// Fingers 获取原始指纹数据
+func (e *Engine) Fingers() types.Fingers {
+	if e == nil || e.config == nil {
+		return nil
+	}
+	return e.config.FullFingers.Fingers()
+}
+
 // GetFingersEngine 获取 FingersEngine（用于 gogo 集成）
-func (e *Engine) GetFingersEngine() (*fingersEngine.FingersEngine, error) {
+func (e *Engine) GetFingersEngine() (*types.FingersMatchEngine, error) {
 	if e.engine == nil {
 		// 返回 nil，允许引擎在未配置时也能使用
 		return nil, nil
@@ -112,7 +126,7 @@ func (e *Engine) GetFingersEngine() (*fingersEngine.FingersEngine, error) {
 		return nil, nil
 	}
 
-	return impl.(*fingersEngine.FingersEngine), nil
+	return impl.(*types.FingersMatchEngine), nil
 }
 
 // Reload 重新加载指纹
@@ -135,7 +149,7 @@ func (e *Engine) Reload(ctx context.Context) error {
 }
 
 // buildEngineFromFingers 从指纹列表构建引擎
-func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alias, matchDetail bool) (*fingersLib.Engine, error) {
+func buildEngineFromFingers(fingers types.Fingers, aliases []*types.Alias, matchDetail bool) (*fingersLib.Engine, error) {
 	engine := &fingersLib.Engine{
 		EnginesImpl:  make(map[string]fingersLib.EngineImpl),
 		Enabled:      make(map[string]bool),
@@ -147,7 +161,7 @@ func buildEngineFromFingers(fingers fingersEngine.Fingers, aliases []*alias.Alia
 	engine.EnginesImpl["favicon"] = faviconEngine
 	engine.Capabilities["favicon"] = faviconEngine.Capability()
 
-	var httpFingers, socketFingers fingersEngine.Fingers
+	var httpFingers, socketFingers types.Fingers
 	for _, finger := range fingers {
 		if finger.Protocol == "http" {
 			httpFingers = append(httpFingers, finger)
@@ -201,7 +215,7 @@ func (e *Engine) Close() error {
 // ========================================
 
 // Match 匹配单个 HTTP 响应原始数据（被动指纹识别 - Level 0）
-func (e *Engine) Match(data []byte) (common.Frameworks, error) {
+func (e *Engine) Match(data []byte) (types.Frameworks, error) {
 	if e.engine == nil {
 		// 返回空结果，允许引擎在未配置时也能使用
 		return nil, nil
@@ -212,10 +226,11 @@ func (e *Engine) Match(data []byte) (common.Frameworks, error) {
 // MatchFavicon 匹配 Favicon 指纹（被动识别）
 // 参数:
 //   - data: favicon 图标的原始字节数据
+//
 // 返回:
-//   - common.Frameworks: 匹配到的指纹列表
+//   - types.Frameworks: 匹配到的指纹列表
 //   - error: 错误信息
-func (e *Engine) MatchFavicon(data []byte) (common.Frameworks, error) {
+func (e *Engine) MatchFavicon(data []byte) (types.Frameworks, error) {
 	if e.engine == nil {
 		// 返回空结果，允许引擎在未配置时也能使用
 		return nil, nil
@@ -226,10 +241,11 @@ func (e *Engine) MatchFavicon(data []byte) (common.Frameworks, error) {
 // MatchHTTP 匹配 HTTP 响应指纹（被动识别）
 // 参数:
 //   - resp: HTTP 响应对象
+//
 // 返回:
-//   - common.Frameworks: 匹配到的指纹列表
+//   - types.Frameworks: 匹配到的指纹列表
 //   - error: 错误信息
-func (e *Engine) MatchHTTP(resp *http.Response) (common.Frameworks, error) {
+func (e *Engine) MatchHTTP(resp *http.Response) (types.Frameworks, error) {
 	if e.engine == nil {
 		// 返回空结果，允许引擎在未配置时也能使用
 		return nil, nil
@@ -246,6 +262,7 @@ func (e *Engine) MatchHTTP(resp *http.Response) (common.Frameworks, error) {
 // 参数:
 //   - ctx: 上下文（包含 timeout、level 等配置）
 //   - urls: 目标URL列表（如 []string{"http://example.com", "https://example.com:8080"}）
+//
 // 返回:
 //   - []*TargetResult: 每个目标的探测结果
 //   - error: 错误信息（仅在引擎初始化失败等严重错误时返回）
@@ -266,7 +283,7 @@ func (e *Engine) HTTPMatch(ctx *Context, urls []string) ([]*TargetResult, error)
 }
 
 // scanHTTPTarget 扫描单个 HTTP 目标（内部方法）
-func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int, client *http.Client, fEngine *fingersEngine.FingersEngine) *TargetResult {
+func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int, client *http.Client, fEngine *types.FingersMatchEngine) *TargetResult {
 	result := &TargetResult{
 		Target: url,
 	}
@@ -308,7 +325,7 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int, client *htt
 	for _, finger := range fEngine.HTTPFingers {
 		frame, vuln, ok := finger.ActiveMatch(level, sender)
 		if ok && frame != nil {
-			result.Results = append(result.Results, &common.ServiceResult{
+			result.Results = append(result.Results, &types.ServiceResult{
 				Framework: frame,
 				Vuln:      vuln,
 			})
@@ -355,6 +372,7 @@ func (e *Engine) scanServiceTarget(ctx *Context, target string, level int) *Targ
 // 参数:
 //   - ctx: 上下文（包含 timeout、level 等配置）
 //   - targets: 目标地址列表（格式：ip:port 或 host:port，如 []string{"192.168.1.1:80", "example.com:443"}）
+//
 // 返回:
 //   - []*TargetResult: 每个目标的探测结果
 //   - error: 错误信息（仅在引擎初始化失败等严重错误时返回）
@@ -378,6 +396,7 @@ func (e *Engine) ServiceMatch(ctx *Context, targets []string) ([]*TargetResult, 
 // 参数:
 //   - ctx: 上下文（包含 timeout、level 等配置）
 //   - urls: 目标URL列表（如 []string{"http://example.com", "https://example.com:8080"}）
+//
 // 返回:
 //   - <-chan *TargetResult: 结果 channel（每个目标扫描完成后立即发送）
 //   - error: 错误信息（仅在引擎初始化失败等严重错误时返回）
@@ -434,13 +453,16 @@ func (e *Engine) HTTPMatchStream(ctx *Context, urls []string) (<-chan *TargetRes
 // 参数:
 //   - ctx: 上下文（包含 timeout、level 等配置）
 //   - target: 目标地址（格式：ip:port 或 host:port，如 "192.168.1.1:80", "example.com:443"）
+//
 // 返回:
-//   - <-chan *common.ServiceResult: 结果 channel
+//   - <-chan *types.ServiceResult: 结果 channel
 //   - error: 错误信息
+//
 // ServiceMatchStream 通用服务主动探测指纹识别（批量流式版本）
 // 参数:
 //   - ctx: 上下文（包含 timeout、level 等配置）
 //   - targets: 目标地址列表（格式：ip:port 或 host:port，如 []string{"192.168.1.1:80", "example.com:443"}）
+//
 // 返回:
 //   - <-chan *TargetResult: 结果 channel（每个目标扫描完成后立即发送）
 //   - error: 错误信息（仅在引擎初始化失败等严重错误时返回）
@@ -614,8 +636,10 @@ func parseTarget(target string) (host, port string, err error) {
 // 参数:
 //   - base: 基础路径（如 "", "/", "/aaa", "/aaa/"）
 //   - append: 要追加的路径（如 "/nacos/"）
+//
 // 返回:
 //   - 连接后的路径
+//
 // 示例:
 //   - pathJoin("", "/nacos/") → "/nacos/"
 //   - pathJoin("/", "/nacos/") → "/nacos/"

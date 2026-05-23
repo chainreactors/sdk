@@ -29,7 +29,7 @@ func main() {
 	opt := spray.NewDefaultOption()
 	opt.Fuzzy = true
 	ctx := spray.NewContext().
-		SetOption(opt.Option).
+		SetOption(opt).
 		SetThreads(4).
 		SetTimeout(5).
 		SetCrawlPlugin(true).

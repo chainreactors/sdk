@@ -6,7 +6,6 @@ import (
 
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	sdk "github.com/chainreactors/sdk/pkg"
-	"github.com/chainreactors/spray/core"
 )
 
 // ========================================
@@ -92,8 +91,8 @@ func (c *Context) SetMatch(match string) *Context {
 }
 
 // SetOption 设置完整选项
-func (c *Context) SetOption(opt *core.Option) *Context {
-	c.opt = cloneOption(&Option{opt})
+func (c *Context) SetOption(opt *Option) *Context {
+	c.opt = cloneOption(opt)
 	return c
 }
 

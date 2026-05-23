@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/chainreactors/fingers/alias"
-	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // NewConfig 创建默认配置
@@ -34,6 +33,12 @@ func (c *Config) SetEnableEngines(engines []string) *Config {
 	return c
 }
 
+// WithProvider 设置远程数据源
+func (c *Config) WithProvider(p *cyberhub.Provider) *Config {
+	c.Provider = p
+	return c
+}
+
 // WithLocalFile 设置本地文件加载
 func (c *Config) WithLocalFile(filename string) *Config {
 	c.Filename = filename
@@ -43,14 +48,14 @@ func (c *Config) WithLocalFile(filename string) *Config {
 }
 
 // WithFingers 设置指纹数据
-func (c *Config) WithFingers(fingers fingersEngine.Fingers) *Config {
+func (c *Config) WithFingers(fingers types.Fingers) *Config {
 	aliases := c.FullFingers.Aliases()
 	c.FullFingers = (FullFingers{}).Merge(fingers, aliases)
 	return c
 }
 
 // WithAliases 设置别名数据
-func (c *Config) WithAliases(aliases []*alias.Alias) *Config {
+func (c *Config) WithAliases(aliases []*types.Alias) *Config {
 	fingers := c.FullFingers.Fingers()
 	c.FullFingers = (FullFingers{}).Merge(fingers, aliases)
 	return c
@@ -115,8 +120,8 @@ func (c *Config) Load(ctx context.Context) error {
 }
 
 type FullFinger struct {
-	Finger *fingersEngine.Finger
-	Alias  *alias.Alias
+	Finger *types.Finger
+	Alias  *types.Alias
 }
 
 type FullFingers struct {
@@ -124,11 +129,11 @@ type FullFingers struct {
 }
 
 // Fingers returns finger list from FullFingers.
-func (f FullFingers) Fingers() fingersEngine.Fingers {
+func (f FullFingers) Fingers() types.Fingers {
 	if len(f.Items) == 0 {
 		return nil
 	}
-	fingers := make(fingersEngine.Fingers, 0, len(f.Items))
+	fingers := make(types.Fingers, 0, len(f.Items))
 	for _, item := range f.Items {
 		if item == nil || item.Finger == nil {
 			continue
@@ -139,11 +144,11 @@ func (f FullFingers) Fingers() fingersEngine.Fingers {
 }
 
 // Aliases returns alias list from FullFingers.
-func (f FullFingers) Aliases() []*alias.Alias {
+func (f FullFingers) Aliases() []*types.Alias {
 	if len(f.Items) == 0 {
 		return nil
 	}
-	aliases := make([]*alias.Alias, 0, len(f.Items))
+	aliases := make([]*types.Alias, 0, len(f.Items))
 	for _, item := range f.Items {
 		if item == nil || item.Alias == nil {
 			continue
@@ -174,7 +179,7 @@ func (f FullFingers) Append(item *FullFinger) FullFingers {
 }
 
 // Merge appends fingers and aliases into FullFingers.
-func (f FullFingers) Merge(fingers fingersEngine.Fingers, aliases []*alias.Alias) FullFingers {
+func (f FullFingers) Merge(fingers types.Fingers, aliases []*types.Alias) FullFingers {
 	if len(fingers) == 0 && len(aliases) == 0 {
 		return f
 	}

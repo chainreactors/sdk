@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	fingersEngine "github.com/chainreactors/fingers/fingers"
+	"github.com/chainreactors/sdk/pkg/types"
 	"gopkg.in/yaml.v3"
 )
 
 // AddFingers adds fingerprints to the current engine and rebuilds it.
-func (e *Engine) AddFingers(fingers fingersEngine.Fingers) error {
+func (e *Engine) AddFingers(fingers types.Fingers) error {
 	if len(fingers) == 0 {
 		return fmt.Errorf("fingers cannot be empty")
 	}
@@ -51,7 +51,7 @@ func (e *Engine) AddFingersFile(path string) error {
 	return e.AddFingers(fingers)
 }
 
-func loadFingersFromPath(path string) (fingersEngine.Fingers, error) {
+func loadFingersFromPath(path string) (types.Fingers, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to access path %s: %w", path, err)
@@ -76,14 +76,14 @@ func loadFingersFromPath(path string) (fingersEngine.Fingers, error) {
 		yamlFiles = []string{path}
 	}
 
-	var loaded fingersEngine.Fingers
+	var loaded types.Fingers
 	for _, yamlFile := range yamlFiles {
 		file, err := os.Open(yamlFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open file %s: %w", yamlFile, err)
 		}
 
-		var raw []*fingersEngine.Finger
+		var raw []*types.Finger
 		if err := yaml.NewDecoder(file).Decode(&raw); err != nil {
 			file.Close()
 			return nil, fmt.Errorf("failed to decode fingerprints: %w", err)

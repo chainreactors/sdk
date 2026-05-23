@@ -10,6 +10,7 @@ import (
 
 	"github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/gogo"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 var (
@@ -97,7 +98,8 @@ func main() {
 	}
 
 	if !*jsonOut {
-		fmt.Println("✅ GoGo engine initialized\n")
+		fmt.Println("✅ GoGo engine initialized")
+		fmt.Println()
 	}
 
 	// 3. 配置扫描参数
@@ -129,8 +131,8 @@ func main() {
 			continue
 		}
 
-		gogoResult := result.(*gogo.Result).GOGOResult()
-		if gogoResult == nil {
+		gogoResult, ok := types.ResultData[*types.GOGOResult](result)
+		if !ok || gogoResult == nil {
 			continue
 		}
 

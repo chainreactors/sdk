@@ -12,10 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/gogo/v2/pkg"
-	"github.com/chainreactors/parsers"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	sdkneutron "github.com/chainreactors/sdk/neutron"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // TestNewGogoEngine 测试引擎创建
@@ -30,7 +29,7 @@ func TestNewEngine(t *testing.T) {
 	}
 
 	// 测试使用自定义配置
-	opt := &pkg.RunnerOption{
+	opt := &types.GogoOption{
 		VersionLevel: 2,
 		Exploit:      "auto",
 	}
@@ -131,7 +130,7 @@ func TestGogoEngineConcurrentScanScenarios(t *testing.T) {
 					errs <- fmt.Errorf("Scan worker %d produced no open-port results", i)
 				}
 			default:
-				workflow := &pkg.Workflow{Name: "concurrent", IP: host, Ports: port}
+				workflow := &types.Workflow{Name: "concurrent", IP: host, Ports: port}
 				ch, err := engine.WorkflowStream(gogoCtx, workflow)
 				if err != nil {
 					errs <- err
@@ -179,12 +178,12 @@ func TestGogoEngineConcurrentCancelledContexts(t *testing.T) {
 			cancel()
 			gogoCtx := NewContext().SetThreads(2).SetDelay(1).WithContext(cancelled)
 
-			var ch <-chan *parsers.GOGOResult
+			var ch <-chan *types.GOGOResult
 			var err error
 			if i%2 == 0 {
 				ch, err = engine.ScanStream(gogoCtx, host, port)
 			} else {
-				workflow := &pkg.Workflow{Name: "cancelled", IP: host, Ports: port}
+				workflow := &types.Workflow{Name: "cancelled", IP: host, Ports: port}
 				ch, err = engine.WorkflowStream(gogoCtx, workflow)
 			}
 			if err != nil {
@@ -430,7 +429,7 @@ func TestScanTask(t *testing.T) {
 // TestWorkflowTask 测试 WorkflowTask
 func TestWorkflowTask(t *testing.T) {
 	// 测试有效任务
-	workflow := &pkg.Workflow{
+	workflow := &types.Workflow{
 		Name:  "test-workflow",
 		IP:    "127.0.0.1",
 		Ports: "top100",
@@ -453,11 +452,7 @@ func TestWorkflowTask(t *testing.T) {
 // TestResult 测试 Result
 func TestResult(t *testing.T) {
 	// 测试成功结果
-	result1 := &Result{
-		success: true,
-		err:     nil,
-		data:    nil,
-	}
+	result1 := newResult(true, nil, nil)
 	if !result1.Success() {
 		t.Error("Result with success=true should return true from Success()")
 	}
@@ -466,11 +461,7 @@ func TestResult(t *testing.T) {
 	}
 
 	// 测试失败结果
-	result2 := &Result{
-		success: false,
-		err:     context.DeadlineExceeded,
-		data:    nil,
-	}
+	result2 := newResult(false, context.DeadlineExceeded, nil)
 	if result2.Success() {
 		t.Error("Result with success=false should return false from Success()")
 	}

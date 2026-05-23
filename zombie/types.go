@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/chainreactors/parsers"
 	sdk "github.com/chainreactors/sdk/pkg"
 )
 
@@ -166,26 +165,4 @@ func (t *WeakpassTask) Validate() error {
 		}
 	}
 	return nil
-}
-
-type Result struct {
-	success bool
-	err     error
-	data    *parsers.ZombieResult
-}
-
-func (r *Result) Success() bool {
-	return r.success
-}
-
-func (r *Result) Error() error {
-	return r.err
-}
-
-func (r *Result) Data() interface{} {
-	return r.data
-}
-
-func (r *Result) ZombieResult() *parsers.ZombieResult {
-	return r.data
 }

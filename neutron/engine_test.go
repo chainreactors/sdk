@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/chainreactors/neutron/templates"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func TestConfigWithCapacity(t *testing.T) {
@@ -29,10 +29,10 @@ func TestSetCapacityPostCreation(t *testing.T) {
 }
 
 func TestCapacityContextCancellation(t *testing.T) {
-	dummyTemplate := &templates.Template{Id: "test-capacity"}
+	dummyTemplate := &types.Template{Id: "test-capacity"}
 	engine := &Engine{
 		config:    NewConfig(),
-		templates: []*templates.Template{dummyTemplate},
+		templates: []*types.Template{dummyTemplate},
 	}
 	engine.SetCapacity(1)
 

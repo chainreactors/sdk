@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/parsers"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // TestNewSprayEngine 测试引擎创建
@@ -186,7 +186,7 @@ func TestSprayEngineConcurrentCancelledContexts(t *testing.T) {
 			cancel()
 			sprayCtx := NewContext().SetThreads(2).SetTimeout(1).WithContext(cancelled)
 
-			var ch <-chan *parsers.SprayResult
+			var ch <-chan *types.SprayResult
 			var err error
 			if i%2 == 0 {
 				ch, err = engine.CheckStream(sprayCtx, []string{server.URL})
@@ -289,7 +289,7 @@ func TestSprayEngineBruteBatchUsesRunnerTaskPool(t *testing.T) {
 
 	adminHits := make(map[string]bool)
 	for result := range resultCh {
-		sprayResult := result.(*Result).SprayResult()
+		sprayResult, _ := types.ResultData[*types.SprayResult](result)
 		if result.Success() && sprayResult != nil && strings.HasSuffix(sprayResult.UrlString, "/admin") {
 			adminHits[pkgBaseURL(sprayResult.UrlString)] = true
 		}
@@ -590,11 +590,7 @@ func TestBruteTask(t *testing.T) {
 // TestResult 测试 Result
 func TestResult(t *testing.T) {
 	// 测试成功结果
-	result1 := &Result{
-		success: true,
-		err:     nil,
-		data:    nil,
-	}
+	result1 := newResult(true, nil, nil)
 	if !result1.Success() {
 		t.Error("Result with success=true should return true from Success()")
 	}
@@ -603,11 +599,7 @@ func TestResult(t *testing.T) {
 	}
 
 	// 测试失败结果
-	result2 := &Result{
-		success: false,
-		err:     context.DeadlineExceeded,
-		data:    nil,
-	}
+	result2 := newResult(false, context.DeadlineExceeded, nil)
 	if result2.Success() {
 		t.Error("Result with success=false should return false from Success()")
 	}

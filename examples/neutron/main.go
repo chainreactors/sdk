@@ -7,10 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/chainreactors/neutron/protocols"
-	neutronTemplates "github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 var (
@@ -67,7 +66,7 @@ func main() {
 		if *source != "" {
 			filter.WithSources(*source)
 		}
-		config.Provider = cyberhub.NewProvider(*cyberhubURL, *apiKey).WithFilter(filter)
+		config.WithProvider(cyberhub.NewProvider(*cyberhubURL, *apiKey).WithFilter(filter))
 		fmt.Printf("Loading POCs from Cyberhub (%s)...\n", *cyberhubURL)
 	} else if *localPath != "" {
 		config.WithLocalFile(*localPath)
@@ -120,7 +119,7 @@ func main() {
 
 		result, err := t.Execute(*target, nil)
 		if err != nil {
-			if err == protocols.OpsecError {
+			if err == types.OpsecError {
 				continue // Skip opsec POCs silently
 			}
 			if !*jsonOut {
@@ -167,12 +166,12 @@ func main() {
 	}
 }
 
-func filterTemplates(templates []*neutronTemplates.Template, severities, tags, pocID string) []*neutronTemplates.Template {
+func filterTemplates(templates []*types.Template, severities, tags, pocID string) []*types.Template {
 	if severities == "" && tags == "" && pocID == "" {
 		return templates
 	}
 
-	var filtered []*neutronTemplates.Template
+	var filtered []*types.Template
 
 	// Parse filters
 	severityList := []string{}
@@ -234,7 +233,7 @@ func filterTemplates(templates []*neutronTemplates.Template, severities, tags, p
 	return filtered
 }
 
-func listPOCsFunc(templates []*neutronTemplates.Template, jsonOut bool) {
+func listPOCsFunc(templates []*types.Template, jsonOut bool) {
 	if jsonOut {
 		output := []map[string]interface{}{}
 		for _, t := range templates {

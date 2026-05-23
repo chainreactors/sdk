@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/chainreactors/parsers"
+	"github.com/chainreactors/sdk/pkg/types"
 	zombiecore "github.com/chainreactors/zombie/core"
 	zombiepkg "github.com/chainreactors/zombie/pkg"
 )
@@ -73,7 +73,7 @@ func TestExpandTasksUsesExplicitAuthsAndNoUnauth(t *testing.T) {
 	if got.IP != "127.0.0.1" || got.Service != "ssh" || got.Username != "root" || got.Password != "toor" {
 		t.Fatalf("unexpected expanded zombie task: %+v", got)
 	}
-	if got.Mod != parsers.ZombieModBrute {
+	if got.Mod != types.ZombieModBrute {
 		t.Fatalf("expected brute task, got %v", got.Mod)
 	}
 }

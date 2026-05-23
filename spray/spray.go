@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/chainreactors/logs"
-	"github.com/chainreactors/parsers"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/spray/core"
 	"github.com/chainreactors/spray/core/baseline"
 	"github.com/chainreactors/spray/core/ihttp"
@@ -114,10 +114,10 @@ func (e *SprayEngine) configureSDKGlobals() {
 	logs.Log.SetColor(false)
 }
 
-func combinedReconExtractors() []*parsers.Extractor {
+func combinedReconExtractors() []*types.Extractor {
 	pentestExtractors := pkg.ExtractRegexps["pentest"]
 	infoExtractors := pkg.ExtractRegexps["info"]
-	reconExtractors := make([]*parsers.Extractor, 0, len(pentestExtractors)+len(infoExtractors))
+	reconExtractors := make([]*types.Extractor, 0, len(pentestExtractors)+len(infoExtractors))
 	reconExtractors = append(reconExtractors, pentestExtractors...)
 	reconExtractors = append(reconExtractors, infoExtractors...)
 	return reconExtractors
@@ -257,28 +257,8 @@ func (e *SprayEngine) Close() error {
 // Result 实现
 // ========================================
 
-// Result Spray 检测结果
-type Result struct {
-	success bool
-	err     error
-	data    *parsers.SprayResult
-}
-
-func (r *Result) Success() bool {
-	return r.success
-}
-
-func (r *Result) Error() error {
-	return r.err
-}
-
-func (r *Result) Data() interface{} {
-	return r.data
-}
-
-// SprayResult 获取原始结果（便捷方法）
-func (r *Result) SprayResult() *parsers.SprayResult {
-	return r.data
+func newResult(success bool, err error, data *types.SprayResult) sdk.Result {
+	return types.NewResult(success, err, data)
 }
 
 func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan sdk.Result) {
@@ -286,10 +266,7 @@ func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan 
 	go func() {
 		for bl := range runner.OutputCh {
 			select {
-			case ch <- &Result{
-				success: bl.IsValid,
-				data:    bl.SprayResult,
-			}:
+			case ch <- newResult(bl.IsValid, nil, bl.SprayResult):
 				runner.OutWg.Done()
 			case <-ctx.Done():
 				runner.OutWg.Done()
@@ -302,10 +279,7 @@ func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan 
 	go func() {
 		for bl := range runner.FuzzyCh {
 			select {
-			case ch <- &Result{
-				success: bl.IsValid,
-				data:    bl.SprayResult,
-			}:
+			case ch <- newResult(bl.IsValid, nil, bl.SprayResult):
 				runner.OutWg.Done()
 			case <-ctx.Done():
 				runner.OutWg.Done()
@@ -391,18 +365,18 @@ func (e *SprayEngine) execute(ctx *Context, taskType string, urls []string, word
 // ========================================
 
 // Check URL 批量检测（同步）
-func (e *SprayEngine) Check(ctx *Context, urls []string) ([]*parsers.SprayResult, error) {
+func (e *SprayEngine) Check(ctx *Context, urls []string) ([]*types.SprayResult, error) {
 	task := NewCheckTask(urls)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
 		return nil, err
 	}
 
-	var sprayResults []*parsers.SprayResult
+	var sprayResults []*types.SprayResult
 	for r := range resultCh {
 		// 返回所有结果，无论是否成功/有效
 		// URL存活检测需要看到所有URL的状态，而不仅仅是有效的
-		if result := r.(*Result).SprayResult(); result != nil {
+		if result, ok := types.ResultData[*types.SprayResult](r); ok && result != nil {
 			sprayResults = append(sprayResults, result)
 		}
 	}
@@ -411,7 +385,7 @@ func (e *SprayEngine) Check(ctx *Context, urls []string) ([]*parsers.SprayResult
 }
 
 // CheckStream URL 批量检测（流式）
-func (e *SprayEngine) CheckStream(ctx *Context, urls []string) (<-chan *parsers.SprayResult, error) {
+func (e *SprayEngine) CheckStream(ctx *Context, urls []string) (<-chan *types.SprayResult, error) {
 	task := NewCheckTask(urls)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -419,12 +393,12 @@ func (e *SprayEngine) CheckStream(ctx *Context, urls []string) (<-chan *parsers.
 	}
 
 	// 转换为 SprayResult channel
-	sprayResultCh := make(chan *parsers.SprayResult, 1)
+	sprayResultCh := make(chan *types.SprayResult, 1)
 	go func() {
 		defer close(sprayResultCh)
 		for result := range resultCh {
-			if result.Success() {
-				sprayResultCh <- result.(*Result).SprayResult()
+			if data, ok := types.ResultData[*types.SprayResult](result); result.Success() && ok && data != nil {
+				sprayResultCh <- data
 			}
 		}
 	}()
@@ -433,17 +407,17 @@ func (e *SprayEngine) CheckStream(ctx *Context, urls []string) (<-chan *parsers.
 }
 
 // Brute 暴力破解（同步）
-func (e *SprayEngine) Brute(ctx *Context, baseURL string, wordlist []string) ([]*parsers.SprayResult, error) {
+func (e *SprayEngine) Brute(ctx *Context, baseURL string, wordlist []string) ([]*types.SprayResult, error) {
 	task := NewBruteTask(baseURL, wordlist)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
 		return nil, err
 	}
 
-	var sprayResults []*parsers.SprayResult
+	var sprayResults []*types.SprayResult
 	for r := range resultCh {
 		// 返回所有结果，无论是否成功/有效
-		if result := r.(*Result).SprayResult(); result != nil {
+		if result, ok := types.ResultData[*types.SprayResult](r); ok && result != nil {
 			sprayResults = append(sprayResults, result)
 		}
 	}
@@ -451,16 +425,16 @@ func (e *SprayEngine) Brute(ctx *Context, baseURL string, wordlist []string) ([]
 	return sprayResults, nil
 }
 
-func (e *SprayEngine) BruteMany(ctx *Context, baseURLs []string, wordlist []string) ([]*parsers.SprayResult, error) {
+func (e *SprayEngine) BruteMany(ctx *Context, baseURLs []string, wordlist []string) ([]*types.SprayResult, error) {
 	task := NewBruteTasks(baseURLs, wordlist)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
 		return nil, err
 	}
 
-	var sprayResults []*parsers.SprayResult
+	var sprayResults []*types.SprayResult
 	for r := range resultCh {
-		if result := r.(*Result).SprayResult(); result != nil {
+		if result, ok := types.ResultData[*types.SprayResult](r); ok && result != nil {
 			sprayResults = append(sprayResults, result)
 		}
 	}
@@ -469,7 +443,7 @@ func (e *SprayEngine) BruteMany(ctx *Context, baseURLs []string, wordlist []stri
 }
 
 // BruteStream 暴力破解（流式）
-func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []string) (<-chan *parsers.SprayResult, error) {
+func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []string) (<-chan *types.SprayResult, error) {
 	task := NewBruteTask(baseURL, wordlist)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -477,12 +451,12 @@ func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []strin
 	}
 
 	// 转换为 SprayResult channel
-	sprayResultCh := make(chan *parsers.SprayResult)
+	sprayResultCh := make(chan *types.SprayResult)
 	go func() {
 		defer close(sprayResultCh)
 		for result := range resultCh {
-			if result.Success() {
-				sprayResultCh <- result.(*Result).SprayResult()
+			if data, ok := types.ResultData[*types.SprayResult](result); result.Success() && ok && data != nil {
+				sprayResultCh <- data
 			}
 		}
 	}()
@@ -490,19 +464,19 @@ func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []strin
 	return sprayResultCh, nil
 }
 
-func (e *SprayEngine) BruteManyStream(ctx *Context, baseURLs []string, wordlist []string) (<-chan *parsers.SprayResult, error) {
+func (e *SprayEngine) BruteManyStream(ctx *Context, baseURLs []string, wordlist []string) (<-chan *types.SprayResult, error) {
 	task := NewBruteTasks(baseURLs, wordlist)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
 		return nil, err
 	}
 
-	sprayResultCh := make(chan *parsers.SprayResult)
+	sprayResultCh := make(chan *types.SprayResult)
 	go func() {
 		defer close(sprayResultCh)
 		for result := range resultCh {
-			if result.Success() {
-				sprayResultCh <- result.(*Result).SprayResult()
+			if data, ok := types.ResultData[*types.SprayResult](result); result.Success() && ok && data != nil {
+				sprayResultCh <- data
 			}
 		}
 	}()

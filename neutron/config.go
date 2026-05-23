@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chainreactors/neutron/templates"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // NewConfig 创建默认配置
@@ -20,8 +21,14 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// WithProvider 设置远程数据源
+func (c *Config) WithProvider(p *cyberhub.Provider) *Config {
+	c.Provider = p
+	return c
+}
+
 // WithTemplates 设置已加载的模板
-func (c *Config) WithTemplates(tpls []*templates.Template) *Config {
+func (c *Config) WithTemplates(tpls []*types.Template) *Config {
 	c.Templates = (Templates{}).Merge(tpls)
 	return c
 }
@@ -35,7 +42,7 @@ func (c *Config) WithLocalFile(path string) *Config {
 }
 
 // WithFilter filters current Templates using predicate.
-func (c *Config) WithFilter(predicate func(*templates.Template) bool) *Config {
+func (c *Config) WithFilter(predicate func(*types.Template) bool) *Config {
 	if c == nil {
 		return c
 	}

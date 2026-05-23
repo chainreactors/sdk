@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chainreactors/neutron/operators"
-	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/neutron/templates"
 	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // ========================================
@@ -60,15 +58,15 @@ func (c *Context) Context() context.Context {
 
 // NeutronResult 聚合单次模板执行的完整结果
 type NeutronResult struct {
-	*operators.Result
-	Events []*protocols.ResultEvent
+	Result *types.OperatorResult
+	Events []*types.ResultEvent
 }
 
 // ExecuteResult POC 执行结果
 type ExecuteResult struct {
 	success  bool
 	err      error
-	template *templates.Template
+	template *types.Template
 	data     *NeutronResult
 }
 
@@ -85,7 +83,7 @@ func (r *ExecuteResult) Data() interface{} {
 }
 
 // Template 返回执行的模板
-func (r *ExecuteResult) Template() *templates.Template {
+func (r *ExecuteResult) Template() *types.Template {
 	return r.template
 }
 
@@ -96,7 +94,7 @@ func (r *ExecuteResult) Result() *NeutronResult {
 
 // Matched 是否命中
 func (r *ExecuteResult) Matched() bool {
-	return r.data != nil && r.data.Matched
+	return r.data != nil && r.data.Result != nil && r.data.Result.Matched
 }
 
 // ========================================
@@ -106,7 +104,7 @@ func (r *ExecuteResult) Matched() bool {
 // ExecuteTask 执行任务
 type ExecuteTask struct {
 	Target    string
-	Templates []*templates.Template
+	Templates []*types.Template
 	Payload   map[string]interface{}
 }
 

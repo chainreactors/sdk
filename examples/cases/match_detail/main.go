@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"github.com/chainreactors/sdk/fingers"
+	"github.com/chainreactors/sdk/pkg/cyberhub"
 )
 
 func main() {
@@ -26,7 +27,7 @@ func main() {
 
 	cfg := fingers.NewConfig().WithMatchDetail()
 	if *cyberhubURL != "" {
-		cfg.WithCyberhub(*cyberhubURL, *apiKey)
+		cfg.WithProvider(cyberhub.NewProvider(*cyberhubURL, *apiKey))
 	}
 	eng, err := fingers.NewEngine(cfg)
 	if err != nil {
