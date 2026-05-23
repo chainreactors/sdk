@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/utils/httputils"
 )
@@ -27,7 +26,7 @@ type Context struct {
 	level         int          // 探测级别（0=被动, 1=基础, 2=深度）
 }
 
-var _ sdk.Context = (*Context)(nil)
+var _ types.Context = (*Context)(nil)
 
 // NewContext 创建 Fingers 上下文
 func NewContext() *Context {
@@ -209,7 +208,7 @@ func (r *TargetResult) Success() bool {
 	return r.Err == nil
 }
 
-// Error 返回错误（实现 sdk.Result 接口）
+// Error 返回错误（实现 types.Result 接口）
 func (r *TargetResult) Error() error {
 	return r.Err
 }
@@ -219,7 +218,7 @@ func (r *TargetResult) HasResults() bool {
 	return len(r.Results) > 0
 }
 
-// Data 返回结果数据（实现 sdk.Result 接口）
+// Data 返回结果数据（实现 types.Result 接口）
 func (r *TargetResult) Data() interface{} {
 	return r.Results
 }

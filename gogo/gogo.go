@@ -13,7 +13,6 @@ import (
 	"github.com/chainreactors/logs"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
-	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/association"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
@@ -33,7 +32,7 @@ type GogoEngine struct {
 	neutronEngine    *neutron.Engine    // 可选的 neutron 引擎
 	index            *association.Index
 	resourceProvider func(string) []byte
-	capacity         *sdk.Capacity
+	capacity         *types.Capacity
 }
 
 // NewGogoEngine 创建 GoGo 引擎
@@ -51,7 +50,7 @@ func NewGogoEngine(config *Config) *GogoEngine {
 		resourceProvider: config.ResourceProvider,
 	}
 	if config.Capacity > 0 {
-		e.capacity = sdk.NewCapacity(config.Capacity)
+		e.capacity = types.NewCapacity(config.Capacity)
 	}
 	return e
 }
@@ -221,12 +220,12 @@ func (e *GogoEngine) Name() string {
 // SetCapacity configures a capacity limit on an already-created engine.
 func (e *GogoEngine) SetCapacity(total int) {
 	if total > 0 {
-		e.capacity = sdk.NewCapacity(total)
+		e.capacity = types.NewCapacity(total)
 	}
 }
 
 // Capacity returns the engine's capacity bucket, or nil if unconfigured.
-func (e *GogoEngine) Capacity() *sdk.Capacity {
+func (e *GogoEngine) Capacity() *types.Capacity {
 	return e.capacity
 }
 
@@ -235,7 +234,7 @@ func (e *GogoEngine) Index() *association.Index {
 	return e.index
 }
 
-func (e *GogoEngine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
+func (e *GogoEngine) Execute(ctx types.Context, task types.Task) (<-chan types.Result, error) {
 	if err := e.Init(); err != nil {
 		return nil, err
 	}
@@ -273,7 +272,7 @@ func (e *GogoEngine) Close() error {
 // Result 实现
 // ========================================
 
-func newResult(success bool, err error, data *types.GOGOResult) sdk.Result {
+func newResult(success bool, err error, data *types.GOGOResult) types.Result {
 	return types.NewResult(success, err, data)
 }
 
@@ -281,7 +280,7 @@ func newResult(success bool, err error, data *types.GOGOResult) sdk.Result {
 // 内部实现
 // ========================================
 
-func (e *GogoEngine) executeScan(ctx *Context, task *ScanTask) (<-chan sdk.Result, error) {
+func (e *GogoEngine) executeScan(ctx *Context, task *ScanTask) (<-chan types.Result, error) {
 	if ctx == nil {
 		ctx = NewContext()
 	}
@@ -295,7 +294,7 @@ func (e *GogoEngine) executeScan(ctx *Context, task *ScanTask) (<-chan sdk.Resul
 	return e.workflowStream(runCtx.Context(), workflow, runCtx)
 }
 
-func (e *GogoEngine) executeWorkflow(ctx *Context, task *WorkflowTask) (<-chan sdk.Result, error) {
+func (e *GogoEngine) executeWorkflow(ctx *Context, task *WorkflowTask) (<-chan types.Result, error) {
 	if ctx == nil {
 		ctx = NewContext()
 	}
@@ -303,7 +302,7 @@ func (e *GogoEngine) executeWorkflow(ctx *Context, task *WorkflowTask) (<-chan s
 	return e.workflowStream(runCtx.Context(), task.Workflow, runCtx)
 }
 
-func (e *GogoEngine) workflowStream(ctx context.Context, workflow *types.Workflow, runCtx *Context) (<-chan sdk.Result, error) {
+func (e *GogoEngine) workflowStream(ctx context.Context, workflow *types.Workflow, runCtx *Context) (<-chan types.Result, error) {
 	// 创建基础配置
 	if runCtx.opt == nil {
 		runCtx.opt = types.NewDefaultGogoOption()
@@ -332,7 +331,7 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *types.Workflo
 	}
 
 	// 创建结果 channel
-	resultCh := make(chan sdk.Result, 100)
+	resultCh := make(chan types.Result, 100)
 
 	// 启动扫描 goroutine
 	go func() {
@@ -350,7 +349,7 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *types.Workflo
 		var tasks int64
 		started := time.Now()
 		defer func() {
-			runCtx.emitStats(sdk.Stats{
+			runCtx.emitStats(types.Stats{
 				Engine:   e.Name(),
 				Task:     "scan",
 				Targets:  targets,

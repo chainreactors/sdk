@@ -6,7 +6,7 @@ import (
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/parsers"
-	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // Query is the unified association query input.
@@ -136,7 +136,7 @@ func (q *Query) terms() []term {
 }
 
 // QueryFromResult extracts association query terms from an SDK result.
-func QueryFromResult(r sdk.Result) *Query {
+func QueryFromResult(r types.Result) *Query {
 	q := NewQuery()
 	if r == nil || !r.Success() {
 		return q

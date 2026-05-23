@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	sdkfingers "github.com/chainreactors/sdk/fingers"
-	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // ========================================
@@ -16,10 +16,10 @@ import (
 type Context struct {
 	ctx          context.Context
 	opt          *Option
-	statsHandler func(sdk.Stats)
+	statsHandler func(types.Stats)
 }
 
-var _ sdk.Context = (*Context)(nil)
+var _ types.Context = (*Context)(nil)
 
 // NewContext 创建 Spray 上下文
 func NewContext() *Context {
@@ -96,12 +96,12 @@ func (c *Context) SetOption(opt *Option) *Context {
 	return c
 }
 
-func (c *Context) SetStatsHandler(handler func(sdk.Stats)) *Context {
+func (c *Context) SetStatsHandler(handler func(types.Stats)) *Context {
 	c.statsHandler = handler
 	return c
 }
 
-func (c *Context) emitStats(stats sdk.Stats) {
+func (c *Context) emitStats(stats types.Stats) {
 	if c != nil && c.statsHandler != nil {
 		c.statsHandler(stats)
 	}

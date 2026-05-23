@@ -3,11 +3,9 @@ package neutron
 import (
 	"context"
 	"fmt"
-	"time"
-
-	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
+	"time"
 )
 
 // ========================================
@@ -32,7 +30,7 @@ type Context struct {
 	ctx context.Context
 }
 
-var _ sdk.Context = (*Context)(nil)
+var _ types.Context = (*Context)(nil)
 
 // NewContext 创建 Neutron 上下文
 func NewContext() *Context {

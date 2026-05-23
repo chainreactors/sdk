@@ -270,7 +270,10 @@ sdk/
 │   │   ├── query.go     # 统一 Query/Lookup
 │   │   └── README.md    # 关联查询文档
 │   ├── types/           # SDK 对外统一类型入口
-│   └── interface.go     # 核心 SDK 接口
+│   │   ├── types.go     # Engine/Context/Config/Task/Result 和外部类型别名
+│   │   ├── result.go    # 通用 Result 封装
+│   │   ├── capacity.go  # 并发容量控制
+│   │   └── registry.go  # 引擎注册入口
 │
 └── examples/            # CLI 工具实现
     ├── fingers/
@@ -501,7 +504,7 @@ go test ./spray -v
 
 ### 添加新引擎
 
-1. 实现 `pkg/interface.go` 中的核心接口
+1. 实现 `pkg/types` 中的核心接口
 2. 创建引擎包，包含 `engine.go`、`config.go`、`init.go`
 3. 在 `engine.go` 的 init 函数中注册
 4. 在 `examples/` 中添加 CLI 工具

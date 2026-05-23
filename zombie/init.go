@@ -3,11 +3,11 @@ package zombie
 import (
 	"fmt"
 
-	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func init() {
-	sdk.Register("zombie", func(config interface{}) (sdk.Engine, error) {
+	types.Register("zombie", func(config interface{}) (types.Engine, error) {
 		var cfg *Config
 		if config == nil {
 			cfg = NewConfig()

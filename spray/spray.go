@@ -8,7 +8,6 @@ import (
 
 	"github.com/chainreactors/logs"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
-	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/spray/core"
 	"github.com/chainreactors/spray/core/baseline"
@@ -25,7 +24,7 @@ type SprayEngine struct {
 	inited           bool
 	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
 	resourceProvider func(string) []byte
-	capacity         *sdk.Capacity
+	capacity         *types.Capacity
 	matchDetail      bool
 	mu               sync.Mutex
 }
@@ -43,7 +42,7 @@ func NewSprayEngine(config *Config) *SprayEngine {
 		matchDetail:      config.MatchDetail,
 	}
 	if config.Capacity > 0 {
-		e.capacity = sdk.NewCapacity(config.Capacity)
+		e.capacity = types.NewCapacity(config.Capacity)
 	}
 	return e
 }
@@ -202,16 +201,16 @@ func (e *SprayEngine) Name() string {
 // SetCapacity configures a capacity limit on an already-created engine.
 func (e *SprayEngine) SetCapacity(total int) {
 	if total > 0 {
-		e.capacity = sdk.NewCapacity(total)
+		e.capacity = types.NewCapacity(total)
 	}
 }
 
 // Capacity returns the engine's capacity bucket, or nil if unconfigured.
-func (e *SprayEngine) Capacity() *sdk.Capacity {
+func (e *SprayEngine) Capacity() *types.Capacity {
 	return e.capacity
 }
 
-func (e *SprayEngine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
+func (e *SprayEngine) Execute(ctx types.Context, task types.Task) (<-chan types.Result, error) {
 	if e == nil {
 		return nil, fmt.Errorf("spray engine is nil")
 	}
@@ -257,11 +256,11 @@ func (e *SprayEngine) Close() error {
 // Result 实现
 // ========================================
 
-func newResult(success bool, err error, data *types.SprayResult) sdk.Result {
+func newResult(success bool, err error, data *types.SprayResult) types.Result {
 	return types.NewResult(success, err, data)
 }
 
-func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan sdk.Result) {
+func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan types.Result) {
 	// 启动结果处理 goroutine - 处理 OutputCh
 	go func() {
 		for bl := range runner.OutputCh {
@@ -289,17 +288,17 @@ func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan 
 	}()
 }
 
-func (e *SprayEngine) executeCheck(ctx *Context, task *CheckTask) (<-chan sdk.Result, error) {
+func (e *SprayEngine) executeCheck(ctx *Context, task *CheckTask) (<-chan types.Result, error) {
 	return e.execute(ctx, task.Type(), task.URLs, nil)
 }
 
-func (e *SprayEngine) executeBrute(ctx *Context, task *BruteTask) (<-chan sdk.Result, error) {
+func (e *SprayEngine) executeBrute(ctx *Context, task *BruteTask) (<-chan types.Result, error) {
 	return e.execute(ctx, task.Type(), task.urls(), task.Wordlist)
 }
 
 // execute 是 check/brute 的统一执行路径.
 // wordlist == nil 表示 check 模式, 否则 brute 模式.
-func (e *SprayEngine) execute(ctx *Context, taskType string, urls []string, wordlist []string) (<-chan sdk.Result, error) {
+func (e *SprayEngine) execute(ctx *Context, taskType string, urls []string, wordlist []string) (<-chan types.Result, error) {
 	opt := cloneOption(ctx.opt)
 	opt.URL = urls
 	opt.PortRange = ""
@@ -328,7 +327,7 @@ func (e *SprayEngine) execute(ctx *Context, taskType string, urls []string, word
 		runner.IsCheck = false
 	}
 
-	ch := make(chan sdk.Result)
+	ch := make(chan types.Result)
 	go func() {
 		defer e.closeRunner(runner)
 		defer close(ch)
@@ -338,7 +337,7 @@ func (e *SprayEngine) execute(ctx *Context, taskType string, urls []string, word
 		started := time.Now()
 		defer func() {
 			stats := runner.Stats()
-			ctx.emitStats(sdk.Stats{
+			ctx.emitStats(types.Stats{
 				Engine:   e.Name(),
 				Task:     taskType,
 				Targets:  stats.Targets,

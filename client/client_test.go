@@ -2,6 +2,15 @@ package client
 
 import "testing"
 
+func TestNewWithoutOptions(t *testing.T) {
+	c := New()
+	defer c.Close()
+
+	if c.opts.provider != nil {
+		t.Fatal("expected nil provider with no options")
+	}
+}
+
 func TestClientEnginesAreTypeSafeAndCached(t *testing.T) {
 	c := New()
 	defer c.Close()
@@ -51,8 +60,72 @@ func TestClientEnginesAreTypeSafeAndCached(t *testing.T) {
 	}
 }
 
-func TestNewEngineRejectsUnknownName(t *testing.T) {
-	if _, err := newEngine("missing", nil); err == nil {
-		t.Fatal("expected unknown engine error")
+func TestGogoResolvesDependencies(t *testing.T) {
+	c := New()
+	defer c.Close()
+
+	if c.fingers != nil || c.neutron != nil {
+		t.Fatal("engines should be nil before first access")
+	}
+
+	_, err := c.Gogo()
+	if err != nil {
+		t.Fatalf("get gogo engine: %v", err)
+	}
+
+	c.mu.Lock()
+	hasFinger := c.fingers != nil
+	hasNeutron := c.neutron != nil
+	c.mu.Unlock()
+
+	if !hasFinger {
+		t.Fatal("expected fingers engine to be created as gogo dependency")
+	}
+	if !hasNeutron {
+		t.Fatal("expected neutron engine to be created as gogo dependency")
+	}
+}
+
+func TestSprayResolvesFingersDependency(t *testing.T) {
+	c := New()
+	defer c.Close()
+
+	_, err := c.Spray()
+	if err != nil {
+		t.Fatalf("get spray engine: %v", err)
+	}
+
+	c.mu.Lock()
+	hasFinger := c.fingers != nil
+	c.mu.Unlock()
+
+	if !hasFinger {
+		t.Fatal("expected fingers engine to be created as spray dependency")
+	}
+}
+
+func TestCloseResetsEngines(t *testing.T) {
+	c := New()
+
+	_, _ = c.Fingers()
+	if err := c.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	c.mu.Lock()
+	isNil := c.fingers == nil
+	c.mu.Unlock()
+
+	if !isNil {
+		t.Fatal("expected engines to be nil after Close")
+	}
+}
+
+func TestIndexBeforeGogo(t *testing.T) {
+	c := New()
+	defer c.Close()
+
+	if idx := c.Index(); idx != nil {
+		t.Fatal("expected nil index before gogo is initialized")
 	}
 }

@@ -1,16 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-go test -timeout 20m \
-  ./client \
-  ./pkg/... \
-  ./fingers \
-  ./gogo \
-  ./neutron \
-  ./spray \
-  ./zombie \
-  ./examples \
-  ./examples/cases/...
+go test -timeout 20m ./...
 
 if [ -d cmd ]; then
   go test -timeout 20m ./cmd/...

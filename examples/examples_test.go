@@ -17,23 +17,35 @@ import (
 	"time"
 )
 
-func TestExampleCommandsBuild(t *testing.T) {
+func TestExampleMainPackagesBuild(t *testing.T) {
+	root := repoRoot(t)
+	out, err := runGo(t, root, time.Minute, "list", "-f", "{{if eq .Name \"main\"}}{{.ImportPath}}{{end}}", "./examples/...")
+	if err != nil {
+		t.Fatalf("go list examples failed: %v\n%s", err, out)
+	}
+
+	for _, importPath := range strings.Fields(out) {
+		name := strings.TrimPrefix(importPath, "github.com/chainreactors/sdk/examples/")
+		t.Run(name, func(t *testing.T) {
+			output := filepath.Join(t.TempDir(), strings.ReplaceAll(name, "/", "_"))
+			if runtime.GOOS == "windows" {
+				output += ".exe"
+			}
+			args := []string{"build", "-o", output, importPath}
+			if out, err := runGo(t, root, 2*time.Minute, args...); err != nil {
+				t.Fatalf("go %s failed: %v\n%s", strings.Join(args, " "), err, out)
+			}
+		})
+	}
+}
+
+func TestExampleSpecialBuilds(t *testing.T) {
 	root := repoRoot(t)
 	commands := []struct {
 		name string
 		args []string
 	}{
-		{"fingers", []string{"./examples/fingers/main.go"}},
-		{"neutron", []string{"./examples/neutron/main.go"}},
-		{"gogo", []string{"./examples/gogo/main.go"}},
-		{"spray", []string{"./examples/spray/main.go"}},
 		{"host_spray_sdk", []string{"./examples/spray/host_spray_sdk.go"}},
-		{"filter", []string{"./examples/filter/main.go"}},
-		{"sdk_usage", []string{"./examples/sdk_usage/main.go"}},
-		{"engine_test", []string{"./examples/engine_test/main.go"}},
-		{"test_all_engines", []string{"./examples/test_all_engines/main.go"}},
-		{"match_detail_case", []string{"./examples/cases/match_detail"}},
-		{"spray_crawl_finger_case", []string{"./examples/cases/spray_crawl_finger"}},
 	}
 
 	for _, tc := range commands {
@@ -53,33 +65,76 @@ func TestExampleCommandsBuild(t *testing.T) {
 func TestExampleCommandUsageSmoke(t *testing.T) {
 	root := repoRoot(t)
 	commands := []struct {
-		name string
-		args []string
-		want string
+		name    string
+		args    []string
+		want    string
+		wantErr bool
 	}{
-		{"fingers", []string{"run", "./examples/fingers/main.go"}, "Usage: fingers"},
-		{"neutron", []string{"run", "./examples/neutron/main.go"}, "Usage: neutron"},
-		{"gogo", []string{"run", "./examples/gogo/main.go"}, "Usage: gogo"},
-		{"spray", []string{"run", "./examples/spray/main.go"}, "Usage: spray"},
-		{"host_spray_sdk", []string{"run", "./examples/spray/host_spray_sdk.go"}, "Usage: host_spray_sdk"},
-		{"match_detail_case", []string{"run", "./examples/cases/match_detail"}, "-target"},
-		{"spray_crawl_finger_case", []string{"run", "./examples/cases/spray_crawl_finger"}, "-target"},
+		{"fingers", []string{"run", "./examples/fingers/main.go"}, "Usage: fingers", true},
+		{"neutron", []string{"run", "./examples/neutron/main.go"}, "Usage: neutron", true},
+		{"gogo", []string{"run", "./examples/gogo/main.go"}, "Usage: gogo", true},
+		{"gogo_cyberhub", []string{"run", "./examples/gogo_cyberhub/main.go"}, "Usage: gogo_cyberhub", true},
+		{"spray", []string{"run", "./examples/spray/main.go"}, "Usage: spray", true},
+		{"host_spray_sdk", []string{"run", "./examples/spray/host_spray_sdk.go"}, "Usage: host_spray_sdk", true},
+		{"cyberhub", []string{"run", "./examples/cyberhub/main.go"}, "Usage: go run ./examples/cyberhub", false},
+		{"match_detail_case", []string{"run", "./examples/cases/match_detail"}, "-target", true},
+		{"request_response_case", []string{"run", "./examples/cases/request_response"}, "-target", true},
+		{"spray_crawl_finger_case", []string{"run", "./examples/cases/spray_crawl_finger"}, "-target", true},
 	}
 
 	for _, tc := range commands {
 		t.Run(tc.name, func(t *testing.T) {
 			out, err := runGo(t, root, time.Minute, tc.args...)
-			if err == nil {
-				t.Fatalf("expected command to fail without required args\n%s", out)
-			}
-			var exitErr *exec.ExitError
-			if !errors.As(err, &exitErr) {
-				t.Fatalf("expected exit error, got %T: %v\n%s", err, err, out)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected command to fail without required args\n%s", out)
+				}
+				var exitErr *exec.ExitError
+				if !errors.As(err, &exitErr) {
+					t.Fatalf("expected exit error, got %T: %v\n%s", err, err, out)
+				}
+			} else if err != nil {
+				t.Fatalf("expected command to succeed: %v\n%s", err, out)
 			}
 			if !strings.Contains(out, tc.want) {
 				t.Fatalf("expected output to contain %q\n%s", tc.want, out)
 			}
 		})
+	}
+}
+
+func TestAssociationExampleInlineSmoke(t *testing.T) {
+	root := repoRoot(t)
+	out, err := runGo(t, root, time.Minute, "run", "./examples/association/main.go")
+	if err != nil {
+		t.Fatalf("association example failed: %v\n%s", err, out)
+	}
+	for _, want := range []string{
+		"finger -> alias -> template",
+		"template -> alias -> finger",
+		"CVE-2022-0001",
+		"tomcat",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected output to contain %q\n%s", want, out)
+		}
+	}
+}
+
+func TestAssociationExampleQuerySmoke(t *testing.T) {
+	root := repoRoot(t)
+	out, err := runGo(t, root, time.Minute, "run", "./examples/association/main.go", "-finger", "apache tomcat")
+	if err != nil {
+		t.Fatalf("association query example failed: %v\n%s", err, out)
+	}
+	for _, want := range []string{
+		"inline lookup",
+		"tomcat",
+		"CVE-2022-0001",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected output to contain %q\n%s", want, out)
+		}
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/chainreactors/neutron/protocols"
-	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
@@ -17,7 +16,7 @@ import (
 type Engine struct {
 	templates []*types.Template
 	config    *Config
-	capacity  *sdk.Capacity
+	capacity  *types.Capacity
 }
 
 // NewEngine 创建一个新的 Engine 实例
@@ -54,7 +53,7 @@ func NewEngine(config *Config) (*Engine, error) {
 		config: config,
 	}
 	if config.Capacity > 0 {
-		e.capacity = sdk.NewCapacity(config.Capacity)
+		e.capacity = types.NewCapacity(config.Capacity)
 	}
 
 	e.templates = e.compileTemplates(tpls)
@@ -79,13 +78,13 @@ func NewEngineWithTemplates(tpls Templates) (*Engine, error) {
 	return e, nil
 }
 
-// Name 返回引擎名称（实现 sdk.Engine 接口）
+// Name 返回引擎名称（实现 types.Engine 接口）
 func (e *Engine) Name() string {
 	return "neutron"
 }
 
-// Execute 执行任务（实现 sdk.Engine 接口）
-func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
+// Execute 执行任务（实现 types.Engine 接口）
+func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Result, error) {
 	if e == nil {
 		return nil, fmt.Errorf("neutron engine is nil")
 	}
@@ -104,7 +103,7 @@ func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, err
 	}
 	if len(templates) == 0 {
 		// 返回空 channel，允许引擎在未配置时也能使用
-		ch := make(chan sdk.Result)
+		ch := make(chan types.Result)
 		close(ch)
 		return ch, nil
 	}
@@ -123,14 +122,14 @@ func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, err
 	return e.executeTemplates(runCtx, templates, execTask.Target, execTask.Payload)
 }
 
-func (e *Engine) executeTemplates(ctx *Context, templates []*types.Template, target string, payload map[string]interface{}) (<-chan sdk.Result, error) {
+func (e *Engine) executeTemplates(ctx *Context, templates []*types.Template, target string, payload map[string]interface{}) (<-chan types.Result, error) {
 	if e.capacity != nil {
 		if err := e.capacity.Acquire(ctx.Context(), 1); err != nil {
 			return nil, err
 		}
 	}
 
-	resultCh := make(chan sdk.Result)
+	resultCh := make(chan types.Result)
 
 	go func() {
 		defer close(resultCh)
@@ -186,12 +185,12 @@ func (e *Engine) Count() int {
 // Subsequent Execute calls will acquire/release from this shared bucket.
 func (e *Engine) SetCapacity(total int) {
 	if total > 0 {
-		e.capacity = sdk.NewCapacity(total)
+		e.capacity = types.NewCapacity(total)
 	}
 }
 
 // Capacity returns the engine's capacity bucket, or nil if unconfigured.
-func (e *Engine) Capacity() *sdk.Capacity {
+func (e *Engine) Capacity() *types.Capacity {
 	return e.capacity
 }
 

@@ -6,7 +6,6 @@ import (
 
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
-	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/association"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
@@ -21,10 +20,10 @@ type Context struct {
 	ctx          context.Context
 	threads      int
 	opt          *types.GogoOption
-	statsHandler func(sdk.Stats)
+	statsHandler func(types.Stats)
 }
 
-var _ sdk.Context = (*Context)(nil)
+var _ types.Context = (*Context)(nil)
 
 // NewContext 创建 GoGo 上下文
 func NewContext() *Context {
@@ -63,12 +62,12 @@ func (c *Context) SetOption(opt *types.GogoOption) *Context {
 	return c
 }
 
-func (c *Context) SetStatsHandler(handler func(sdk.Stats)) *Context {
+func (c *Context) SetStatsHandler(handler func(types.Stats)) *Context {
 	c.statsHandler = handler
 	return c
 }
 
-func (c *Context) emitStats(stats sdk.Stats) {
+func (c *Context) emitStats(stats types.Stats) {
 	if c != nil && c.statsHandler != nil {
 		c.statsHandler(stats)
 	}

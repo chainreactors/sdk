@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 type Context struct {
@@ -14,10 +14,10 @@ type Context struct {
 	top          int
 	firstOnly    bool
 	noUnauth     bool
-	statsHandler func(sdk.Stats)
+	statsHandler func(types.Stats)
 }
 
-var _ sdk.Context = (*Context)(nil)
+var _ types.Context = (*Context)(nil)
 
 func NewContext() *Context {
 	return &Context{
@@ -75,12 +75,12 @@ func (c *Context) SetNoUnauth(noUnauth bool) *Context {
 	return c
 }
 
-func (c *Context) SetStatsHandler(handler func(sdk.Stats)) *Context {
+func (c *Context) SetStatsHandler(handler func(types.Stats)) *Context {
 	c.statsHandler = handler
 	return c
 }
 
-func (c *Context) emitStats(stats sdk.Stats) {
+func (c *Context) emitStats(stats types.Stats) {
 	if c != nil && c.statsHandler != nil {
 		c.statsHandler(stats)
 	}

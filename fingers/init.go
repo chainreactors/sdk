@@ -3,12 +3,12 @@ package fingers
 import (
 	"fmt"
 
-	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func init() {
 	// 注册 fingers 引擎到全局注册表
-	sdk.Register("fingers", func(config interface{}) (sdk.Engine, error) {
+	types.Register("fingers", func(config interface{}) (types.Engine, error) {
 		var cfg *Config
 
 		if config == nil {

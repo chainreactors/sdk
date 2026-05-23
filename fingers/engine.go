@@ -15,7 +15,6 @@ import (
 	"github.com/chainreactors/fingers/favicon"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/resources"
-	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/utils/httputils"
 )
@@ -507,17 +506,17 @@ func (e *Engine) ServiceMatchStream(ctx *Context, targets []string) (<-chan *Tar
 // SDK Engine 接口实现（可选）
 // ========================================
 
-// Name 返回引擎名称（实现 sdk.Engine 接口）
+// Name 返回引擎名称（实现 types.Engine 接口）
 func (e *Engine) Name() string {
 	return "fingers"
 }
 
-// Execute 执行任务（实现 sdk.Engine 接口）
-func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
+// Execute 执行任务（实现 types.Engine 接口）
+func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Result, error) {
 	// 确保引擎已初始化
 	if e.engine == nil {
 		// 返回空 channel，允许引擎在未配置时也能使用
-		ch := make(chan sdk.Result)
+		ch := make(chan types.Result)
 		close(ch)
 		return ch, nil
 	}
@@ -548,8 +547,8 @@ func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, err
 }
 
 // executeMatch 执行单个指纹匹配任务
-func (e *Engine) executeMatch(ctx *Context, task *MatchTask) (<-chan sdk.Result, error) {
-	resultCh := make(chan sdk.Result, 1)
+func (e *Engine) executeMatch(ctx *Context, task *MatchTask) (<-chan types.Result, error) {
+	resultCh := make(chan types.Result, 1)
 
 	go func() {
 		defer close(resultCh)

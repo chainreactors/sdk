@@ -3,12 +3,12 @@ package neutron
 import (
 	"fmt"
 
-	sdk "github.com/chainreactors/sdk/pkg"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func init() {
 	// 注册 neutron 引擎到全局注册表
-	sdk.Register("neutron", func(config interface{}) (sdk.Engine, error) {
+	types.Register("neutron", func(config interface{}) (types.Engine, error) {
 		var cfg *Config
 
 		if config == nil {

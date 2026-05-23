@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/types"
 	zombiecore "github.com/chainreactors/zombie/core"
 	zombiepkg "github.com/chainreactors/zombie/pkg"
@@ -20,11 +19,11 @@ import (
 type Engine struct {
 	inited   bool
 	config   *Config
-	capacity *sdk.Capacity
+	capacity *types.Capacity
 	mu       sync.Mutex
 }
 
-func newResult(success bool, err error, data *types.ZombieResult) sdk.Result {
+func newResult(success bool, err error, data *types.ZombieResult) types.Result {
 	return types.NewResult(success, err, data)
 }
 
@@ -34,7 +33,7 @@ func NewEngine(config *Config) *Engine {
 	}
 	e := &Engine{config: config}
 	if config.Capacity > 0 {
-		e.capacity = sdk.NewCapacity(config.Capacity)
+		e.capacity = types.NewCapacity(config.Capacity)
 	}
 	return e
 }
@@ -63,16 +62,16 @@ func (e *Engine) Name() string {
 // SetCapacity configures a capacity limit on an already-created engine.
 func (e *Engine) SetCapacity(total int) {
 	if total > 0 {
-		e.capacity = sdk.NewCapacity(total)
+		e.capacity = types.NewCapacity(total)
 	}
 }
 
 // Capacity returns the engine's capacity bucket, or nil if unconfigured.
-func (e *Engine) Capacity() *sdk.Capacity {
+func (e *Engine) Capacity() *types.Capacity {
 	return e.capacity
 }
 
-func (e *Engine) Execute(ctx sdk.Context, task sdk.Task) (<-chan sdk.Result, error) {
+func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Result, error) {
 	if !e.inited {
 		if err := e.Init(); err != nil {
 			return nil, err
@@ -105,7 +104,7 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-func (e *Engine) executeWeakpass(ctx *Context, task *WeakpassTask) (<-chan sdk.Result, error) {
+func (e *Engine) executeWeakpass(ctx *Context, task *WeakpassTask) (<-chan types.Result, error) {
 	threads := ctx.threads
 	if e.capacity != nil {
 		if err := e.capacity.Acquire(ctx.Context(), threads); err != nil {
@@ -119,7 +118,7 @@ func (e *Engine) executeWeakpass(ctx *Context, task *WeakpassTask) (<-chan sdk.R
 	var results int64
 	var errors int64
 
-	resultCh := make(chan sdk.Result, ctx.threads)
+	resultCh := make(chan types.Result, ctx.threads)
 	pool, err := ants.NewPoolWithFunc(ctx.threads, func(i interface{}) {
 		defer i.(*workItem).wg.Done()
 		item := i.(*workItem)
@@ -157,7 +156,7 @@ func (e *Engine) executeWeakpass(ctx *Context, task *WeakpassTask) (<-chan sdk.R
 			defer e.capacity.Release(threads)
 		}
 		defer func() {
-			ctx.emitStats(sdk.Stats{
+			ctx.emitStats(types.Stats{
 				Engine:   e.Name(),
 				Task:     task.Type(),
 				Targets:  int64(len(task.Targets)),

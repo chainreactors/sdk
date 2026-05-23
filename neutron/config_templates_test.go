@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
 )
@@ -127,5 +126,5 @@ func (f fakeTask) Validate() error {
 	return nil
 }
 
-var _ sdk.Context = fakeContext{}
-var _ sdk.Task = fakeTask{}
+var _ types.Context = fakeContext{}
+var _ types.Task = fakeTask{}

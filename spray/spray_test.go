@@ -12,7 +12,6 @@ import (
 	"time"
 
 	sdkfingers "github.com/chainreactors/sdk/fingers"
-	sdk "github.com/chainreactors/sdk/pkg"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
@@ -327,7 +326,7 @@ func TestSprayEngineConcurrentExecuteWithSharedContext(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			var resultCh <-chan sdk.Result
+			var resultCh <-chan types.Result
 			var err error
 			if i%2 == 0 {
 				resultCh, err = engine.Execute(sharedCtx, NewCheckTask([]string{server.URL + "/admin"}))
