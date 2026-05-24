@@ -14,7 +14,6 @@ type Provider struct {
 	apiKey  string
 	timeout time.Duration
 	filter  *ExportFilter
-	draft   bool
 
 	once sync.Once
 	cli  *client
@@ -41,12 +40,6 @@ func (p *Provider) WithTimeout(d time.Duration) *Provider {
 	return p
 }
 
-// WithDraft 启用草稿模式：已审核的指纹直接使用，未审核的使用待审核版本，单次 API 调用加载
-func (p *Provider) WithDraft() *Provider {
-	p.draft = true
-	return p
-}
-
 func (p *Provider) client() *client {
 	p.once.Do(func() {
 		p.cli = newClient(p.url, p.apiKey, p.timeout)
@@ -56,12 +49,12 @@ func (p *Provider) client() *client {
 
 // Fingers 导出指纹与别名数据
 func (p *Provider) Fingers(ctx context.Context) (types.Fingers, []*types.Alias, error) {
-	return p.client().exportFingers(ctx, p.filter, p.draft)
+	return p.client().exportFingers(ctx, p.filter)
 }
 
 // POCs 导出 POC 模板数据
 func (p *Provider) POCs(ctx context.Context) ([]*types.Template, error) {
-	responses, err := p.client().exportPOCs(ctx, p.filter, p.draft)
+	responses, err := p.client().exportPOCs(ctx, p.filter)
 	if err != nil {
 		return nil, err
 	}

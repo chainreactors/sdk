@@ -12,6 +12,15 @@ type ExportFilter struct {
 	Statuses     []string
 	ReviewStatus string
 
+	// Draft controls whether unreviewed-draft content is returned in place of
+	// the approved RawContent. When true the backend sends back RawContentDraft
+	// for rows that have one (and the approved RawContent otherwise), which is
+	// the only way to actually read brand-new pending entries or pending edits.
+	//
+	// Draft is orthogonal to Statuses / ReviewStatus: filter fields decide
+	// which rows are returned, Draft decides which column is read.
+	Draft bool
+
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
 	UpdatedAfter  *time.Time
@@ -81,5 +90,15 @@ func (f *ExportFilter) WithStatuses(statuses ...string) *ExportFilter {
 
 func (f *ExportFilter) WithReviewStatus(status string) *ExportFilter {
 	f.ReviewStatus = status
+	return f
+}
+
+// WithDraft toggles draft mode: when true the backend returns RawContentDraft
+// for rows that have a pending-review draft (and falls back to RawContent
+// otherwise). Combine with WithStatuses("pending"|"draft") or
+// WithReviewStatus("pending") to actually pull pending rows — the filter
+// fields decide which rows come back, WithDraft decides which column is read.
+func (f *ExportFilter) WithDraft(draft bool) *ExportFilter {
+	f.Draft = draft
 	return f
 }

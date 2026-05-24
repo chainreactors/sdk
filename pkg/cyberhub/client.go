@@ -36,12 +36,9 @@ func newClient(baseURL, apiKey string, timeout time.Duration) *client {
 	}
 }
 
-func (c *client) exportFingers(ctx context.Context, filter *ExportFilter, draft bool) (types.Fingers, []*types.Alias, error) {
+func (c *client) exportFingers(ctx context.Context, filter *ExportFilter) (types.Fingers, []*types.Alias, error) {
 	params := url.Values{}
 	params.Set("with_fingerprint", "true")
-	if draft {
-		params.Set("with_draft", "true")
-	}
 	applyFilterParams(params, filter)
 
 	endpoint := fmt.Sprintf("%s/fingerprints/export?%s", c.baseURL, params.Encode())
@@ -64,11 +61,8 @@ func (c *client) exportFingers(ctx context.Context, filter *ExportFilter, draft 
 	return allFingers, allAliases, nil
 }
 
-func (c *client) exportPOCs(ctx context.Context, filter *ExportFilter, draft bool) ([]pocResponse, error) {
+func (c *client) exportPOCs(ctx context.Context, filter *ExportFilter) ([]pocResponse, error) {
 	params := url.Values{}
-	if draft {
-		params.Set("with_draft", "true")
-	}
 	applyFilterParams(params, filter)
 	applyDefaultPOCStatus(params)
 
@@ -118,6 +112,14 @@ func applyFilterParams(params url.Values, filter *ExportFilter) {
 
 	if filter.ReviewStatus != "" {
 		params.Set("review_status", filter.ReviewStatus)
+	}
+
+	// Draft is orthogonal to Statuses / ReviewStatus: filter fields choose
+	// the rows, with_draft chooses the column read off each row. Only emit
+	// the query param when the caller explicitly asked for drafts so the
+	// default backend semantics (RawContent) is preserved.
+	if filter.Draft {
+		params.Set("with_draft", "true")
 	}
 
 	if filter.CreatedAfter != nil {
