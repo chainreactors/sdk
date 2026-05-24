@@ -36,9 +36,12 @@ func newClient(baseURL, apiKey string, timeout time.Duration) *client {
 	}
 }
 
-func (c *client) exportFingers(ctx context.Context, filter *ExportFilter) (types.Fingers, []*types.Alias, error) {
+func (c *client) exportFingers(ctx context.Context, filter *ExportFilter, draft bool) (types.Fingers, []*types.Alias, error) {
 	params := url.Values{}
 	params.Set("with_fingerprint", "true")
+	if draft {
+		params.Set("with_draft", "true")
+	}
 	applyFilterParams(params, filter)
 
 	endpoint := fmt.Sprintf("%s/fingerprints/export?%s", c.baseURL, params.Encode())
@@ -61,8 +64,11 @@ func (c *client) exportFingers(ctx context.Context, filter *ExportFilter) (types
 	return allFingers, allAliases, nil
 }
 
-func (c *client) exportPOCs(ctx context.Context, filter *ExportFilter) ([]pocResponse, error) {
+func (c *client) exportPOCs(ctx context.Context, filter *ExportFilter, draft bool) ([]pocResponse, error) {
 	params := url.Values{}
+	if draft {
+		params.Set("with_draft", "true")
+	}
 	applyFilterParams(params, filter)
 	applyDefaultPOCStatus(params)
 
