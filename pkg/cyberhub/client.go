@@ -275,6 +275,13 @@ func applyFilterParams(params url.Values, filter *ExportFilter) {
 	if rs := strings.TrimSpace(filter.ReviewStatus); rs != "" {
 		params.Set("review_status", rs)
 	}
+
+	// 是否拉取待审核草稿内容：与 Statuses / ReviewStatus 正交，需要显式声明。
+	// 默认不设置该参数（保持后端默认 RawContent 语义），仅当调用方明确要求
+	// 时透传 with_draft=true。
+	if filter.Draft {
+		params.Set("with_draft", "true")
+	}
 }
 
 // applyDefaultPOCStatus 在调用方未显式指定任何 POC 状态相关参数时，

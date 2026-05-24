@@ -32,6 +32,17 @@ type ExportFilter struct {
 	// 留空表示不按审核状态过滤；合法值：pending / approved / rejected / draft / none。
 	ReviewStatus string
 
+	// 是否拉取待审核草稿内容（POC / 指纹导出均会透传，对应后端 ?with_draft=true）。
+	//
+	// 默认 false 时后端返回 RawContent（已生效内容）；置 true 时优先返回
+	// RawContentDraft（待审核草稿），这是把"全新待审核行"和"编辑型 pending
+	// 行"的实际新内容取回来的唯一途径。注意此标志与 Statuses / ReviewStatus
+	// 正交：filter 决定"返回哪些行"，Draft 决定"读哪一列"，需要同时设置。
+	//
+	// 仅 FingerprintHub 引擎的指纹会在 raw_content 中返回 draft；其他引擎指
+	// 纹 raw_content 字段固定为空。
+	Draft bool
+
 	// 时间范围筛选
 	CreatedAfter  *time.Time // 创建时间起始
 	CreatedBefore *time.Time // 创建时间截止
@@ -72,6 +83,19 @@ func (f *ExportFilter) WithStatuses(statuses ...string) *ExportFilter {
 // 留空表示不过滤；合法值：pending / approved / rejected / draft / none。
 func (f *ExportFilter) WithReviewStatus(status string) *ExportFilter {
 	f.ReviewStatus = status
+	return f
+}
+
+// WithDraft 控制是否拉取待审核草稿内容（对应后端 ?with_draft=true）。
+//
+// 默认 false 时后端返回 RawContent（已生效内容）；置 true 时优先返回
+// RawContentDraft。要拉到"全新待审核 POC / 指纹"或"编辑型 pending"的实
+// 际新内容，必须显式调用 WithDraft(true) —— 此标志与 Statuses /
+// ReviewStatus 解耦，filter 决定"返回哪些行"，Draft 决定"读哪一列"。
+//
+// 仅 FingerprintHub 引擎的指纹会在 raw_content 字段返回 draft 内容。
+func (f *ExportFilter) WithDraft(draft bool) *ExportFilter {
+	f.Draft = draft
 	return f
 }
 

@@ -8,11 +8,18 @@
 //     规则隐掉。如果客户端要拿到这部分"空壳待审核"指纹，仍需显式
 //     WithStatuses("pending") / WithStatuses("draft") 等。
 //
+// 注意：WithStatuses / WithReviewStatus 只决定"返回哪些行"，要拿到这些行的
+// 待审核草稿内容 (RawContentDraft) 还需要再叠一个 .WithDraft(true)：
+//
+//   - 不加 -draft 时：编辑型 pending 行 raw_content 是旧的已生效内容；全新待审核行 raw_content 为空字符串。
+//   - 加 -draft 时：raw_content 优先返回 RawContentDraft（仅 FingerprintHub 引擎生效）。
+//
 // 用法:
 //
 //	pending_fingerprints -url http://127.0.0.1:8080 -key YOUR_KEY
 //	pending_fingerprints -url ... -key ... -statuses active,pending,draft
 //	pending_fingerprints -url ... -key ... -review pending
+//	pending_fingerprints -url ... -key ... -review pending -draft
 package main
 
 import (
@@ -32,6 +39,7 @@ var (
 		"指纹生命周期状态（逗号分隔）：active / pending / draft / inactive / deprecated；留空走后端默认（不含 draft 和空 pending）")
 	review = flag.String("review", "",
 		"审核流程状态：pending / approved / rejected / draft / none，留空表示不按审核状态过滤")
+	draft   = flag.Bool("draft", false, "拉取待审核草稿内容 (RawContentDraft) 而非 RawContent，仅 FingerprintHub 引擎生效")
 	preview = flag.Int("preview", 10, "最多打印多少条指纹摘要")
 )
 
@@ -39,7 +47,7 @@ func main() {
 	flag.Parse()
 
 	if *cyberhubURL == "" || *apiKey == "" {
-		fmt.Println("usage: pending_fingerprints -url <cyberhub_url> -key <api_key> [-statuses active,pending] [-review pending]")
+		fmt.Println("usage: pending_fingerprints -url <cyberhub_url> -key <api_key> [-statuses active,pending] [-review pending] [-draft]")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
@@ -51,6 +59,9 @@ func main() {
 	}
 	if *review != "" {
 		filter.WithReviewStatus(*review)
+	}
+	if *draft {
+		filter.WithDraft(true)
 	}
 
 	// 2. 挂到 fingers.Config 上（和 POC 路径完全对称）
@@ -64,7 +75,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("加载到 %d 条指纹 (statuses=%q review=%q)\n", engine.Count(), *statuses, *review)
+	fmt.Printf("加载到 %d 条指纹 (statuses=%q review=%q draft=%v)\n", engine.Count(), *statuses, *review, *draft)
 
 	items := config.FullFingers.Fingers()
 	limit := *preview

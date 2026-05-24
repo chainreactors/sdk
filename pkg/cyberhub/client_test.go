@@ -118,6 +118,49 @@ func TestApplyFilterParams_ReviewStatus(t *testing.T) {
 	}
 }
 
+func TestApplyFilterParams_Draft(t *testing.T) {
+	t.Run("default false omits with_draft", func(t *testing.T) {
+		params := url.Values{}
+		applyFilterParams(params, &ExportFilter{})
+
+		if _, ok := params["with_draft"]; ok {
+			t.Fatalf("expected no with_draft param when Draft=false, got %v", params["with_draft"])
+		}
+	})
+
+	t.Run("Draft=true transmits with_draft=true", func(t *testing.T) {
+		params := url.Values{}
+		applyFilterParams(params, &ExportFilter{Draft: true})
+
+		if got := params.Get("with_draft"); got != "true" {
+			t.Fatalf("expected with_draft=true, got %q", got)
+		}
+	})
+
+	t.Run("Draft orthogonal to ReviewStatus/Statuses", func(t *testing.T) {
+		params := url.Values{}
+		filter := &ExportFilter{
+			Statuses:     []string{"pending", "draft"},
+			ReviewStatus: "pending",
+			Draft:        true,
+		}
+
+		applyFilterParams(params, filter)
+
+		if got := params.Get("with_draft"); got != "true" {
+			t.Fatalf("expected with_draft=true, got %q", got)
+		}
+		if got := params.Get("review_status"); got != "pending" {
+			t.Fatalf("expected review_status=pending, got %q", got)
+		}
+		statuses := params["statuses"]
+		sort.Strings(statuses)
+		if len(statuses) != 2 || statuses[0] != "draft" || statuses[1] != "pending" {
+			t.Fatalf("expected statuses=[draft pending], got %v", statuses)
+		}
+	})
+}
+
 func TestApplyDefaultPOCStatus(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -247,6 +290,49 @@ func TestExportPOCs_StatusBehavior(t *testing.T) {
 		}
 	})
 
+	t.Run("Draft alone wires with_draft=true and keeps default active", func(t *testing.T) {
+		captured = nil
+		filter := NewExportFilter().WithDraft(true)
+		if _, err := client.ExportPOCs(ctx, nil, nil, "", "", filter); err != nil {
+			t.Fatalf("ExportPOCs failed: %v", err)
+		}
+		if got := captured.Get("with_draft"); got != "true" {
+			t.Fatalf("expected with_draft=true, got %q", got)
+		}
+		// Draft alone does not touch the default active fallback —
+		// caller still needs WithStatuses / WithReviewStatus to list pending rows.
+		if got := captured.Get("status"); got != "active" {
+			t.Fatalf("expected default status=active, got %q", got)
+		}
+	})
+
+	t.Run("ReviewStatus pending + Draft true returns pending draft content", func(t *testing.T) {
+		captured = nil
+		filter := NewExportFilter().WithReviewStatus("pending").WithDraft(true)
+		if _, err := client.ExportPOCs(ctx, nil, nil, "", "", filter); err != nil {
+			t.Fatalf("ExportPOCs failed: %v", err)
+		}
+		if got := captured.Get("review_status"); got != "pending" {
+			t.Fatalf("expected review_status=pending, got %q", got)
+		}
+		if got := captured.Get("with_draft"); got != "true" {
+			t.Fatalf("expected with_draft=true, got %q", got)
+		}
+		if got := captured.Get("status"); got != "" {
+			t.Fatalf("expected status= empty (review_status suppresses default), got %q", got)
+		}
+	})
+
+	t.Run("default omits with_draft", func(t *testing.T) {
+		captured = nil
+		if _, err := client.ExportPOCs(ctx, nil, nil, "", "", nil); err != nil {
+			t.Fatalf("ExportPOCs failed: %v", err)
+		}
+		if _, ok := captured["with_draft"]; ok {
+			t.Fatalf("expected no with_draft param by default, got %v", captured["with_draft"])
+		}
+	})
+
 	t.Run("names default exports active only", func(t *testing.T) {
 		captured = nil
 		if _, err := client.ExportPOCsByNames(ctx, []string{"example-poc"}); err != nil {
@@ -274,6 +360,67 @@ func TestExportPOCs_StatusBehavior(t *testing.T) {
 		}
 		if got := captured["statuses"]; len(got) != 1 || got[0] != "pending" {
 			t.Fatalf("expected statuses=[pending], got %v", got)
+		}
+	})
+}
+
+// TestExportFingerprints_DraftBehavior verifies WithDraft also wires the
+// fingerprint export path (no default-active fallback applies on this endpoint).
+func TestExportFingerprints_DraftBehavior(t *testing.T) {
+	var captured url.Values
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r.URL.Query()
+		resp := APIResponse{
+			Code:    0,
+			Message: "ok",
+			Data: FingerprintListResponse{
+				Fingerprints: []FingerprintResponse{},
+				Total:        0,
+				Page:         1,
+				PageSize:     0,
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-key", 5*time.Second)
+	ctx := context.Background()
+
+	t.Run("default omits with_draft", func(t *testing.T) {
+		captured = nil
+		if _, err := client.ExportFingerprints(ctx, true, "", nil); err != nil {
+			t.Fatalf("ExportFingerprints failed: %v", err)
+		}
+		if _, ok := captured["with_draft"]; ok {
+			t.Fatalf("expected no with_draft param by default, got %v", captured["with_draft"])
+		}
+	})
+
+	t.Run("WithDraft(true) sets with_draft=true", func(t *testing.T) {
+		captured = nil
+		filter := NewExportFilter().WithDraft(true)
+		if _, err := client.ExportFingerprints(ctx, true, "", filter); err != nil {
+			t.Fatalf("ExportFingerprints failed: %v", err)
+		}
+		if got := captured.Get("with_draft"); got != "true" {
+			t.Fatalf("expected with_draft=true, got %q", got)
+		}
+	})
+
+	t.Run("ReviewStatus pending + Draft true wires both", func(t *testing.T) {
+		captured = nil
+		filter := NewExportFilter().WithReviewStatus("pending").WithDraft(true)
+		if _, err := client.ExportFingerprints(ctx, true, "", filter); err != nil {
+			t.Fatalf("ExportFingerprints failed: %v", err)
+		}
+		if got := captured.Get("review_status"); got != "pending" {
+			t.Fatalf("expected review_status=pending, got %q", got)
+		}
+		if got := captured.Get("with_draft"); got != "true" {
+			t.Fatalf("expected with_draft=true, got %q", got)
 		}
 	})
 }
