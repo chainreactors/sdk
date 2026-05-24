@@ -11,7 +11,7 @@ require (
 	github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0
 	github.com/chainreactors/spray v1.2.6-0.20260523083907-546e8ab7756a
 	github.com/chainreactors/utils v0.0.0-20260520090033-cfefcb28cc6f
-	github.com/chainreactors/zombie v1.2.3-0.20260523084643-c35bbbe8b950
+	github.com/chainreactors/zombie v1.2.3-0.20260524062446-53a80b50a5ba
 	github.com/panjf2000/ants/v2 v2.12.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -60,7 +60,6 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/snappy v1.0.0 // indirect

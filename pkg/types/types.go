@@ -10,6 +10,7 @@ import (
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	gogopkg "github.com/chainreactors/gogo/v2/pkg"
 	"github.com/chainreactors/neutron/operators"
+	zombiecore "github.com/chainreactors/zombie/core"
 	"github.com/chainreactors/neutron/protocols"
 	templateHTTP "github.com/chainreactors/neutron/protocols/http"
 	templateNetwork "github.com/chainreactors/neutron/protocols/network"
@@ -211,4 +212,19 @@ const (
 type (
 	Workflow   = gogopkg.Workflow
 	GogoOption = gogopkg.RunnerOption
+)
+
+// ====================
+// Zombie
+// ====================
+
+type (
+	ZombieOption = zombiecore.RunnerOption
+	ZombieTarget = zombiecore.Target
+)
+
+var (
+	ZombieModeBomb      = zombiecore.ModBomb
+	ZombieModePitchFork = zombiecore.ModPitchFork
+	ZombieModeSniper    = zombiecore.ModSniper
 )

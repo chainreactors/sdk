@@ -1,19 +1,14 @@
 package zombie
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"runtime/debug"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/chainreactors/sdk/pkg/types"
 	zombiecore "github.com/chainreactors/zombie/core"
 	zombiepkg "github.com/chainreactors/zombie/pkg"
-	"github.com/panjf2000/ants/v2"
 )
 
 type Engine struct {
@@ -21,10 +16,6 @@ type Engine struct {
 	config   *Config
 	capacity *types.Capacity
 	mu       sync.Mutex
-}
-
-func newResult(success bool, err error, data *types.ZombieResult) types.Result {
-	return types.NewResult(success, err, data)
 }
 
 func NewEngine(config *Config) *Engine {
@@ -59,14 +50,12 @@ func (e *Engine) Name() string {
 	return "zombie"
 }
 
-// SetCapacity configures a capacity limit on an already-created engine.
 func (e *Engine) SetCapacity(total int) {
 	if total > 0 {
 		e.capacity = types.NewCapacity(total)
 	}
 }
 
-// Capacity returns the engine's capacity bucket, or nil if unconfigured.
 func (e *Engine) Capacity() *types.Capacity {
 	return e.capacity
 }
@@ -93,8 +82,8 @@ func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Resul
 	}
 
 	switch t := task.(type) {
-	case *WeakpassTask:
-		return e.executeWeakpass(runCtx, t)
+	case *BruteTask:
+		return e.execute(runCtx, t)
 	default:
 		return nil, fmt.Errorf("unsupported task type: %s", task.Type())
 	}
@@ -104,211 +93,168 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-func (e *Engine) executeWeakpass(ctx *Context, task *WeakpassTask) (<-chan types.Result, error) {
-	threads := ctx.threads
+// ========================================
+// 便捷 API — 按攻击模式分类
+// ========================================
+
+// Brute runs clusterbomb mode: cartesian product of users × passwords.
+func (e *Engine) Brute(ctx *Context, targets []Target, users, passwords []string) ([]*types.ZombieResult, error) {
+	return e.collect(e.BruteStream(ctx, targets, users, passwords))
+}
+
+func (e *Engine) BruteStream(ctx *Context, targets []Target, users, passwords []string) (<-chan *types.ZombieResult, error) {
+	task := &BruteTask{
+		Targets:   targets,
+		Users:     users,
+		Passwords: passwords,
+		mod:       types.ZombieModeBomb,
+	}
+	return e.typedStream(ctx, task)
+}
+
+// Pitchfork runs pitchfork mode: paired username::password auth list.
+func (e *Engine) Pitchfork(ctx *Context, targets []Target, auths []Auth) ([]*types.ZombieResult, error) {
+	return e.collect(e.PitchforkStream(ctx, targets, auths))
+}
+
+func (e *Engine) PitchforkStream(ctx *Context, targets []Target, auths []Auth) (<-chan *types.ZombieResult, error) {
+	task := &BruteTask{
+		Targets: targets,
+		Auths:   auths,
+		mod:     types.ZombieModePitchFork,
+	}
+	return e.typedStream(ctx, task)
+}
+
+// Sniper runs sniper mode: one attempt per target using its own credentials.
+func (e *Engine) Sniper(ctx *Context, targets []Target) ([]*types.ZombieResult, error) {
+	return e.collect(e.SniperStream(ctx, targets))
+}
+
+func (e *Engine) SniperStream(ctx *Context, targets []Target) (<-chan *types.ZombieResult, error) {
+	task := &BruteTask{
+		Targets: targets,
+		mod:     types.ZombieModeSniper,
+	}
+	return e.typedStream(ctx, task)
+}
+
+// ========================================
+// 内部执行
+// ========================================
+
+func (e *Engine) execute(ctx *Context, task *BruteTask) (<-chan types.Result, error) {
+	threads := ctx.opt.Threads
 	if e.capacity != nil {
 		if err := e.capacity.Acquire(ctx.Context(), threads); err != nil {
 			return nil, err
 		}
 	}
 
-	ztasks := expandTasks(ctx, task)
-	started := time.Now()
-	var requests int64
-	var results int64
-	var errors int64
-
-	resultCh := make(chan types.Result, ctx.threads)
-	pool, err := ants.NewPoolWithFunc(ctx.threads, func(i interface{}) {
-		defer i.(*workItem).wg.Done()
-		item := i.(*workItem)
-		atomic.AddInt64(&requests, 1)
-		result := runTask(item.ctx, item.task)
-		if result == nil {
-			return
-		}
-		if isZombieExecutionError(result.Err) {
-			atomic.AddInt64(&errors, 1)
-		}
-		if result.OK {
-			atomic.AddInt64(&results, 1)
-		}
-		if result.OK && item.firstOnly {
-			item.task.Canceler()
-		}
-
-		select {
-		case resultCh <- newResult(result.OK, result.Err, result.ZombieResult):
-		case <-item.ctx.Done():
-		}
-	})
-	if err != nil {
-		if e.capacity != nil {
-			e.capacity.Release(threads)
-		}
-		return nil, err
+	opt := ctx.opt.Clone()
+	opt.Quiet = true
+	opt.NoCheckHoneyPot = true
+	if task.mod != "" {
+		opt.Mod = task.mod
 	}
+	if opt.Mod == "" {
+		opt.Mod = types.ZombieModeBomb
+	}
+
+	runner := zombiecore.NewRunner(opt)
+	runner.SetTargets(convertTargets(task.Targets))
+	if len(task.Users) > 0 {
+		runner.SetUsers(task.Users)
+	}
+	if len(task.Passwords) > 0 {
+		runner.SetPasswords(task.Passwords)
+	}
+	if len(task.Auths) > 0 {
+		pairs := make([]string, len(task.Auths))
+		for i, a := range task.Auths {
+			pairs[i] = a.Username + "::" + a.Password
+		}
+		runner.SetAuths(pairs)
+	}
+
+	started := time.Now()
+	resultCh := make(chan types.Result, threads)
 
 	go func() {
 		defer close(resultCh)
-		defer pool.Release()
 		if e.capacity != nil {
 			defer e.capacity.Release(threads)
 		}
-		defer func() {
-			ctx.emitStats(types.Stats{
-				Engine:   e.Name(),
-				Task:     task.Type(),
-				Targets:  int64(len(task.Targets)),
-				Tasks:    int64(len(ztasks)),
-				Requests: atomic.LoadInt64(&requests),
-				Results:  atomic.LoadInt64(&results),
-				Errors:   atomic.LoadInt64(&errors),
-				Duration: time.Since(started),
-			})
-		}()
 
-		var wg sync.WaitGroup
-		for _, ztask := range ztasks {
-			select {
-			case <-ctx.Context().Done():
-				wg.Wait()
-				return
-			default:
-			}
-
-			wg.Add(1)
-			if err := pool.Invoke(&workItem{
-				ctx:       ctx.Context(),
-				wg:        &wg,
-				task:      ztask,
-				firstOnly: ctx.firstOnly,
-			}); err != nil {
-				atomic.AddInt64(&errors, 1)
-				wg.Done()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for result := range runner.OutputCh {
 				select {
-				case resultCh <- newResult(false, err, ztask.ZombieResult):
+				case resultCh <- types.NewResult(result.OK, result.Err, result.ZombieResult):
 				case <-ctx.Context().Done():
 					return
 				}
 			}
-		}
-		wg.Wait()
+		}()
+
+		_ = runner.RunWithContext(ctx.Context())
+		<-done
+
+		stat := runner.Stat()
+		ctx.emitStats(types.Stats{
+			Engine:   e.Name(),
+			Task:     task.Type(),
+			Targets:  int64(len(task.Targets)),
+			Tasks:    int64(stat.Total),
+			Requests: int64(stat.Total),
+			Results:  int64(stat.Success),
+			Duration: time.Since(started),
+		})
 	}()
 
 	return resultCh, nil
 }
 
-type workItem struct {
-	ctx       context.Context
-	wg        *sync.WaitGroup
-	task      *zombiepkg.Task
-	firstOnly bool
-}
-
-func runTask(ctx context.Context, task *zombiepkg.Task) *zombiepkg.Result {
-	select {
-	case <-ctx.Done():
-		return zombiepkg.NewResult(task, ctx.Err())
-	case <-task.Context.Done():
-		return zombiepkg.NewResult(task, task.Context.Err())
-	default:
+func (e *Engine) typedStream(ctx *Context, task *BruteTask) (<-chan *types.ZombieResult, error) {
+	resultCh, err := e.Execute(ctx, task)
+	if err != nil {
+		return nil, err
 	}
 
-	resultCh := make(chan *zombiepkg.Result, 1)
+	zombieResultCh := make(chan *types.ZombieResult, 100)
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				resultCh <- zombiepkg.NewResult(task, fmt.Errorf("panic: %v\n%s", r, debug.Stack()))
+		defer close(zombieResultCh)
+		for result := range resultCh {
+			if data, ok := types.ResultData[*types.ZombieResult](result); result.Success() && ok && data != nil {
+				zombieResultCh <- data
 			}
-		}()
-
-		if task.Mod == types.ZombieModUnauth {
-			resultCh <- zombiecore.Unauth(task)
-			return
 		}
-		resultCh <- zombiecore.Brute(task)
 	}()
-
-	timeout := time.Duration(task.Timeout*2) * time.Second
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-
-	select {
-	case result := <-resultCh:
-		return result
-	case <-ctx.Done():
-		return zombiepkg.NewResult(task, ctx.Err())
-	case <-task.Context.Done():
-		return zombiepkg.NewResult(task, task.Context.Err())
-	case <-time.After(timeout):
-		task.Canceler()
-		return zombiepkg.NewResult(task, fmt.Errorf("task timed out after %s", timeout))
-	}
+	return zombieResultCh, nil
 }
 
-func isZombieExecutionError(err error) bool {
-	if err == nil {
-		return false
+func (e *Engine) collect(ch <-chan *types.ZombieResult, err error) ([]*types.ZombieResult, error) {
+	if err != nil {
+		return nil, err
 	}
-	if errors.Is(err, zombiepkg.ErrorWrongUserOrPwd) ||
-		errors.Is(err, zombiepkg.NotImplUnauthorized) ||
-		errors.Is(err, zombiecore.ErrNoUnauth) {
-		return false
+	var results []*types.ZombieResult
+	for result := range ch {
+		results = append(results, result)
 	}
-	return true
+	return results, nil
 }
 
-func expandTasks(ctx *Context, task *WeakpassTask) []*zombiepkg.Task {
-	var tasks []*zombiepkg.Task
-	for _, target := range task.Targets {
-		target = normalizeTarget(target)
-		if target.Service == "" {
+func convertTargets(targets []Target) []*Target {
+	result := make([]*Target, 0, len(targets))
+	for i := range targets {
+		t := normalizeTarget(targets[i])
+		if t.Service == "" {
 			continue
 		}
-
-		targetCtx, cancel := context.WithCancel(ctx.Context())
-		if !ctx.noUnauth {
-			tasks = append(tasks, newZombieTask(targetCtx, cancel, ctx.timeout, target, "", "", types.ZombieModUnauth))
-		}
-
-		auths := authPairs(ctx, task, target)
-		for _, auth := range auths {
-			tasks = append(tasks, newZombieTask(targetCtx, cancel, ctx.timeout, target, auth.Username, auth.Password, types.ZombieModBrute))
-			if ctx.firstOnly && target.Username != "" && target.Password != "" {
-				break
-			}
-		}
+		result = append(result, &t)
 	}
-	return tasks
-}
-
-func authPairs(ctx *Context, task *WeakpassTask, target Target) []Auth {
-	if len(task.Auths) > 0 {
-		return task.Auths
-	}
-	if target.Username != "" || target.Password != "" {
-		return []Auth{{Username: target.Username, Password: target.Password}}
-	}
-
-	users := task.Users
-	if len(users) == 0 {
-		users = zombiepkg.UseDefaultUser(target.Service, ctx.top)
-	}
-
-	passwords := task.Passwords
-	if len(passwords) == 0 {
-		passwords = zombiepkg.UseDefaultPassword(target.Service, ctx.top)
-	}
-
-	auths := make([]Auth, 0, len(users)*len(passwords))
-	for _, user := range users {
-		for _, password := range passwords {
-			auths = append(auths, Auth{Username: user, Password: password})
-		}
-	}
-	return auths
+	return result
 }
 
 func normalizeTarget(target Target) Target {
@@ -326,53 +272,4 @@ func normalizeTarget(target Target) Target {
 		target.Scheme = target.Service
 	}
 	return target
-}
-
-func newZombieTask(ctx context.Context, cancel context.CancelFunc, timeout int, target Target, username, password string, mod types.ZombieTaskMod) *zombiepkg.Task {
-	return &zombiepkg.Task{
-		ZombieResult: &types.ZombieResult{
-			IP:       target.IP,
-			Port:     target.Port,
-			Service:  target.Service,
-			Scheme:   target.Scheme,
-			Username: username,
-			Password: password,
-			Param:    target.Param,
-			Mod:      mod,
-		},
-		Timeout:  timeout,
-		Context:  ctx,
-		Canceler: cancel,
-	}
-}
-
-func (e *Engine) Weakpass(ctx *Context, task *WeakpassTask) ([]*types.ZombieResult, error) {
-	resultCh, err := e.WeakpassStream(ctx, task)
-	if err != nil {
-		return nil, err
-	}
-
-	var results []*types.ZombieResult
-	for result := range resultCh {
-		results = append(results, result)
-	}
-	return results, nil
-}
-
-func (e *Engine) WeakpassStream(ctx *Context, task *WeakpassTask) (<-chan *types.ZombieResult, error) {
-	resultCh, err := e.Execute(ctx, task)
-	if err != nil {
-		return nil, err
-	}
-
-	zombieResultCh := make(chan *types.ZombieResult, 100)
-	go func() {
-		defer close(zombieResultCh)
-		for result := range resultCh {
-			if data, ok := types.ResultData[*types.ZombieResult](result); result.Success() && ok && data != nil {
-				zombieResultCh <- data
-			}
-		}
-	}()
-	return zombieResultCh, nil
 }

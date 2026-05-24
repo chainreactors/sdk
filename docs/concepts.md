@@ -84,6 +84,7 @@ type Task interface {
 | GoGo | `WorkflowTask` | 工作流扫描 |
 | Spray | `CheckTask` | URL 存活检测 |
 | Spray | `BruteTask` | 路径爆破 |
+| Zombie | `BruteTask` | 弱口令检测（Brute/Pitchfork/Sniper） |
 
 ### Result
 
@@ -156,3 +157,4 @@ ctx := gogo.NewContext().SetStatsHandler(func(s types.Stats) {
 - [Neutron - POC 扫描](neutron.md)
 - [GoGo - 端口扫描](gogo.md)
 - [Spray - HTTP 检测](spray.md)
+- [Zombie - 弱口令检测](zombie.md)

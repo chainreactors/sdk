@@ -10,8 +10,11 @@ Chainreactors SDK 为多个安全扫描工具提供统一接口：
 - **Neutron**: POC/漏洞扫描
 - **GoGo**: 集成指纹识别和 POC 检测的端口扫描
 - **Spray**: HTTP 批量检测和路径爆破
+- **Zombie**: 弱口令检测和未授权访问检测
 - **Cyberhub Provider**: 统一远程数据源，导出指纹、alias 和 POC
 - **Association**: 统一关联查询，从 finger、alias、template、CVE 等条件互相查找
+
+详细文档见 [docs/](docs/README.md)。
 
 ## 安装
 
@@ -19,194 +22,234 @@ Chainreactors SDK 为多个安全扫描工具提供统一接口：
 go get github.com/chainreactors/sdk
 ```
 
+## 快速开始
+
+### 通过 Client 使用（推荐）
+
+Client 是 SDK 的统一入口，管理引擎生命周期、依赖注入和关联查询：
+
+```go
+import (
+    "github.com/chainreactors/sdk/client"
+    "github.com/chainreactors/sdk/pkg/cyberhub"
+    "github.com/chainreactors/sdk/gogo"
+)
+
+// 创建 Client，共享 Provider，开启关联索引
+provider := cyberhub.NewProvider("http://127.0.0.1:8080", "your_key")
+c := client.New(
+    client.WithProvider(provider),
+    client.WithIndex(nil),  // 可选：开启关联查询
+)
+defer c.Close()
+
+// 获取引擎 — 依赖自动注入
+// GoGo 自动获得 Fingers + Neutron 引擎
+gogoEng, _ := c.Gogo()
+results, _ := gogoEng.Scan(gogo.NewContext().SetThreads(1000), "192.168.1.0/24", "80,443")
+
+// 关联查询 — 扫描结果直接查关联 POC
+for _, r := range results {
+    related, _ := c.LookupByFinger(r.Frameworks.Names()...)
+    // related.Templates — 关联的 POC
+}
+```
+
+Client 的依赖注入关系：
+
+```
+GoGo  → 自动注入 Fingers + Neutron
+Spray → 自动注入 Fingers
+```
+
+### 直接使用引擎
+
+如果只需要单个引擎，可以跳过 Client 直接创建：
+
+```go
+// Fingers - 指纹识别
+config := fingers.NewConfig().
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
+engine, _ := fingers.NewEngine(config)
+frameworks, _ := engine.Match(httpResponseBytes)
+
+// Neutron - POC 扫描
+config := neutron.NewConfig().
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
+engine, _ := neutron.NewEngine(config)
+for _, t := range engine.Get() {
+    result, _ := t.Execute("http://target.com", nil)
+}
+
+// GoGo - 端口扫描（Provider 自动加载 Fingers 和 Neutron）
+gogoConfig := gogo.NewConfig().
+    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
+gogoEngine := gogo.NewEngine(gogoConfig)
+results, _ := gogoEngine.Scan(gogo.NewContext(), "192.168.1.0/24", "80,443")
+
+// Spray - HTTP 检测
+sprayEngine := spray.NewEngine(nil)
+results, _ := sprayEngine.Check(spray.NewContext(), []string{"http://example.com"})
+
+// Zombie - 弱口令检测
+zombieEngine := zombie.NewEngine(nil)
+task := zombie.NewWeakpassTask([]zombie.Target{{IP: "192.168.1.1", Port: "22", Service: "ssh"}})
+results, _ := zombieEngine.Weakpass(zombie.NewContext(), task)
+```
+
 ## 架构设计
 
-### 核心架构
+### 核心接口
 
-SDK 采用简单的四组件架构：
+SDK 采用四组件架构，定义在 `pkg/types/types.go`：
 
-1. **Engine（引擎）**: 实现具体的扫描逻辑
-2. **Context（上下文）**: 携带配置和控制信息
-3. **Task（任务）**: 定义扫描目标
-4. **Result（结果）**: 返回扫描结果
+| 接口 | 职责 |
+|------|------|
+| **Engine** | `Execute(Context, Task) → chan Result`，实现具体扫描逻辑 |
+| **Context** | 携带运行时配置（线程、超时、代理等） |
+| **Task** | 定义扫描目标和参数 |
+| **Result** | 返回扫描结果，通过 `TypedResult[T]` 实现类型安全 |
 
-每个引擎可以独立使用，也可以与其他引擎集成（如 GoGo 同时集成 Fingers 和 Neutron）。
+### Client 架构
+
+```
+              ┌──────────────────────────┐
+              │         Client           │
+              │  WithProvider / WithIndex │
+              └────┬──────────┬──────────┘
+                   │          │
+         ┌─────────┤   ┌──────▼──────┐
+         │         │   │ Index (可选) │
+         │         │   └──────────────┘
+    ┌────▼───┐ ┌───▼────┐ ┌───────┐ ┌────────┐ ┌────────┐
+    │ Fingers │ │ Neutron │ │ GoGo  │ │ Spray  │ │ Zombie │
+    └────────┘ └────────┘ └───────┘ └────────┘ └────────┘
+```
+
+- 引擎懒加载，首次访问时创建
+- 依赖自动注入（GoGo ← Fingers + Neutron，Spray ← Fingers）
+- Index 是可选的关联查询层，通过 `WithIndex` 开启
 
 ### 数据源
 
 所有引擎支持双重加载模式：
 
 - **本地模式**: 从嵌入数据或文件系统加载
-- **远程模式**: 从 Cyberhub API 加载，支持 sources 过滤
+- **远程模式**: 从 Cyberhub API 加载，支持过滤条件
 
-## 快速开始
+## Client API
 
-### Fingers - 指纹识别
+### Option
 
 ```go
-import (
-    "github.com/chainreactors/sdk/fingers"
-    "github.com/chainreactors/sdk/pkg/cyberhub"
-)
-
-// 创建并加载引擎
-config := fingers.NewConfig().
-    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
-
-engine, _ := fingers.NewEngine(config)
-
-// 方式一：使用 Match API 直接检测
-frameworks, _ := engine.Match(httpResponseBytes)
-
-// 方式二：使用底层 Engine
-libEngine := engine.Get()
-frameworks, _ = libEngine.DetectContent(httpResponseBytes)
+client.WithProvider(provider)           // 共享 Cyberhub 数据源
+client.WithResourceProvider(rp)         // 共享资源加载器
+client.WithIndex(opts)                  // 开启关联索引（可选）
+client.WithFingersConfig(cfg)           // 覆盖 Fingers 配置
+client.WithNeutronConfig(cfg)           // 覆盖 Neutron 配置
+client.WithGogoConfig(cfg)              // 覆盖 GoGo 配置
+client.WithSprayConfig(cfg)             // 覆盖 Spray 配置
+client.WithZombieConfig(cfg)            // 覆盖 Zombie 配置
 ```
 
-### Neutron - POC 扫描
+### 引擎访问
 
 ```go
-import (
-    "github.com/chainreactors/sdk/neutron"
-    "github.com/chainreactors/sdk/pkg/cyberhub"
-)
-
-// 创建并加载引擎
-config := neutron.NewConfig().
-    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
-
-engine, _ := neutron.NewEngine(config)
-templates := engine.Get()  // 自动编译
-
-// 执行 POC
-for _, t := range templates {
-    result, _ := t.Execute("http://target.com", nil)
-    if result.Matched {
-        // 处理漏洞
-    }
-}
+c.Fingers()  // *fingers.Engine
+c.Neutron()  // *neutron.Engine
+c.Gogo()     // *gogo.GogoEngine
+c.Spray()    // *spray.SprayEngine
+c.Zombie()   // *zombie.Engine
 ```
 
-### GoGo - 集成扫描
+### 关联查询
 
 ```go
-import (
-    "github.com/chainreactors/sdk/gogo"
-    "github.com/chainreactors/sdk/pkg/cyberhub"
-)
-
-// 创建集成扫描器，Provider 会自动加载 Fingers 和 Neutron 数据
-gogoConfig := gogo.NewConfig().
-    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
-gogoEngine := gogo.NewEngine(gogoConfig)
-gogoEngine.Init()
-
-// 执行扫描
-gogoCtx := gogo.NewContext().
-    SetThreads(1000).
-    SetVersionLevel(2).
-    SetExploit("all").
-    SetDelay(5)
-task := gogo.NewScanTask("192.168.1.0/24", "80,443,8080")
-resultCh, _ := gogoEngine.Execute(gogoCtx, task)
-
-for result := range resultCh {
-    // 处理结果
-}
-```
-
-### Spray - HTTP 检测
-
-```go
-import (
-    "github.com/chainreactors/sdk/spray"
-    "github.com/chainreactors/sdk/pkg/types"
-)
-
-engine := spray.NewEngine(nil)
-engine.Init()
-
-urls := []string{"http://example.com", "http://target.com"}
-sprayCtx := spray.NewContext().
-    SetThreads(100).
-    SetTimeout(10)
-task := spray.NewCheckTask(urls)
-resultCh, _ := engine.Execute(sprayCtx, task)
-
-for result := range resultCh {
-    sprayResult, _ := types.ResultData[*types.SprayResult](result)
-    // 处理结果
-}
+c.Index()                    // 获取关联索引
+c.Lookup(query)              // 通用查询
+c.LookupResult(result)      // 从引擎结果查询关联
+c.LookupByFinger("tomcat")  // 按指纹名查询
+c.LookupByCVE("CVE-...")    // 按 CVE 查询
+c.BuildIndex(ctx, opts...)   // 构建独立索引
 ```
 
 ## 配置
 
-### Fingers 配置
+### 引擎配置
 
 ```go
-remoteConfig := fingers.NewConfig().WithProvider(
-    cyberhub.NewProvider("http://127.0.0.1:8080", "your_key").
-        WithFilter(types.NewExportFilter().WithSources("github")),
-)
+// Fingers
+fingers.NewConfig().
+    WithProvider(provider).           // 远程加载
+    WithLocalFile("fingers.yaml").    // 或本地加载
+    WithMatchDetail()                 // 开启匹配细节
 
-localConfig := fingers.NewConfig().WithLocalFile("fingers.yaml") // 从导出的 YAML 加载
+// Neutron
+neutron.NewConfig().
+    WithProvider(provider).
+    WithLocalFile("./pocs").
+    WithCapacity(10)                  // 并发限制
+
+// GoGo
+gogo.NewConfig().
+    WithProvider(provider).           // 自动加载 Fingers + Neutron
+    WithFingersEngine(fingersEng).    // 或手动注入
+    WithNeutronEngine(neutronEng).
+    WithCapacity(5000)
+
+// Spray
+spray.NewConfig().
+    WithFingersEngine(fingersEng).
+    WithMatchDetail().
+    WithCapacity(3000)
+
+// Zombie
+zombie.NewConfig().
+    WithCapacity(500)
 ```
 
-### Neutron 配置
+### 运行时 Context
 
 ```go
-remoteConfig := neutron.NewConfig().WithProvider(
-    cyberhub.NewProvider("http://127.0.0.1:8080", "your_key").
-        WithFilter(types.NewExportFilter().WithSources("github")),
-)
-
-localConfig := neutron.NewConfig().WithLocalFile("./pocs") // 本地 POC 目录
-localConfig.Timeout = 10 * time.Second
-```
-
-### GoGo 配置
-
-```go
-config := gogo.NewConfig().
-    WithFingersEngine(fingersEngine).
-    WithNeutronEngine(neutronEngine)
-```
-
-### GoGo 运行时上下文
-
-```go
-ctx := gogo.NewContext().
+// GoGo
+gogo.NewContext().
     SetThreads(1000).
-    SetVersionLevel(2).         // 指纹识别级别（见下方说明）
+    SetVersionLevel(2).         // 0=被动, 1=基础, 2=深度, 3=全量
     SetExploit("all").          // none/all/known
-    SetDelay(5)                 // 请求超时时间
+    SetDelay(5)
+
+// Spray
+spray.NewContext().
+    SetThreads(100).
+    SetTimeout(10).
+    SetCrawlPlugin(true).
+    SetFinger(true)
+
+// Zombie
+zombie.NewContext().
+    SetThreads(100).
+    SetTimeout(5).
+    SetTop(10)                  // 使用 top N 字典
 ```
 
-**指纹识别级别说明**:
-
-- **Level 0 (被动模式)**: 仅分析响应内容，不发送主动探测请求
-  - 适用场景：快速扫描、隐蔽性要求高
-  - 优点：速度快、流量小、不易被检测
-  - 缺点：识别准确度较低
-
-- **Level 1 (基础模式)**: 使用指纹级别的主动探测
-  - 发送finger-level的send_data探测请求
-  - 适用场景：常规扫描、平衡速度和准确度
-  - 优点：准确度较高、流量适中
-  - 缺点：会产生额外的探测流量
-
-- **Level 2 (全量模式)**: 使用指纹+规则级别的主动探测
-  - 发送finger-level和rule-level的send_data探测请求
-  - 适用场景：深度扫描、要求最高准确度
-  - 优点：识别最准确、覆盖最全面
-  - 缺点：速度较慢、流量较大
-
-### Spray 运行时上下文
+### 数据筛选
 
 ```go
-ctx := spray.NewContext().
-    SetThreads(100).
-    SetTimeout(10)
+// 远程筛选（减少传输量）
+filter := types.NewExportFilter().
+    WithTags("cms", "rce").
+    WithSources("github").
+    WithSeverities("critical", "high").
+    WithLimit(100)
+
+provider := cyberhub.NewProvider(url, key).WithFilter(filter)
+
+// 本地筛选（加载后过滤）
+config := fingers.NewConfig().
+    WithProvider(provider).
+    WithFilter(func(f *fingers.FullFinger) bool {
+        return f.Finger.Protocol == "http"
+    })
 ```
 
 ## 命令行工具
@@ -214,14 +257,13 @@ ctx := spray.NewContext().
 `examples/` 目录提供了预构建的命令行工具：
 
 ```bash
-# 构建所有工具
 cd examples
-go build -o fingers/fingers.exe ./fingers/main.go
-go build -o neutron/neutron.exe ./neutron/main.go
-go build -o gogo/gogo.exe ./gogo/main.go
-go build -o spray/spray.exe ./spray/main.go
-go build -o cyberhub/cyberhub.exe ./cyberhub/main.go
-go build -o association/association.exe ./association/main.go
+go build -o bin/fingers ./fingers
+go build -o bin/neutron ./neutron
+go build -o bin/gogo ./gogo
+go build -o bin/spray ./spray
+go build -o bin/cyberhub ./cyberhub
+go build -o bin/association ./association
 ```
 
 详细使用方法参见 [examples/README.md](examples/README.md)。
@@ -230,261 +272,82 @@ go build -o association/association.exe ./association/main.go
 
 ```
 sdk/
-├── fingers/              # 指纹识别引擎
-│   ├── engine.go        # 核心引擎实现
-│   ├── config.go        # 配置
-│   ├── types.go         # 类型定义
-│   ├── additions.go     # 扩展方法 (AddFingers, AddFingersFile)
-│   ├── init.go          # 注册入口
-│   └── README.md        # 引擎文档
+├── client/              # 统一客户端（依赖注入、关联查询）
+│   └── client.go
+│
+├── fingers/             # 指纹识别引擎
+│   ├── engine.go        # 核心引擎（Match / HTTPMatch / ServiceMatch）
+│   ├── config.go        # 配置与 FullFingers 类型
+│   ├── types.go         # Context / Task / Result 定义
+│   ├── sender.go        # HTTP 发送器接口
+│   ├── additions.go     # 动态扩展（AddFingers / AddFingersFile）
+│   └── init.go
 │
 ├── neutron/             # POC 扫描引擎
-│   ├── engine.go        # 核心引擎（自动编译）
+│   ├── engine.go        # 核心引擎（自动编译模板）
 │   ├── config.go        # 配置
-│   ├── types.go         # 类型定义
-│   ├── templates.go     # Templates 辅助类型 (Filter, Merge)
-│   ├── additions.go     # 扩展方法 (AddPocs, AddPocsFile)
-│   └── README.md        # 引擎文档
+│   ├── types.go         # Context / Task / Result 定义
+│   ├── templates.go     # Templates 辅助类型（Filter / Merge）
+│   ├── additions.go     # 动态扩展（AddPocs / AddPocsFile）
+│   └── init.go
 │
-├── gogo/                # 端口扫描（集成）
-│   ├── gogo.go          # 支持 Fingers/Neutron 的引擎
-│   ├── types.go         # 类型定义和配置
-│   ├── init.go          # 注册入口
-│   └── README.md        # 引擎文档
+├── gogo/                # 端口扫描引擎
+│   ├── gogo.go          # 核心引擎（Scan / ScanStream / Workflow）
+│   ├── types.go         # Context / Config / Task 定义
+│   └── init.go
 │
 ├── spray/               # HTTP 检测引擎
-│   ├── spray.go         # 核心引擎实现
-│   ├── types.go         # 类型定义和配置
-│   ├── init.go          # 注册入口
-│   └── README.md        # 引擎文档
+│   ├── spray.go         # 核心引擎（Check / Brute / BruteMany）
+│   ├── types.go         # Context / Config / Task 定义
+│   ├── config.go        # Option 默认值
+│   └── init.go
+│
+├── zombie/              # 弱口令检测引擎
+│   ├── engine.go        # 核心引擎（Weakpass / WeakpassStream）
+│   ├── types.go         # Context / Config / Target / Task 定义
+│   └── init.go
 │
 ├── pkg/
-│   ├── cyberhub/        # 统一 API 客户端
-│   │   ├── api.go       # Cyberhub 响应结构
-│   │   ├── client.go    # HTTP 客户端（支持 gzip）
-│   │   ├── provider.go  # Provider 数据源
-│   │   ├── types.go     # ExportFilter 兼容入口
-│   │   └── README.md    # Provider 文档
-│   ├── association/     # 关联索引
-│   │   ├── index.go     # 指纹-alias-POC 关联索引
-│   │   ├── query.go     # 统一 Query/Lookup
-│   │   └── README.md    # 关联查询文档
-│   ├── types/           # SDK 对外统一类型入口
-│   │   ├── types.go     # Engine/Context/Config/Task/Result 和外部类型别名
-│   │   ├── result.go    # 通用 Result 封装
+│   ├── types/           # 核心接口与类型
+│   │   ├── types.go     # Engine / Context / Task / Result 接口 + 类型别名
+│   │   ├── result.go    # TypedResult[T] 泛型包装
 │   │   ├── capacity.go  # 并发容量控制
-│   │   └── registry.go  # 引擎注册入口
+│   │   ├── registry.go  # 引擎注册（供独立使用场景）
+│   │   ├── stats.go     # 执行统计
+│   │   ├── export_filter.go  # ExportFilter 导出筛选
+│   │   ├── gogo.go      # GogoOption 包装
+│   │   └── spray.go     # SprayOption 包装
+│   │
+│   ├── cyberhub/        # Cyberhub 远程数据源
+│   │   ├── provider.go  # Provider（Fingers / POCs 导出）
+│   │   ├── client.go    # HTTP 客户端（gzip 支持）
+│   │   ├── api.go       # API 响应结构
+│   │   └── types.go     # 类型定义
+│   │
+│   └── association/     # 关联索引（独立机制）
+│       ├── index.go     # Index 构建与实体管理
+│       └── query.go     # Query / Lookup / QueryFromResult
 │
-└── examples/            # CLI 工具实现
-    ├── fingers/
-    ├── neutron/
-    ├── gogo/
-    ├── spray/
-    ├── cyberhub/
-    ├── association/
-    └── README.md
-```
-
-## 核心特性
-
-### Cyberhub 集成
-
-所有引擎都支持从 Cyberhub 加载数据：
-- Gzip 压缩处理
-- 基于 `types.ExportFilter` 的 name、tag、source、severity、status 等过滤
-- API Key 认证
-- `cyberhub.Provider` 可被 Fingers、Neutron、GoGo 和 Association 复用
-
-[pkg/cyberhub/README.md](pkg/cyberhub/README.md) / [examples/cyberhub](examples/cyberhub)
-
-### POC 自动编译
-
-Neutron 引擎在加载时自动编译 POC：
-- 无需手动编译
-- 编译失败的 POC 自动跳过
-- ExecuterOptions 从引擎配置生成
-
-### GoGo 集成
-
-GoGo 可以同时集成 Fingers 和 Neutron：
-- `WithProvider` 自动加载指纹和 POC
-- 扫描结果通过 `types.GOGOResult` 暴露
-- 需要跨 finger、alias、template 的通用关联时，使用 `pkg/association`
-
-### 关联查询
-
-`pkg/association` 通过 `association.NewQuery()` + `idx.Lookup(query)` 统一查询 finger、alias、template、tag、service、CPE、CVE 和属性关联。
-
-[pkg/association/README.md](pkg/association/README.md) / [examples/association](examples/association)
-
-### 数据筛选
-
-SDK 支持两种筛选方式：
-
-#### 1. 远程筛选（请求 Cyberhub 时过滤）
-
-使用 `ExportFilter` 在请求 API 时筛选，减少传输数据量：
-
-```go
-import (
-    "time"
-    "github.com/chainreactors/sdk/fingers"
-    "github.com/chainreactors/sdk/neutron"
-    "github.com/chainreactors/sdk/pkg/cyberhub"
-    "github.com/chainreactors/sdk/pkg/types"
-)
-
-// 指纹筛选
-filter := types.NewExportFilter().
-    WithTags("cms", "framework").            // 按标签筛选
-    WithSources("github").                   // 按来源筛选
-    WithLimit(100).                          // 限制数量
-    WithUpdatedAfter(time.Now().AddDate(0, -1, 0)) // 最近一个月更新的
-
-config := fingers.NewConfig().
-    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key").WithFilter(filter))
-
-engine, _ := fingers.NewEngine(config)
-
-// POC 筛选
-pocFilter := types.NewExportFilter().
-    WithTags("cve", "rce").                  // 按标签筛选
-    WithSources("nuclei").                   // 按来源筛选
-    WithCreatedAfter(time.Now().AddDate(-1, 0, 0)) // 最近一年创建的
-
-nConfig := neutron.NewConfig().
-    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key").WithFilter(pocFilter))
-
-nEngine, _ := neutron.NewEngine(nConfig)
-```
-
-#### 2. 本地筛选（加载后在内存中过滤）
-
-使用 `FullFingers.Filter` 或 `Templates.Filter` 对已加载的数据进行二次过滤：
-
-```go
-import (
-    "github.com/chainreactors/sdk/fingers"
-    "github.com/chainreactors/sdk/neutron"
-    "github.com/chainreactors/sdk/pkg/cyberhub"
-    "github.com/chainreactors/sdk/pkg/types"
-)
-
-// 加载指纹后筛选
-fConfig := fingers.NewConfig().
-    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
-fEngine, _ := fingers.NewEngine(fConfig)
-
-// 获取并过滤指纹（按协议筛选）
-allFingers := fConfig.FullFingers
-httpFingers := allFingers.Filter(func(f *fingers.FullFinger) bool {
-    return f.Finger != nil && f.Finger.Protocol == "http"
-})
-
-// 加载 POC 后筛选
-nConfig := neutron.NewConfig().
-    WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
-nEngine, _ := neutron.NewEngine(nConfig)
-
-// 使用 Templates.Filter 筛选
-allTemplates := (neutron.Templates{}).Merge(nEngine.Get())
-
-// 按严重级别筛选
-highSeverity := allTemplates.Filter(func(t *types.Template) bool {
-    severity := t.Info.Severity
-    return severity == "critical" || severity == "high"
-})
-
-// 按标签筛选
-rceTemplates := allTemplates.Filter(func(t *types.Template) bool {
-    for _, tag := range t.GetTags() {
-        if tag == "rce" {
-            return true
-        }
-    }
-    return false
-})
-```
-
-### 基于指纹筛选 POC 示例
-
-下面示例演示：Fingers 命中指纹后，使用 `neutron.Templates.Filter` 从模板集中筛选相关 POC 并执行。
-
-```go
-package main
-
-import (
-	"strings"
-
-	"github.com/chainreactors/sdk/fingers"
-	"github.com/chainreactors/sdk/neutron"
-	"github.com/chainreactors/sdk/pkg/cyberhub"
-	"github.com/chainreactors/sdk/pkg/types"
-)
-
-func main() {
-	// 1) 指纹识别
-	fConfig := fingers.NewConfig().
-		WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
-	fEngine, _ := fingers.NewEngine(fConfig)
-
-	// 使用 Match API 直接匹配
-	frameworks, _ := fEngine.Match([]byte("raw http response"))
-
-	// 收集指纹名称
-	fingerNames := make(map[string]struct{})
-	for _, frame := range frameworks {
-		fingerNames[strings.ToLower(frame.Name)] = struct{}{}
-	}
-
-	// 2) 加载 POC 并使用 Filter 筛选
-	nConfig := neutron.NewConfig().
-		WithProvider(cyberhub.NewProvider("http://127.0.0.1:8080", "your_key"))
-	nEngine, _ := neutron.NewEngine(nConfig)
-
-	// 使用 Templates.Filter 按指纹/标签筛选
-	filtered := (neutron.Templates{}).Merge(nEngine.Get()).Filter(func(t *types.Template) bool {
-		// 按 Fingers 字段匹配
-		for _, finger := range t.Fingers {
-			if _, ok := fingerNames[strings.ToLower(finger)]; ok {
-				return true
-			}
-		}
-		// 按 Tags 匹配
-		for _, tag := range t.GetTags() {
-			if _, ok := fingerNames[strings.ToLower(tag)]; ok {
-				return true
-			}
-		}
-		return false
-	})
-
-	// 3) 执行筛选后的 POC
-	task := &neutron.ExecuteTask{
-		Target:    "http://target.example",
-		Templates: filtered.Templates(),
-	}
-	resultCh, _ := nEngine.Execute(neutron.NewContext(), task)
-	for range resultCh {
-		// consume results
-	}
-}
-```
-
-也可以使用 `pkg/association` 包中的 `Index` 进行更高效的关联查询。
-
-### 动态扩展
-
-引擎支持在运行时动态添加指纹和 POC：
-
-```go
-// Fingers: 动态添加指纹
-engine.AddFingers(newFingers)           // 添加指纹切片
-engine.AddFingersFile("./custom.yaml")  // 从文件/目录加载
-
-// Neutron: 动态添加 POC
-engine.AddPocs(newTemplates)            // 添加模板切片
-engine.AddPocsFile("./custom-pocs/")    // 从文件/目录加载
+├── examples/            # 示例程序
+│   ├── sdk_usage/       # Client 统一用法
+│   ├── fingers/         # 指纹识别 CLI
+│   ├── neutron/         # POC 扫描 CLI
+│   ├── gogo/            # 端口扫描 CLI
+│   ├── spray/           # HTTP 检测 CLI
+│   ├── cyberhub/        # Cyberhub 数据加载
+│   ├── association/     # 关联查询
+│   ├── filter/          # 数据筛选
+│   └── cases/           # 进阶用例
+│
+└── docs/                # 用户文档
+    ├── quickstart.md    # 快速开始
+    ├── concepts.md      # 核心概念
+    ├── fingers.md       # Fingers 引擎
+    ├── neutron.md       # Neutron 引擎
+    ├── gogo.md          # GoGo 引擎
+    ├── spray.md         # Spray 引擎
+    ├── cyberhub.md      # Cyberhub 数据源
+    └── association.md   # 关联查询
 ```
 
 ## 开发
@@ -492,22 +355,15 @@ engine.AddPocsFile("./custom-pocs/")    // 从文件/目录加载
 ### 运行测试
 
 ```bash
-# 运行所有测试
 go test ./...
-
-# 运行特定包的测试
-go test ./fingers -v
-go test ./neutron -v
-go test ./gogo -v
-go test ./spray -v
 ```
 
 ### 添加新引擎
 
-1. 实现 `pkg/types` 中的核心接口
-2. 创建引擎包，包含 `engine.go`、`config.go`、`init.go`
-3. 在 `engine.go` 的 init 函数中注册
-4. 在 `examples/` 中添加 CLI 工具
+1. 实现 `pkg/types` 中的 Engine / Context / Task / Result 接口
+2. 创建引擎包（engine.go / types.go / init.go）
+3. 在 `client/client.go` 中添加 ensure 方法和访问器
+4. 在 `examples/` 中添加示例
 
 ## License
 
@@ -519,3 +375,4 @@ MIT License
 - [Neutron](https://github.com/chainreactors/neutron) - POC 框架
 - [GoGo](https://github.com/chainreactors/gogo) - 端口扫描器
 - [Spray](https://github.com/chainreactors/spray) - HTTP 扫描器
+- [Zombie](https://github.com/chainreactors/zombie) - 弱口令检测

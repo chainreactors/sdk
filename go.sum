@@ -117,8 +117,6 @@ github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 h1:cU3sGEODXZs
 github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0/go.mod h1:NSxGNMRWryAyrDzZpVwmujI22wbGw6c52bQOd5zEvyU=
 github.com/chainreactors/fingers v1.2.1-0.20260517173939-651a8e7ceac0/go.mod h1:dEsa73t8NP7DacLCQOKa+7bKOlAorOyLxXjCMPPn+VU=
 github.com/chainreactors/fingers v1.2.1-0.20260518103258-7a88bfa946ff/go.mod h1:dEsa73t8NP7DacLCQOKa+7bKOlAorOyLxXjCMPPn+VU=
-github.com/chainreactors/fingers v1.2.1-0.20260522155757-56668e36a899 h1:Z3NFIlYqVp2QOpbhRwq40unqNG4AIcqIjFhQNEyEgCA=
-github.com/chainreactors/fingers v1.2.1-0.20260522155757-56668e36a899/go.mod h1:3LWvrHgXt4nuBnN8fWUuQBYm+cvkhMDbIDWxjA6CRYU=
 github.com/chainreactors/fingers v1.2.1-0.20260523084643-75e5a3f2065e h1:8TORlKnuU4mQXuZ3tGIgDwRgcQn2RoDsEKBZgWo/euw=
 github.com/chainreactors/fingers v1.2.1-0.20260523084643-75e5a3f2065e/go.mod h1:3LWvrHgXt4nuBnN8fWUuQBYm+cvkhMDbIDWxjA6CRYU=
 github.com/chainreactors/gogo/v2 v2.14.2-0.20260518120413-769f82fc91a6 h1:it75WL6Q7f0oInUahut6CXReeH5Z85zK771Jni67Kv0=
@@ -135,8 +133,6 @@ github.com/chainreactors/proton v0.0.0-20260521032855-e7e7b12b4506 h1:zFfjzsAeXc
 github.com/chainreactors/proton v0.0.0-20260521032855-e7e7b12b4506/go.mod h1:EuaBkQ5IJuI9BNQbGTM7igVDjA+2jy4Vnye4rKs+C98=
 github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0 h1:WsXmNDgGL63ppkjfZvEcf+sNf1afLJfQ8cYzbxVwK7c=
 github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0/go.mod h1:Yi0GCltPMYKS7QrCpwfUu2U9jX2zUQuQ0kwzH6dpbCU=
-github.com/chainreactors/spray v1.2.6-0.20260523075935-95dc85a6afe9 h1:qGvh8o0C/TQZencVzg/5qRCFQJV2LqdWYmuoCEN8FjA=
-github.com/chainreactors/spray v1.2.6-0.20260523075935-95dc85a6afe9/go.mod h1:y4p9+PlrDbgenvcOGjfstGp/0THr3ox2Z9ZlDltFUZk=
 github.com/chainreactors/spray v1.2.6-0.20260523083907-546e8ab7756a h1:fc9+vwRRk7dqWqyk0DjstiE3taC0yQpjmEfK+CNEJrU=
 github.com/chainreactors/spray v1.2.6-0.20260523083907-546e8ab7756a/go.mod h1:y4p9+PlrDbgenvcOGjfstGp/0THr3ox2Z9ZlDltFUZk=
 github.com/chainreactors/utils v0.0.0-20240716182459-e85f2b01ee16/go.mod h1:LajXuvESQwP+qCMAvlcoSXppQCjuLlBrnQpu9XQ1HtU=
@@ -146,10 +142,8 @@ github.com/chainreactors/utils v0.0.0-20260520090033-cfefcb28cc6f/go.mod h1:LajX
 github.com/chainreactors/words v0.0.0-20241002061906-25d8893158d9/go.mod h1:zfz367PUmyaX6oAqV9SktVqyRXKlEh0sel9Wsq9dd2c=
 github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4 h1:lvnDYEkatmZFHP5i321qQXK9L4vKRfso/uUfr5tOeC8=
 github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4/go.mod h1:zfz367PUmyaX6oAqV9SktVqyRXKlEh0sel9Wsq9dd2c=
-github.com/chainreactors/zombie v1.2.3-0.20260519174828-007508851ffd h1:KUTDGqnMdghNsJGrxa9ru6oT/jaGgkLBJ2MAVTa/6ds=
-github.com/chainreactors/zombie v1.2.3-0.20260519174828-007508851ffd/go.mod h1:qaSUL1ZFCmPiTvQv0Wxo2T+qiMX9zJ4Z8HrJmrOtx/s=
-github.com/chainreactors/zombie v1.2.3-0.20260523084643-c35bbbe8b950 h1:BAFj//2QHQ3mu2A2DgyLr5XRP2vkNi+FdnzR2KRRy+Q=
-github.com/chainreactors/zombie v1.2.3-0.20260523084643-c35bbbe8b950/go.mod h1:qaSUL1ZFCmPiTvQv0Wxo2T+qiMX9zJ4Z8HrJmrOtx/s=
+github.com/chainreactors/zombie v1.2.3-0.20260524062446-53a80b50a5ba h1:Yt7MhUAP8ZZ4QDj2odHrU9ltTwBrFkGnYOPmS1aofuM=
+github.com/chainreactors/zombie v1.2.3-0.20260524062446-53a80b50a5ba/go.mod h1:qaSUL1ZFCmPiTvQv0Wxo2T+qiMX9zJ4Z8HrJmrOtx/s=
 github.com/charlievieth/fastwalk v1.0.14 h1:3Eh5uaFGwHZd8EGwTjJnSpBkfwfsak9h6ICgnWlhAyg=
 github.com/charlievieth/fastwalk v1.0.14/go.mod h1:diVcUreiU1aQ4/Wu3NbxxH4/KYdKpLDojrQ1Bb2KgNY=
 github.com/charmbracelet/colorprofile v0.4.3 h1:QPa1IWkYI+AOB+fE+mg/5/4HRMZcaXex9t5KX76i20Q=

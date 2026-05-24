@@ -2,12 +2,9 @@ package zombie
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/chainreactors/sdk/pkg/types"
-	zombiecore "github.com/chainreactors/zombie/core"
-	zombiepkg "github.com/chainreactors/zombie/pkg"
 )
 
 func TestContextSettersCloneAndClamp(t *testing.T) {
@@ -19,77 +16,73 @@ func TestContextSettersCloneAndClamp(t *testing.T) {
 		SetNoUnauth(true)
 
 	ctx.SetThreads(0).SetTimeout(0).SetTop(-1)
-	if ctx.threads != 12 || ctx.timeout != 7 || ctx.top != 3 {
-		t.Fatalf("invalid setter values should be ignored: %+v", ctx)
+	if ctx.opt.Threads != 12 || ctx.opt.Timeout != 7 || ctx.opt.Top != 3 {
+		t.Fatalf("invalid setter values should be ignored: threads=%d timeout=%d top=%d",
+			ctx.opt.Threads, ctx.opt.Timeout, ctx.opt.Top)
 	}
 
 	child := ctx.WithContext(context.Background())
 	if child == ctx {
 		t.Fatal("WithContext should clone the SDK context")
 	}
-	if child.threads != 12 || child.timeout != 7 || child.top != 3 || child.firstOnly || !child.noUnauth {
-		t.Fatalf("clone lost fields: %+v", child)
+	if child.opt.Threads != 12 || child.opt.Timeout != 7 || child.opt.Top != 3 ||
+		child.opt.FirstOnly || !child.opt.NoUnAuth {
+		t.Fatalf("clone lost fields: threads=%d timeout=%d top=%d firstOnly=%v noUnauth=%v",
+			child.opt.Threads, child.opt.Timeout, child.opt.Top,
+			child.opt.FirstOnly, child.opt.NoUnAuth)
 	}
 }
 
-func TestTargetAddressAndWeakpassValidation(t *testing.T) {
-	if got := (Target{IP: "127.0.0.1"}).Address(); got != "127.0.0.1" {
+func TestTargetAddressAndBruteTaskValidation(t *testing.T) {
+	if got := (&Target{IP: "127.0.0.1"}).Address(); got != "127.0.0.1:" {
 		t.Fatalf("address without port = %q", got)
 	}
-	if got := (Target{IP: "127.0.0.1", Port: "22"}).Address(); got != "127.0.0.1:22" {
+	if got := (&Target{IP: "127.0.0.1", Port: "22"}).Address(); got != "127.0.0.1:22" {
 		t.Fatalf("address with port = %q", got)
 	}
 
-	if err := NewWeakpassTask(nil).Validate(); err == nil {
+	if err := NewBruteTask(nil).Validate(); err == nil {
 		t.Fatal("expected empty targets to fail")
 	}
-	if err := NewWeakpassTask([]Target{{Service: "ssh"}}).Validate(); err == nil {
+	if err := NewBruteTask([]Target{{Service: "ssh"}}).Validate(); err == nil {
 		t.Fatal("expected missing IP to fail")
 	}
-	if err := NewWeakpassTask([]Target{{IP: "127.0.0.1"}}).Validate(); err == nil {
+	if err := NewBruteTask([]Target{{IP: "127.0.0.1"}}).Validate(); err == nil {
 		t.Fatal("expected missing service to fail")
 	}
-	if err := NewWeakpassTask([]Target{{IP: "127.0.0.1", Service: "ssh"}}).Validate(); err != nil {
-		t.Fatalf("valid weakpass task failed: %v", err)
+	if err := NewBruteTask([]Target{{IP: "127.0.0.1", Service: "ssh"}}).Validate(); err != nil {
+		t.Fatalf("valid brute task failed: %v", err)
 	}
 }
 
-func TestExpandTasksUsesExplicitAuthsAndNoUnauth(t *testing.T) {
-	if err := zombiepkg.Load(); err != nil {
-		t.Fatalf("load zombie resources: %v", err)
+func TestConvertTargetsNormalizesService(t *testing.T) {
+	targets := convertTargets([]Target{
+		{IP: "127.0.0.1", Service: "SSH"},
+		{IP: "127.0.0.2", Service: ""},
+	})
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 target (empty service filtered), got %d", len(targets))
 	}
-
-	ctx := NewContext().SetNoUnauth(true).SetFirstOnly(false)
-	task := &WeakpassTask{
-		Targets: []Target{{IP: "127.0.0.1", Service: "ssh"}},
-		Auths:   []Auth{{Username: "root", Password: "toor"}},
+	if targets[0].Service != "ssh" {
+		t.Fatalf("expected normalized service 'ssh', got %q", targets[0].Service)
 	}
-
-	ztasks := expandTasks(ctx, task)
-	if len(ztasks) != 1 {
-		t.Fatalf("expanded tasks len = %d, want 1", len(ztasks))
-	}
-	got := ztasks[0].ZombieResult
-	if got.IP != "127.0.0.1" || got.Service != "ssh" || got.Username != "root" || got.Password != "toor" {
-		t.Fatalf("unexpected expanded zombie task: %+v", got)
-	}
-	if got.Mod != types.ZombieModBrute {
-		t.Fatalf("expected brute task, got %v", got.Mod)
+	if targets[0].Port != "22" {
+		t.Fatalf("expected default port '22', got %q", targets[0].Port)
 	}
 }
 
-func TestZombieExecutionErrorClassification(t *testing.T) {
-	for _, err := range []error{
-		nil,
-		zombiepkg.ErrorWrongUserOrPwd,
-		zombiepkg.NotImplUnauthorized,
-		zombiecore.ErrNoUnauth,
-	} {
-		if isZombieExecutionError(err) {
-			t.Fatalf("expected %v to be non-execution error", err)
-		}
+func TestSetOptionOverrides(t *testing.T) {
+	ctx := NewContext().SetThreads(50).SetTimeout(10)
+
+	if ctx.opt.Threads != 50 || ctx.opt.Timeout != 10 {
+		t.Fatalf("setter failed: threads=%d timeout=%d", ctx.opt.Threads, ctx.opt.Timeout)
 	}
-	if !isZombieExecutionError(errors.New("network failed")) {
-		t.Fatal("expected generic error to count as execution error")
+
+	custom := &types.ZombieOption{Threads: 200, Timeout: 30, Mod: "sniper", FirstOnly: false}
+	ctx.SetOption(custom)
+
+	if ctx.opt.Threads != 200 || ctx.opt.Timeout != 30 || ctx.opt.Mod != "sniper" {
+		t.Fatalf("SetOption failed: threads=%d timeout=%d mod=%s",
+			ctx.opt.Threads, ctx.opt.Timeout, ctx.opt.Mod)
 	}
 }

@@ -12,6 +12,7 @@
 | [Neutron - POC 扫描](neutron.md) | 模板加载、漏洞检测、结果事件 |
 | [GoGo - 端口扫描](gogo.md) | 端口扫描、指纹+POC 一体化 |
 | [Spray - HTTP 检测](spray.md) | URL 存活检测、路径爆破、插件体系 |
+| [Zombie - 弱口令检测](zombie.md) | Brute/Pitchfork/Sniper 三种模式 |
 | [Cyberhub 数据源](cyberhub.md) | 远程加载指纹/POC、过滤条件 |
 | [Association 关联查询](association.md) | 指纹/别名/模板/CVE 跨域关联 |
 
@@ -24,6 +25,7 @@ sdk/
   neutron/        # POC/漏洞扫描引擎
   gogo/           # 端口扫描引擎（集成 fingers + neutron）
   spray/          # HTTP 批量检测/爆破引擎
+  zombie/         # 弱口令检测引擎
   pkg/
     types/        # 核心接口与类型定义
     cyberhub/     # Cyberhub 远程数据源
