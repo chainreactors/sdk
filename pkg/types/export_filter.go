@@ -11,6 +11,7 @@ type ExportFilter struct {
 	POCType      string
 	Statuses     []string
 	ReviewStatus string
+	Draft        bool
 
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
@@ -81,5 +82,10 @@ func (f *ExportFilter) WithStatuses(statuses ...string) *ExportFilter {
 
 func (f *ExportFilter) WithReviewStatus(status string) *ExportFilter {
 	f.ReviewStatus = status
+	return f
+}
+
+func (f *ExportFilter) WithDraft(draft bool) *ExportFilter {
+	f.Draft = draft
 	return f
 }

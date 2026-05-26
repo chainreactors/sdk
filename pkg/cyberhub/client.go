@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/chainreactors/sdk/pkg/types"
 )
 
 type client struct {
@@ -36,39 +34,22 @@ func newClient(baseURL, apiKey string, timeout time.Duration) *client {
 	}
 }
 
-func (c *client) exportFingers(ctx context.Context, filter *ExportFilter, draft bool) (types.Fingers, []*types.Alias, error) {
+func (c *client) exportFingers(ctx context.Context, filter *ExportFilter) ([]FingerprintExport, error) {
 	params := url.Values{}
 	params.Set("with_fingerprint", "true")
-	if draft {
-		params.Set("with_draft", "true")
-	}
 	applyFilterParams(params, filter)
 
 	endpoint := fmt.Sprintf("%s/fingerprints/export?%s", c.baseURL, params.Encode())
 
 	var response fingerprintListResponse
 	if err := c.doRequest(ctx, "GET", endpoint, nil, &response); err != nil {
-		return nil, nil, fmt.Errorf("export fingers failed: %w", err)
+		return nil, fmt.Errorf("export fingers failed: %w", err)
 	}
-
-	var allFingers types.Fingers
-	var allAliases []*types.Alias
-	for _, resp := range response.Fingerprints {
-		if resp.Finger != nil {
-			allFingers = append(allFingers, resp.Finger)
-		}
-		if resp.Alias != nil {
-			allAliases = append(allAliases, resp.Alias)
-		}
-	}
-	return allFingers, allAliases, nil
+	return response.Fingerprints, nil
 }
 
-func (c *client) exportPOCs(ctx context.Context, filter *ExportFilter, draft bool) ([]pocResponse, error) {
+func (c *client) exportPOCs(ctx context.Context, filter *ExportFilter) ([]pocResponse, error) {
 	params := url.Values{}
-	if draft {
-		params.Set("with_draft", "true")
-	}
 	applyFilterParams(params, filter)
 	applyDefaultPOCStatus(params)
 
@@ -118,6 +99,10 @@ func applyFilterParams(params url.Values, filter *ExportFilter) {
 
 	if filter.ReviewStatus != "" {
 		params.Set("review_status", filter.ReviewStatus)
+	}
+
+	if filter.Draft {
+		params.Set("with_draft", "true")
 	}
 
 	if filter.CreatedAfter != nil {
