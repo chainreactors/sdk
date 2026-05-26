@@ -12,13 +12,13 @@ type ExportFilter struct {
 	Statuses     []string
 	ReviewStatus string
 
-	// Draft controls whether unreviewed-draft content is returned in place of
-	// the approved RawContent. When true the backend sends back RawContentDraft
-	// for rows that have one (and the approved RawContent otherwise), which is
-	// the only way to actually read brand-new pending entries or pending edits.
+	// Draft controls whether the backend also returns pending draft content.
+	// For fingerprint exports, RawContent remains the approved/effective
+	// content and RawContentDraft is returned alongside it when available.
+	// For POC exports, the backend parses the draft template when available.
 	//
 	// Draft is orthogonal to Statuses / ReviewStatus: filter fields decide
-	// which rows are returned, Draft decides which column is read.
+	// which rows are returned, Draft decides whether draft content is included.
 	Draft bool
 
 	CreatedAfter  *time.Time
@@ -93,11 +93,11 @@ func (f *ExportFilter) WithReviewStatus(status string) *ExportFilter {
 	return f
 }
 
-// WithDraft toggles draft mode: when true the backend returns RawContentDraft
-// for rows that have a pending-review draft (and falls back to RawContent
-// otherwise). Combine with WithStatuses("pending"|"draft") or
-// WithReviewStatus("pending") to actually pull pending rows — the filter
-// fields decide which rows come back, WithDraft decides which column is read.
+// WithDraft toggles draft mode. For fingerprint exports, the backend keeps
+// raw_content as the approved/effective content and adds raw_content_draft
+// for rows that have a pending-review draft. Combine with
+// WithStatuses("pending"|"draft") or WithReviewStatus("pending") to actually
+// pull pending-only rows; the filter fields decide which rows come back.
 func (f *ExportFilter) WithDraft(draft bool) *ExportFilter {
 	f.Draft = draft
 	return f
