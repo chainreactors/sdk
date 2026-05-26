@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func TestApplyFilterParams_DedupTags(t *testing.T) {
@@ -172,6 +174,59 @@ func TestWithDraftBuilder(t *testing.T) {
 	}
 	if got := filter.WithDraft(false); got.Draft {
 		t.Fatalf("expected WithDraft(false) to clear the flag")
+	}
+}
+
+func TestProviderExportFingersReturnsRawContentFields(t *testing.T) {
+	var captured url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r.URL.Query()
+		data := fingerprintExportListResponse{
+			Fingerprints: []FingerprintExport{
+				{
+					Finger:          &types.Finger{Name: "pending-hub", Protocol: "http"},
+					Engine:          "fingerprinthub",
+					Source:          "unit-source",
+					SourceNames:     []string{"unit-source"},
+					RawContent:      "approved-yaml",
+					RawContentDraft: "pending-yaml",
+				},
+			},
+		}
+		resp := apiResponse{Code: 0, Message: "ok", Data: data}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	filter := NewExportFilter().WithReviewStatus("pending").WithDraft(true)
+	p := NewProvider(server.URL, "test-key").WithFilter(filter).WithTimeout(5 * time.Second)
+	records, err := p.ExportFingers(context.Background())
+	if err != nil {
+		t.Fatalf("ExportFingers failed: %v", err)
+	}
+
+	if got := captured.Get("with_draft"); got != "true" {
+		t.Fatalf("expected with_draft=true, got %q", got)
+	}
+	if got := captured.Get("review_status"); got != "pending" {
+		t.Fatalf("expected review_status=pending, got %q", got)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected one record, got %d", len(records))
+	}
+	record := records[0]
+	if record.Finger == nil || record.Finger.Name != "pending-hub" {
+		t.Fatalf("expected embedded finger pending-hub, got %#v", record.Finger)
+	}
+	if record.Engine != "fingerprinthub" {
+		t.Fatalf("expected engine fingerprinthub, got %q", record.Engine)
+	}
+	if record.RawContent != "approved-yaml" {
+		t.Fatalf("expected approved raw_content, got %q", record.RawContent)
+	}
+	if record.RawContentDraft != "pending-yaml" {
+		t.Fatalf("expected pending raw_content_draft, got %q", record.RawContentDraft)
 	}
 }
 
