@@ -22,6 +22,15 @@ type FingerprintExport struct {
 	RawContentDraft string       `json:"raw_content_draft,omitempty" yaml:"raw_content_draft,omitempty"`
 }
 
+// EffectiveRawContent returns the draft YAML when present, otherwise the
+// approved/effective YAML.
+func (f FingerprintExport) EffectiveRawContent() string {
+	if f.RawContentDraft != "" {
+		return f.RawContentDraft
+	}
+	return f.RawContent
+}
+
 type fingerprintExportListResponse struct {
 	Fingerprints []FingerprintExport `json:"fingerprints"`
 	Total        int                 `json:"total"`

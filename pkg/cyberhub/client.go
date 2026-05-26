@@ -115,9 +115,9 @@ func applyFilterParams(params url.Values, filter *ExportFilter) {
 	}
 
 	// Draft is orthogonal to Statuses / ReviewStatus: filter fields choose
-	// the rows, with_draft chooses the column read off each row. Only emit
-	// the query param when the caller explicitly asked for drafts so the
-	// default backend semantics (RawContent) is preserved.
+	// the rows, with_draft asks the backend to include the pending draft
+	// column alongside the approved/effective raw_content. Only emit the
+	// query param when the caller explicitly asked for drafts.
 	if filter.Draft {
 		params.Set("with_draft", "true")
 	}

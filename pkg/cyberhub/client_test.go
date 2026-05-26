@@ -228,6 +228,12 @@ func TestProviderExportFingersReturnsRawContentFields(t *testing.T) {
 	if record.RawContentDraft != "pending-yaml" {
 		t.Fatalf("expected pending raw_content_draft, got %q", record.RawContentDraft)
 	}
+	if got := record.EffectiveRawContent(); got != "pending-yaml" {
+		t.Fatalf("expected effective raw content to prefer draft, got %q", got)
+	}
+	if got := (FingerprintExport{RawContent: "approved-yaml"}).EffectiveRawContent(); got != "approved-yaml" {
+		t.Fatalf("expected effective raw content to fall back to approved, got %q", got)
+	}
 }
 
 func TestApplyFilterParams_Limit(t *testing.T) {
