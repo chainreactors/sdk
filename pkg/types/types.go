@@ -29,6 +29,12 @@ type (
 		io.Closer
 	}
 
+	// Provider 是统一的数据源接口，CyberHub 和 Embed 均实现此接口。
+	Provider interface {
+		Fingers(ctx context.Context) (Fingers, []*Alias, error)
+		POCs(ctx context.Context) ([]*Template, error)
+	}
+
 	Context interface {
 		Context() context.Context
 	}

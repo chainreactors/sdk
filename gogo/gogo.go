@@ -13,7 +13,6 @@ import (
 	"github.com/chainreactors/logs"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
-	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/panjf2000/ants/v2"
 )
@@ -26,7 +25,7 @@ import (
 type GogoEngine struct {
 	mu               sync.Mutex
 	inited           bool
-	provider         *cyberhub.Provider
+	provider         types.Provider
 	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
 	neutronEngine    *neutron.Engine    // 可选的 neutron 引擎
 	resourceProvider func(string) []byte
@@ -121,27 +120,8 @@ func (e *GogoEngine) Init() error {
 		logs.Log.Debugf("load port config failed, using default: %v", err)
 	}
 
-	if ok := e.applyInjectedFingers(); !ok {
-		// 尝试创建默认的 fingers 引擎
-		defaultFingers, err := sdkfingers.NewEngine(nil)
-		if err == nil && defaultFingers != nil {
-			e.fingersEngine = defaultFingers
-			e.applyInjectedFingers()
-		}
-		if e.fingersEngine == nil || pkg.FingerEngine == nil {
-			// 如果创建失败，尝试使用内置指纹
-			if err := pkg.LoadFinger(nil); err != nil {
-				logs.Log.Debugf("load finger failed, continuing without fingerprints: %v", err)
-			}
-		}
-	}
-
-	if ok := e.applyInjectedNeutron(); !ok {
-		// 否则使用默认加载方式，允许失败
-		if err := pkg.LoadNeutron(""); err != nil {
-			logs.Log.Debugf("load neutron failed, using built-in: %v", err)
-		}
-	}
+	e.applyInjectedFingers()
+	e.applyInjectedNeutron()
 
 	e.inited = true
 	return nil
@@ -176,7 +156,6 @@ func (e *GogoEngine) applyInjectedFingers() bool {
 	}
 	fingerImpl, err := e.fingersEngine.GetFingersEngine()
 	if fingerImpl == nil || err != nil {
-		logs.Log.Debugf("custom fingers engine is empty, falling back to built-in fingers")
 		return false
 	}
 	pkg.FingerEngine = fingerImpl

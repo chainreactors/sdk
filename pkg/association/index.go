@@ -10,7 +10,7 @@ import (
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/resources"
 	"github.com/chainreactors/neutron/templates"
-	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 type entityKind uint8
@@ -93,13 +93,13 @@ func NewIndexWithOptions(options IndexOptions) *Index {
 	return idx
 }
 
-// BuildFromProvider loads data from a cyberhub Provider and builds an index.
-func BuildFromProvider(ctx context.Context, p *cyberhub.Provider) (*Index, error) {
+// BuildFromProvider loads data from a Provider and builds an index.
+func BuildFromProvider(ctx context.Context, p types.Provider) (*Index, error) {
 	return BuildFromProviderWithOptions(ctx, p, IndexOptions{})
 }
 
-// BuildFromProviderWithOptions loads data from a cyberhub Provider and builds an index.
-func BuildFromProviderWithOptions(ctx context.Context, p *cyberhub.Provider, options IndexOptions) (*Index, error) {
+// BuildFromProviderWithOptions loads data from a Provider and builds an index.
+func BuildFromProviderWithOptions(ctx context.Context, p types.Provider, options IndexOptions) (*Index, error) {
 	if p == nil {
 		return nil, fmt.Errorf("provider is nil")
 	}

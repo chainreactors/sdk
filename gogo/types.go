@@ -6,7 +6,6 @@ import (
 
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
-	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
@@ -105,7 +104,7 @@ func (c *Context) SetDelay(delay int) *Context {
 
 // Config GoGo 配置
 type Config struct {
-	Provider         *cyberhub.Provider
+	Provider         types.Provider
 	FingersEngine    *sdkfingers.Engine
 	NeutronEngine    *neutron.Engine
 	ResourceProvider func(string) []byte
@@ -121,8 +120,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// WithProvider 设置远程数据源（自动创建 fingers + neutron 引擎）
-func (c *Config) WithProvider(p *cyberhub.Provider) *Config {
+// WithProvider 设置数据源（自动创建 fingers + neutron 引擎）
+func (c *Config) WithProvider(p types.Provider) *Config {
 	c.Provider = p
 	return c
 }

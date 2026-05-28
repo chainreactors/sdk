@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
@@ -21,8 +20,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// WithProvider 设置远程数据源
-func (c *Config) WithProvider(p *cyberhub.Provider) *Config {
+// WithProvider 设置数据源
+func (c *Config) WithProvider(p types.Provider) *Config {
 	c.Provider = p
 	return c
 }
@@ -81,20 +80,5 @@ func (c *Config) Load(ctx context.Context) error {
 		return nil
 	}
 
-	defaultPaths := []string{
-		"templates",
-		"pocs",
-		"./templates",
-		"./pocs",
-	}
-
-	for _, path := range defaultPaths {
-		loaded, err := loadTemplatesFromPath(path)
-		if err == nil {
-			c.Templates = (Templates{}).Merge(loaded)
-			return nil
-		}
-	}
-
-	return fmt.Errorf("no data source configured: please use WithLocalFile(), Provider, or WithTemplates() to configure template data")
+	return fmt.Errorf("no data source configured: use WithProvider(), WithLocalFile(), or WithTemplates()")
 }

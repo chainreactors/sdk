@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
@@ -15,7 +14,7 @@ func NewConfig() *Config {
 
 // Config Fingers SDK 配置
 type Config struct {
-	Provider      *cyberhub.Provider
+	Provider      types.Provider
 	Filename      string
 	EnableEngines []string
 	FullFingers   FullFingers
@@ -33,8 +32,8 @@ func (c *Config) SetEnableEngines(engines []string) *Config {
 	return c
 }
 
-// WithProvider 设置远程数据源
-func (c *Config) WithProvider(p *cyberhub.Provider) *Config {
+// WithProvider 设置数据源（CyberHub、Embed 等）
+func (c *Config) WithProvider(p types.Provider) *Config {
 	c.Provider = p
 	return c
 }
@@ -101,22 +100,7 @@ func (c *Config) Load(ctx context.Context) error {
 		return nil
 	}
 
-	defaultPaths := []string{
-		"fingers.json",
-		"data/fingers.json",
-		"./fingers.json",
-		"./data/fingers.json",
-	}
-
-	for _, path := range defaultPaths {
-		fingers, err := loadFingersFromPath(path)
-		if err == nil {
-			c.FullFingers = (FullFingers{}).Merge(fingers, nil)
-			return nil
-		}
-	}
-
-	return fmt.Errorf("no data source configured: please use WithLocalFile(), Provider, or WithFingers() to configure fingerprint data")
+	return fmt.Errorf("no data source configured: use WithProvider(), WithLocalFile(), or WithFingers()")
 }
 
 type FullFinger struct {

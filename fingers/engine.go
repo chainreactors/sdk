@@ -179,19 +179,28 @@ func buildEngineFromFingers(fingers types.Fingers, aliases []*types.Alias, match
 
 	engine.Register(fEngine)
 
-	// Compile 会从 finger 列表重建 aliases（不含 pocs），
-	// 所以必须先 Compile，再用传入的 aliases（含 pocs）覆盖。
-	engine.Compile()
+	// 不调 engine.Compile()，避免隐式加载 embed aliases。
+	// 手动填充 favicon hash 并构造 aliases，只使用显式传入的数据。
+	if impl := engine.Fingers(); impl != nil {
+		for hash, name := range impl.Favicons.Md5Fingers {
+			engine.Favicon().Md5Fingers[hash] = name
+		}
+		for hash, name := range impl.Favicons.Mmh3Fingers {
+			engine.Favicon().Mmh3Fingers[hash] = name
+		}
+	}
+	engine.Enabled["favicon"] = false
+
 	if matchDetail {
 		fEngine.SetMatchDetailEnabled(true)
 	}
 
-	if len(aliases) > 0 {
-		aliasEngine, err := alias.NewAliases(aliases...)
-		if err == nil {
-			engine.Aliases = aliasEngine
-		}
+	aliasEngine := &alias.Aliases{
+		Aliases: make(map[string]*alias.Alias, len(aliases)),
+		Map:     make(map[string]map[string]string),
 	}
+	aliasEngine.Compile(aliases)
+	engine.Aliases = aliasEngine
 
 	return engine, nil
 }

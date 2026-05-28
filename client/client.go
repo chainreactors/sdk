@@ -10,7 +10,6 @@ import (
 	"github.com/chainreactors/sdk/gogo"
 	"github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/association"
-	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/sdk/spray"
 	"github.com/chainreactors/sdk/zombie"
@@ -19,7 +18,7 @@ import (
 type Option func(*options)
 
 type options struct {
-	provider         *cyberhub.Provider
+	provider         types.Provider
 	resourceProvider func(string) []byte
 	indexOptions     *association.IndexOptions
 
@@ -30,7 +29,7 @@ type options struct {
 	zombieConfig  *zombie.Config
 }
 
-func WithProvider(p *cyberhub.Provider) Option {
+func WithProvider(p types.Provider) Option {
 	return func(o *options) { o.provider = p }
 }
 
@@ -205,6 +204,9 @@ func (c *Client) ensureSpray() error {
 	cfg := c.opts.sprayConfig
 	if cfg == nil {
 		cfg = spray.NewConfig()
+	}
+	if cfg.Provider == nil && c.opts.provider != nil {
+		cfg.WithProvider(c.opts.provider)
 	}
 	if cfg.FingersEngine == nil {
 		cfg.WithFingersEngine(c.fingers)

@@ -22,6 +22,7 @@ import (
 // SprayEngine Spray 引擎实现
 type SprayEngine struct {
 	inited           bool
+	provider         types.Provider
 	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
 	resourceProvider func(string) []byte
 	capacity         *types.Capacity
@@ -37,6 +38,7 @@ func NewSprayEngine(config *Config) *SprayEngine {
 
 	e := &SprayEngine{
 		inited:           false,
+		provider:         config.Provider,
 		fingersEngine:    config.FingersEngine,
 		resourceProvider: config.ResourceProvider,
 		matchDetail:      config.MatchDetail,
@@ -66,28 +68,15 @@ func (e *SprayEngine) Init() error {
 		return fmt.Errorf("load config failed: %v", err)
 	}
 
-	loadedFingers := false
-	if e.applyInjectedFingers() {
-		loadedFingers = true
-	}
-	if !loadedFingers {
-		// 尝试创建默认的 fingers 引擎
-		defaultFingers, err := sdkfingers.NewEngine(nil)
-		if err == nil && defaultFingers != nil {
-			e.fingersEngine = defaultFingers
-			if e.applyInjectedFingers() {
-				loadedFingers = true
-				logs.Log.Debugf("using default fingers engine")
-			}
-		}
-		if !loadedFingers {
-			if err := pkg.LoadFingers(); err != nil {
-				logs.Log.Debugf("load built-in fingers failed, continuing without fingerprints: %v", err)
-			} else if pkg.FingerEngine != nil {
-				loadedFingers = true
-			}
+	// 从 Provider 自动创建 fingers 引擎
+	if e.provider != nil && e.fingersEngine == nil {
+		fc := sdkfingers.NewConfig().WithProvider(e.provider)
+		if eng, err := sdkfingers.NewEngine(fc); err == nil {
+			e.fingersEngine = eng
 		}
 	}
+
+	e.applyInjectedFingers()
 	e.applyMatchDetail()
 	e.refreshActivePath()
 	e.configureSDKGlobals()
@@ -145,7 +134,6 @@ func (e *SprayEngine) applyInjectedFingers() bool {
 	}
 	libEngine := e.fingersEngine.Get()
 	if libEngine == nil {
-		logs.Log.Debugf("custom fingers engine is empty, falling back to built-in fingers")
 		return false
 	}
 	pkg.FingerEngine = libEngine

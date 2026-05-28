@@ -3,7 +3,6 @@ package neutron
 import (
 	"context"
 	"fmt"
-	"github.com/chainreactors/sdk/pkg/cyberhub"
 	"github.com/chainreactors/sdk/pkg/types"
 	"time"
 )
@@ -14,7 +13,7 @@ import (
 
 // Config Neutron SDK 配置
 type Config struct {
-	Provider  *cyberhub.Provider
+	Provider  types.Provider
 	LocalPath string
 	Templates Templates
 	Capacity  int
