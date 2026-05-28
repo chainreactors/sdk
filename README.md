@@ -62,6 +62,35 @@ GoGo  → 自动注入 Fingers + Neutron
 Spray → 自动注入 Fingers
 ```
 
+### 数据源（Provider）
+
+所有数据通过 `types.Provider` 接口显式加载，支持多个数据源合并：
+
+```go
+import (
+    "github.com/chainreactors/sdk/pkg/cyberhub"
+    "github.com/chainreactors/sdk/pkg/provider"
+)
+
+// 内置 embed 数据
+provider.NewEmbedProvider()
+
+// 本地文件或目录
+provider.NewFileProvider("fingers.yaml", "pocs/")
+
+// 远程 URL
+provider.NewURLProvider("https://example.com/fingers.yaml", "")
+
+// CyberHub API
+cyberhub.NewProvider(url, key)
+
+// 多源合并：embed + CyberHub
+client.New(client.WithProvider(
+    provider.NewEmbedProvider(),
+    cyberhub.NewProvider(url, key),
+))
+```
+
 ### 直接使用引擎
 
 如果只需要单个引擎，可以跳过 Client 直接创建：
@@ -268,76 +297,18 @@ go build -o bin/association ./association
 
 ## 项目结构
 
-```
-sdk/
-├── client/              # 统一客户端（依赖注入、关联查询）
-│   └── client.go
-│
-├── fingers/             # 指纹识别引擎
-│   ├── engine.go        # 核心引擎（Match / HTTPMatch / ServiceMatch）
-│   ├── config.go        # 配置与 FullFingers 类型
-│   ├── types.go         # Context / Task / Result 定义
-│   ├── sender.go        # HTTP 发送器接口
-│   ├── additions.go     # 动态扩展（AddFingers / AddFingersFile）
-│   └── init.go
-│
-├── neutron/             # POC 扫描引擎
-│   ├── engine.go        # 核心引擎（自动编译模板）
-│   ├── config.go        # 配置
-│   ├── types.go         # Context / Task / Result 定义
-│   ├── templates.go     # Templates 辅助类型（Filter / Merge）
-│   ├── additions.go     # 动态扩展（AddPocs / AddPocsFile）
-│   └── init.go
-│
-├── gogo/                # 端口扫描引擎
-│   ├── gogo.go          # 核心引擎（Scan / ScanStream / Workflow）
-│   ├── types.go         # Context / Config / Task 定义
-│   └── init.go
-│
-├── spray/               # HTTP 检测引擎
-│   ├── spray.go         # 核心引擎（Check / Brute / BruteMany）
-│   ├── types.go         # Context / Config / Task 定义
-│   ├── config.go        # Option 默认值
-│   └── init.go
-│
-├── zombie/              # 弱口令检测引擎
-│   ├── engine.go        # 核心引擎（Weakpass / WeakpassStream）
-│   ├── types.go         # Context / Config / Target / Task 定义
-│   └── init.go
-│
-├── pkg/
-│   ├── types/           # 核心接口与类型
-│   │   ├── types.go     # Engine / Context / Task / Result 接口 + 类型别名
-│   │   ├── result.go    # TypedResult[T] 泛型包装
-│   │   ├── capacity.go  # 并发容量控制
-│   │   ├── registry.go  # 引擎注册（供独立使用场景）
-│   │   ├── stats.go     # 执行统计
-│   │   ├── export_filter.go  # ExportFilter 导出筛选
-│   │   ├── gogo.go      # GogoOption 包装
-│   │   └── spray.go     # SprayOption 包装
-│   │
-│   ├── cyberhub/        # Cyberhub 远程数据源
-│   │   ├── provider.go  # Provider（Fingers / POCs 导出）
-│   │   ├── client.go    # HTTP 客户端（gzip 支持）
-│   │   ├── api.go       # API 响应结构
-│   │   └── types.go     # 类型定义
-│   │
-│   └── association/     # 关联索引（独立机制）
-│       ├── index.go     # Index 构建与实体管理
-│       └── query.go     # Query / Lookup / QueryFromResult
-│
-├── examples/            # 示例程序
-│   ├── sdk_usage/       # Client 统一用法
-│   ├── fingers/         # 指纹识别 CLI
-│   ├── neutron/         # POC 扫描 CLI
-│   ├── gogo/            # 端口扫描 CLI
-│   ├── spray/           # HTTP 检测 CLI
-│   ├── cyberhub/        # Cyberhub 数据加载
-│   ├── association/     # 关联查询
-│   ├── filter/          # 数据筛选
-│   └── cases/           # 进阶用例
-│
-└── docs/                # 用户文档
+- `client/` — 统一客户端（依赖注入、关联查询）
+- `fingers/` — 指纹识别引擎
+- `neutron/` — POC 扫描引擎
+- `gogo/` — 端口扫描引擎
+- `spray/` — HTTP 检测引擎
+- `zombie/` — 弱口令检测引擎
+- `pkg/types/` — 核心接口（Engine / Provider / Context / Task / Result）
+- `pkg/cyberhub/` — CyberHub 远程数据源
+- `pkg/provider/` — 内置数据源（EmbedProvider / FileProvider / URLProvider）
+- `pkg/association/` — 关联索引
+- `examples/` — 示例程序
+- `docs/` — 用户文档
     ├── quickstart.md    # 快速开始
     ├── concepts.md      # 核心概念
     ├── fingers.md       # Fingers 引擎

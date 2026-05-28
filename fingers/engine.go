@@ -195,10 +195,25 @@ func buildEngineFromFingers(fingers types.Fingers, aliases []*types.Alias, match
 		fEngine.SetMatchDetailEnabled(true)
 	}
 
+	// 先从 finger 列表生成基础 alias 映射，确保每个 finger 都能被 FindFramework 命中。
+	// 再用 Provider 传入的 aliases 覆盖（含 POC 等额外信息）。
+	var baseAliases []*alias.Alias
+	if impl := engine.Fingers(); impl != nil {
+		for _, finger := range impl.HTTPFingers {
+			baseAliases = append(baseAliases, &alias.Alias{
+				Name:       finger.Name,
+				Attributes: finger.Attributes,
+				AliasMap: map[string][]string{
+					"fingers": {finger.Name},
+				},
+			})
+		}
+	}
 	aliasEngine := &alias.Aliases{
-		Aliases: make(map[string]*alias.Alias, len(aliases)),
+		Aliases: make(map[string]*alias.Alias, len(baseAliases)+len(aliases)),
 		Map:     make(map[string]map[string]string),
 	}
+	aliasEngine.Compile(baseAliases)
 	aliasEngine.Compile(aliases)
 	engine.Aliases = aliasEngine
 

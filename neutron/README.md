@@ -91,9 +91,9 @@ templates := engine.Get()
 
 ```go
 type Config struct {
-    Provider  types.Provider    // 数据源（CyberHub/Embed/File/URL）
-    Templates neutron.Templates // 已加载的 POC
-    Timeout   time.Duration    // 模板执行超时
+    Providers []types.Provider   // 数据源（CyberHub/Embed/File/URL），支持多源合并
+    Templates neutron.Templates  // 已加载的 POC
+    Timeout   time.Duration     // 模板执行超时
 }
 ```
 
