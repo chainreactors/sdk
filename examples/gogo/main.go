@@ -10,6 +10,7 @@ import (
 
 	"github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/gogo"
+	"github.com/chainreactors/sdk/pkg/provider"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
@@ -59,7 +60,7 @@ func main() {
 		}
 
 		fingersConfig := fingers.NewConfig()
-		fingersConfig.WithLocalFile(*fingersPath)
+		fingersConfig.WithProvider(provider.NewFileProvider(*fingersPath, ""))
 
 		fingersEng, err := fingers.NewEngine(fingersConfig)
 		if err != nil {

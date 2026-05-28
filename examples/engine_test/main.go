@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/chainreactors/sdk/fingers"
+	"github.com/chainreactors/sdk/pkg/provider"
 )
 
 func main() {
@@ -12,7 +13,7 @@ func main() {
 	fmt.Println()
 
 	// 创建配置（使用本地测试数据）
-	config := fingers.NewConfig().WithLocalFile("test_fingers.yaml")
+	config := fingers.NewConfig().WithProvider(provider.NewFileProvider("test_fingers.yaml", ""))
 
 	fmt.Println("正在加载指纹数据...")
 

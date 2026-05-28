@@ -150,7 +150,7 @@ engine, err := fingers.NewEngine(config)
 config.WithProvider(cyberhub.NewProvider("http://hub:8080", "api-key"))
 
 // 2. 从本地文件加载
-config.WithLocalFile("./data/fingers.json")
+config.WithProvider(provider.NewFileProvider("path", ""))
 
 // 3. 直接传入内存数据
 config.WithFingers(myFingers)

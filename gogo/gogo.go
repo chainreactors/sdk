@@ -25,7 +25,7 @@ import (
 type GogoEngine struct {
 	mu               sync.Mutex
 	inited           bool
-	provider         types.Provider
+	providers        []types.Provider
 	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
 	neutronEngine    *neutron.Engine    // 可选的 neutron 引擎
 	resourceProvider func(string) []byte
@@ -40,7 +40,7 @@ func NewGogoEngine(config *Config) *GogoEngine {
 
 	e := &GogoEngine{
 		inited:           false,
-		provider:         config.Provider,
+		providers:        config.Providers,
 		fingersEngine:    config.FingersEngine,
 		neutronEngine:    config.NeutronEngine,
 		resourceProvider: config.ResourceProvider,
@@ -98,16 +98,16 @@ func (e *GogoEngine) Init() error {
 		return nil
 	}
 
-	// 自动从 Provider 创建 fingers/neutron 引擎
-	if e.provider != nil {
+	// 自动从 Providers 创建 fingers/neutron 引擎
+	if len(e.providers) > 0 {
 		if e.fingersEngine == nil {
-			fc := sdkfingers.NewConfig().WithProvider(e.provider)
+			fc := sdkfingers.NewConfig().WithProvider(e.providers...)
 			if eng, err := sdkfingers.NewEngine(fc); err == nil {
 				e.fingersEngine = eng
 			}
 		}
 		if e.neutronEngine == nil {
-			nc := neutron.NewConfig().WithProvider(e.provider)
+			nc := neutron.NewConfig().WithProvider(e.providers...)
 			if eng, err := neutron.NewEngine(nc); err == nil {
 				e.neutronEngine = eng
 			}

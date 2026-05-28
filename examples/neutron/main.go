@@ -9,6 +9,7 @@ import (
 
 	"github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/provider"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
@@ -69,7 +70,7 @@ func main() {
 		config.WithProvider(cyberhub.NewProvider(*cyberhubURL, *apiKey).WithFilter(filter))
 		fmt.Printf("Loading POCs from Cyberhub (%s)...\n", *cyberhubURL)
 	} else if *localPath != "" {
-		config.WithLocalFile(*localPath)
+		config.WithProvider(provider.NewFileProvider("", *localPath))
 		fmt.Printf("Loading POCs from local (%s)...\n", *localPath)
 	}
 

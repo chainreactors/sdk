@@ -11,7 +11,7 @@ config := neutron.NewConfig().
 
 // 从本地目录加载
 config := neutron.NewConfig().
-    WithLocalFile("./pocs")
+    WithProvider(provider.NewFileProvider("path", ""))
 
 // 直接传入模板
 config := neutron.NewConfig().

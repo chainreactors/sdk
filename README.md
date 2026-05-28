@@ -180,14 +180,12 @@ c.BuildIndex(ctx, opts...)   // 构建独立索引
 ```go
 // Fingers
 fingers.NewConfig().
-    WithProvider(provider).           // 远程加载
-    WithLocalFile("fingers.yaml").    // 或本地加载
+    WithProvider(provider).           // 通过 Provider 加载（CyberHub/Embed/File/URL）
     WithMatchDetail()                 // 开启匹配细节
 
 // Neutron
 neutron.NewConfig().
     WithProvider(provider).
-    WithLocalFile("./pocs").
     WithCapacity(10)                  // 并发限制
 
 // GoGo

@@ -30,14 +30,9 @@ func TestConfigSourceSelectionAndFiltering(t *testing.T) {
 		t.Fatalf("expected alias to be preserved after filter: %+v", item)
 	}
 
-	cfg.Provider = cyberhub.NewProvider("https://cyberhub.test", "key")
-	if cfg.Provider == nil || cfg.Filename != "" {
+	cfg.WithProvider(cyberhub.NewProvider("https://cyberhub.test", "key"))
+	if len(cfg.Providers) == 0 {
 		t.Fatalf("Provider assignment did not work: %+v", cfg)
-	}
-
-	cfg.WithLocalFile("fingers.yaml")
-	if cfg.Provider != nil || cfg.Filename != "fingers.yaml" {
-		t.Fatalf("WithLocalFile did not reset provider: %+v", cfg)
 	}
 }
 

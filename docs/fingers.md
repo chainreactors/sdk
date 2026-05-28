@@ -11,7 +11,7 @@ config := fingers.NewConfig().
 
 // 从本地文件加载
 config := fingers.NewConfig().
-    WithLocalFile("./fingers.json")
+    WithProvider(provider.NewFileProvider("path", ""))
 
 // 直接传入数据
 config := fingers.NewConfig().

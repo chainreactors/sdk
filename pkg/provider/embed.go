@@ -1,4 +1,4 @@
-package embed
+package provider
 
 import (
 	"context"
@@ -11,14 +11,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Provider 从 fingers/gogo 库内置的 embed 资源加载指纹、别名和 POC 数据。
-type Provider struct{}
+// EmbedProvider 从 fingers/gogo 库内置的 embed 资源加载指纹、别名和 POC 数据。
+type EmbedProvider struct{}
 
-func NewProvider() *Provider {
-	return &Provider{}
+func NewEmbedProvider() *EmbedProvider {
+	return &EmbedProvider{}
 }
 
-func (p *Provider) Fingers(ctx context.Context) (types.Fingers, []*types.Alias, error) {
+func (p *EmbedProvider) Fingers(ctx context.Context) (types.Fingers, []*types.Alias, error) {
 	httpFingers, err := fingersEngine.LoadFingers(resources.FingersHTTPData)
 	if err != nil {
 		return nil, nil, err
@@ -49,7 +49,7 @@ func (p *Provider) Fingers(ctx context.Context) (types.Fingers, []*types.Alias, 
 	return append(httpFingers, socketFingers...), aliases, nil
 }
 
-func (p *Provider) POCs(ctx context.Context) ([]*types.Template, error) {
+func (p *EmbedProvider) POCs(ctx context.Context) ([]*types.Template, error) {
 	data := gogopkg.LoadEmbeddedConfig("neutron")
 	if len(data) == 0 {
 		return nil, nil

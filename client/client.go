@@ -18,7 +18,7 @@ import (
 type Option func(*options)
 
 type options struct {
-	provider         types.Provider
+	providers        []types.Provider
 	resourceProvider func(string) []byte
 	indexOptions     *association.IndexOptions
 
@@ -29,8 +29,8 @@ type options struct {
 	zombieConfig  *zombie.Config
 }
 
-func WithProvider(p types.Provider) Option {
-	return func(o *options) { o.provider = p }
+func WithProvider(providers ...types.Provider) Option {
+	return func(o *options) { o.providers = append(o.providers, providers...) }
 }
 
 func WithResourceProvider(rp func(string) []byte) Option {
@@ -100,8 +100,8 @@ func (c *Client) ensureFingers() error {
 	cfg := c.opts.fingersConfig
 	if cfg == nil {
 		cfg = fingers.NewConfig()
-		if c.opts.provider != nil {
-			cfg.WithProvider(c.opts.provider)
+		if len(c.opts.providers) > 0 {
+			cfg.WithProvider(c.opts.providers...)
 		}
 	}
 
@@ -121,8 +121,8 @@ func (c *Client) ensureNeutron() error {
 	cfg := c.opts.neutronConfig
 	if cfg == nil {
 		cfg = neutron.NewConfig()
-		if c.opts.provider != nil {
-			cfg.WithProvider(c.opts.provider)
+		if len(c.opts.providers) > 0 {
+			cfg.WithProvider(c.opts.providers...)
 		}
 	}
 
@@ -177,8 +177,8 @@ func (c *Client) ensureGogo() error {
 	if cfg.NeutronEngine == nil {
 		cfg.WithNeutronEngine(c.neutron)
 	}
-	if cfg.Provider == nil && c.opts.provider != nil {
-		cfg.WithProvider(c.opts.provider)
+	if len(cfg.Providers) == 0 && len(c.opts.providers) > 0 {
+		cfg.WithProvider(c.opts.providers...)
 	}
 	if cfg.ResourceProvider == nil && c.opts.resourceProvider != nil {
 		cfg.WithResourceProvider(c.opts.resourceProvider)
@@ -205,8 +205,8 @@ func (c *Client) ensureSpray() error {
 	if cfg == nil {
 		cfg = spray.NewConfig()
 	}
-	if cfg.Provider == nil && c.opts.provider != nil {
-		cfg.WithProvider(c.opts.provider)
+	if len(cfg.Providers) == 0 && len(c.opts.providers) > 0 {
+		cfg.WithProvider(c.opts.providers...)
 	}
 	if cfg.FingersEngine == nil {
 		cfg.WithFingersEngine(c.fingers)

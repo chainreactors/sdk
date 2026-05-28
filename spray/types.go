@@ -207,7 +207,7 @@ func (c *Context) SetDefaultDict(enable bool) *Context {
 
 // Config Spray 配置
 type Config struct {
-	Provider         types.Provider
+	Providers        []types.Provider
 	FingersEngine    *sdkfingers.Engine
 	ResourceProvider func(string) []byte
 	Capacity         int
@@ -223,9 +223,9 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// WithProvider 设置数据源（自动创建 fingers 引擎）
-func (c *Config) WithProvider(p types.Provider) *Config {
-	c.Provider = p
+// WithProvider 追加数据源，支持多次调用自动合并
+func (c *Config) WithProvider(providers ...types.Provider) *Config {
+	c.Providers = append(c.Providers, providers...)
 	return c
 }
 

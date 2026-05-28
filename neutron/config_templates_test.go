@@ -28,14 +28,9 @@ func TestConfigSourcesAndTemplateFiltering(t *testing.T) {
 		t.Fatalf("expected critical template, got %q", got)
 	}
 
-	cfg.Provider = cyberhub.NewProvider("https://cyberhub.test", "key")
-	if cfg.Provider == nil || cfg.LocalPath != "" {
+	cfg.WithProvider(cyberhub.NewProvider("https://cyberhub.test", "key"))
+	if len(cfg.Providers) == 0 {
 		t.Fatalf("Provider assignment did not work: %+v", cfg)
-	}
-
-	cfg.WithLocalFile("pocs")
-	if cfg.Provider != nil || cfg.LocalPath != "pocs" {
-		t.Fatalf("WithLocalFile did not reset provider: %+v", cfg)
 	}
 }
 

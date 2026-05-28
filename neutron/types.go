@@ -13,8 +13,7 @@ import (
 
 // Config Neutron SDK 配置
 type Config struct {
-	Provider  types.Provider
-	LocalPath string
+	Providers []types.Provider
 	Templates Templates
 	Capacity  int
 	Timeout   time.Duration

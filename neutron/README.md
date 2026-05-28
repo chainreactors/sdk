@@ -37,7 +37,7 @@ fmt.Printf("加载了 %d 个 POC\n", len(templates))
 ```go
 // 加载指定目录的所有 YAML 文件
 config := neutron.NewConfig()
-config.WithLocalFile("./my_pocs")
+config.WithProvider(provider.NewFileProvider("path", ""))
 engine, err := neutron.NewEngine(config)
 if err != nil {
     log.Fatal(err)
@@ -62,11 +62,11 @@ if err != nil {
 templates := engine.Get()
 ```
 
-需要本地加载时使用 `WithLocalFile`：
+需要本地加载时使用 `FileProvider`：
 
 ```go
 config := neutron.NewConfig()
-config.WithLocalFile("./my_pocs") // 目录或单个 YAML 文件
+config.WithProvider(provider.NewFileProvider("", "./pocs")) // 目录或单个 YAML 文件
 engine, _ := neutron.NewEngine(config)
 ```
 
@@ -91,12 +91,9 @@ templates := engine.Get()
 
 ```go
 type Config struct {
-    Provider *cyberhub.Provider
-
-    // 本地配置
-    LocalPath string           // 本地 POC 文件/目录路径
+    Provider  types.Provider    // 数据源（CyberHub/Embed/File/URL）
     Templates neutron.Templates // 已加载的 POC
-    Timeout time.Duration       // 模板执行超时
+    Timeout   time.Duration    // 模板执行超时
 }
 ```
 

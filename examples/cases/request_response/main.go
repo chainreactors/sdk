@@ -17,6 +17,7 @@ import (
 
 	"github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/cyberhub"
+	"github.com/chainreactors/sdk/pkg/provider"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
@@ -45,7 +46,7 @@ func main() {
 		}
 		config.WithProvider(cyberhub.NewProvider(*cyberhubURL, *apiKey))
 	} else {
-		config.WithLocalFile(*localPath)
+		config.WithProvider(provider.NewFileProvider("", *localPath))
 	}
 
 	engine, err := neutron.NewEngine(config)

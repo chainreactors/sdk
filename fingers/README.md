@@ -147,7 +147,7 @@ frameworks, _ := engine.Match(httpResponseBytes)
 
 ```go
 config := fingers.NewConfig()
-config.WithLocalFile("./fingers.yaml") // 文件或目录
+config.WithProvider(provider.NewFileProvider("path", "")) // 文件或目录
 
 engine, _ := fingers.NewEngine(config)
 ```
@@ -242,8 +242,8 @@ config.WithProvider(
         WithTimeout(30 * time.Second),
 )
 
-// 选择本地加载时使用 WithLocalFile，会覆盖 Cyberhub 配置
-// config.WithLocalFile("./fingers.yaml")
+// 本地加载时使用 FileProvider
+// config.WithProvider(provider.NewFileProvider("./fingers.yaml", ""))
 
 engine, _ := fingers.NewEngine(config)
 ```

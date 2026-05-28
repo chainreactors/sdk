@@ -14,8 +14,13 @@ import (
 
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	sdkneutron "github.com/chainreactors/sdk/neutron"
+	"github.com/chainreactors/sdk/pkg/provider"
 	"github.com/chainreactors/sdk/pkg/types"
 )
+
+func testConfig() *Config {
+	return NewConfig().WithProvider(provider.NewEmbedProvider())
+}
 
 // TestNewGogoEngine 测试引擎创建
 func TestNewEngine(t *testing.T) {
@@ -48,7 +53,7 @@ func TestNewEngine(t *testing.T) {
 
 // TestGogoEngineName 测试引擎名称
 func TestGogoEngineName(t *testing.T) {
-	engine := NewEngine(nil)
+	engine := NewEngine(testConfig())
 	if engine.Name() != "gogo" {
 		t.Errorf("Expected engine name 'gogo', got '%s'", engine.Name())
 	}
@@ -70,7 +75,7 @@ func TestInitWithEmptyCustomFingersDoesNotFail(t *testing.T) {
 }
 
 func TestInitConcurrent(t *testing.T) {
-	engine := NewEngine(nil)
+	engine := NewEngine(testConfig())
 	var wg sync.WaitGroup
 	errs := make(chan error, 8)
 	for i := 0; i < 8; i++ {
@@ -96,7 +101,7 @@ func TestGogoEngineConcurrentScanScenarios(t *testing.T) {
 	defer server.Close()
 
 	host, port := splitTestServerHostPort(t, server.URL)
-	engine := NewEngine(nil)
+	engine := NewEngine(testConfig())
 	if err := engine.Init(); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
@@ -164,7 +169,7 @@ func TestGogoEngineConcurrentCancelledContexts(t *testing.T) {
 	defer server.Close()
 
 	host, port := splitTestServerHostPort(t, server.URL)
-	engine := NewEngine(nil)
+	engine := NewEngine(testConfig())
 	const workers = 8
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
@@ -303,7 +308,7 @@ func TestConfigWithCapacity(t *testing.T) {
 }
 
 func TestSetCapacityPostCreation(t *testing.T) {
-	engine := NewEngine(nil)
+	engine := NewEngine(testConfig())
 	if engine.Capacity() != nil {
 		t.Fatal("engine should have no capacity by default")
 	}
@@ -476,7 +481,7 @@ func TestScanOne(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	engine := NewEngine(nil)
+	engine := NewEngine(testConfig())
 	if err := engine.Init(); err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
@@ -505,7 +510,7 @@ func TestScanIntegration(t *testing.T) {
 	defer server.Close()
 	host, port := splitTestServerHostPort(t, server.URL)
 
-	engine := NewEngine(nil)
+	engine := NewEngine(testConfig())
 	if err := engine.Init(); err != nil {
 		t.Skipf("Init failed (may need finger database): %v", err)
 	}

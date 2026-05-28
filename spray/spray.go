@@ -22,7 +22,7 @@ import (
 // SprayEngine Spray 引擎实现
 type SprayEngine struct {
 	inited           bool
-	provider         types.Provider
+	providers        []types.Provider
 	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
 	resourceProvider func(string) []byte
 	capacity         *types.Capacity
@@ -38,7 +38,7 @@ func NewSprayEngine(config *Config) *SprayEngine {
 
 	e := &SprayEngine{
 		inited:           false,
-		provider:         config.Provider,
+		providers:        config.Providers,
 		fingersEngine:    config.FingersEngine,
 		resourceProvider: config.ResourceProvider,
 		matchDetail:      config.MatchDetail,
@@ -68,9 +68,9 @@ func (e *SprayEngine) Init() error {
 		return fmt.Errorf("load config failed: %v", err)
 	}
 
-	// 从 Provider 自动创建 fingers 引擎
-	if e.provider != nil && e.fingersEngine == nil {
-		fc := sdkfingers.NewConfig().WithProvider(e.provider)
+	// 从 Providers 自动创建 fingers 引擎
+	if len(e.providers) > 0 && e.fingersEngine == nil {
+		fc := sdkfingers.NewConfig().WithProvider(e.providers...)
 		if eng, err := sdkfingers.NewEngine(fc); err == nil {
 			e.fingersEngine = eng
 		}

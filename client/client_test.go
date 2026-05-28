@@ -10,8 +10,8 @@ func TestNewWithoutOptions(t *testing.T) {
 	c := New()
 	defer c.Close()
 
-	if c.opts.provider != nil {
-		t.Fatal("expected nil provider with no options")
+	if len(c.opts.providers) != 0 {
+		t.Fatal("expected empty providers with no options")
 	}
 }
 

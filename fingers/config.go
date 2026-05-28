@@ -14,8 +14,7 @@ func NewConfig() *Config {
 
 // Config Fingers SDK 配置
 type Config struct {
-	Provider      types.Provider
-	Filename      string
+	Providers     []types.Provider
 	EnableEngines []string
 	FullFingers   FullFingers
 	MatchDetail   bool
@@ -32,17 +31,9 @@ func (c *Config) SetEnableEngines(engines []string) *Config {
 	return c
 }
 
-// WithProvider 设置数据源（CyberHub、Embed 等）
-func (c *Config) WithProvider(p types.Provider) *Config {
-	c.Provider = p
-	return c
-}
-
-// WithLocalFile 设置本地文件加载
-func (c *Config) WithLocalFile(filename string) *Config {
-	c.Filename = filename
-	c.Provider = nil
-	c.FullFingers = FullFingers{}
+// WithProvider 追加数据源，支持多次调用自动合并
+func (c *Config) WithProvider(providers ...types.Provider) *Config {
+	c.Providers = append(c.Providers, providers...)
 	return c
 }
 
@@ -83,24 +74,18 @@ func (c *Config) Load(ctx context.Context) error {
 	if c.FullFingers.Len() > 0 {
 		return nil
 	}
-	if c.Filename != "" {
-		fingers, err := loadFingersFromPath(c.Filename)
-		if err != nil {
-			return err
+	if len(c.Providers) > 0 {
+		for _, p := range c.Providers {
+			fingersData, aliases, err := p.Fingers(ctx)
+			if err != nil {
+				return err
+			}
+			c.FullFingers = c.FullFingers.Merge(fingersData, aliases)
 		}
-		c.FullFingers = (FullFingers{}).Merge(fingers, nil)
-		return nil
-	}
-	if c.Provider != nil {
-		fingersData, aliases, err := c.Provider.Fingers(ctx)
-		if err != nil {
-			return err
-		}
-		c.FullFingers = (FullFingers{}).Merge(fingersData, aliases)
 		return nil
 	}
 
-	return fmt.Errorf("no data source configured: use WithProvider(), WithLocalFile(), or WithFingers()")
+	return fmt.Errorf("no data source configured: use WithProvider() or WithFingers()")
 }
 
 type FullFinger struct {

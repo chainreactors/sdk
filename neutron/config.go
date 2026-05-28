@@ -20,23 +20,15 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// WithProvider 设置数据源
-func (c *Config) WithProvider(p types.Provider) *Config {
-	c.Provider = p
+// WithProvider 追加数据源，支持多次调用自动合并
+func (c *Config) WithProvider(providers ...types.Provider) *Config {
+	c.Providers = append(c.Providers, providers...)
 	return c
 }
 
 // WithTemplates 设置已加载的模板
 func (c *Config) WithTemplates(tpls []*types.Template) *Config {
 	c.Templates = (Templates{}).Merge(tpls)
-	return c
-}
-
-// WithLocalFile 设置本地加载配置
-func (c *Config) WithLocalFile(path string) *Config {
-	c.LocalPath = path
-	c.Provider = nil
-	c.Templates = Templates{}
 	return c
 }
 
@@ -63,22 +55,16 @@ func (c *Config) Load(ctx context.Context) error {
 	if c.Templates.Len() > 0 {
 		return nil
 	}
-	if c.LocalPath != "" {
-		loaded, err := loadTemplatesFromPath(c.LocalPath)
-		if err != nil {
-			return err
+	if len(c.Providers) > 0 {
+		for _, p := range c.Providers {
+			tpls, err := p.POCs(ctx)
+			if err != nil {
+				return err
+			}
+			c.Templates = c.Templates.Merge(tpls)
 		}
-		c.Templates = (Templates{}).Merge(loaded)
-		return nil
-	}
-	if c.Provider != nil {
-		tpls, err := c.Provider.POCs(ctx)
-		if err != nil {
-			return err
-		}
-		c.Templates = (Templates{}).Merge(tpls)
 		return nil
 	}
 
-	return fmt.Errorf("no data source configured: use WithProvider(), WithLocalFile(), or WithTemplates()")
+	return fmt.Errorf("no data source configured: use WithProvider() or WithTemplates()")
 }
