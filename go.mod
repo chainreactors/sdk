@@ -136,3 +136,5 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace github.com/chainreactors/gogo/v2 => /mnt/chainreactors/gogo/v2

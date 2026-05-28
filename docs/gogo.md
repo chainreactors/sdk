@@ -89,6 +89,7 @@ fmt.Println(result.Status, result.Frameworks)
 ```go
 ctx := gogo.NewContext().
     SetThreads(2000).          // 并发线程数（默认 1000）
+    SetMod(gogo.ModSmart).     // 扫描模式：smart / super-smart 等
     SetVersionLevel(2).        // 指纹识别级别 0-3
     SetExploit("all").         // POC 模式：none / all / known
     SetDelay(5)                // 超时时间（秒）
@@ -97,20 +98,57 @@ ctx := gogo.NewContext().
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `SetThreads` | 并发线程数 | 1000 |
+| `SetMod` | 扫描模式（见下方常量） | `""` (default) |
 | `SetVersionLevel` | 指纹识别深度，0=关闭，1=基础，2=深度，3=全量 | 0 |
 | `SetExploit` | 漏洞检测模式 | `"none"` |
 | `SetDelay` | 单次请求超时（秒） | 5 |
 
 > 源码：[`gogo/types.go`](../gogo/types.go)
 
-## 工作流扫描
+## Smart 扫描模式
 
-Workflow 允许更精细地控制扫描行为：
+Smart 模式先用探针探测存活网段，再对存活网段做完整扫描，适合大范围目标：
+
+```go
+// 通过 Context 设置
+ctx := gogo.NewContext().
+    SetThreads(1000).
+    SetMod(gogo.ModSmart)
+
+results, err := engine.Scan(ctx, "10.0.0.0/16", "80,443,8080")
+```
+
+也可以通过 Workflow 直接设置：
 
 ```go
 workflow := &types.Workflow{
+    IP:    "10.0.0.0/16",
+    Ports: "80,443,8080",
+    Mod:   gogo.ModSmart,
+}
+results, err := engine.Workflow(ctx, workflow)
+```
+
+### 模式常量
+
+| 常量 | 值 | 说明 |
+|------|-----|------|
+| `gogo.ModDefault` | `"default"` | 默认模式，直接扫描所有目标 |
+| `gogo.ModSmart` | `"s"` | 用 port-probe 探测存活 C 段，再递归到 default 扫描 |
+| `gogo.ModSuperSmart` | `"ss"` | 用 ip-probe 探测存活 B 段，再递归到 smart 扫描 |
+| `gogo.ModSmartB` | `"sc"` | 用 ip-probe 探测存活 B 段，再递归到 C 段探测 |
+
+## 工作流扫描
+
+Workflow 允许更精细地控制扫描行为，支持 Mod、Ping、探针等高级配置：
+
+```go
+workflow := &types.Workflow{
+    Name:  "internal-scan",
     IP:    "192.168.1.0/24",
     Ports: "80,443,8080",
+    Mod:   gogo.ModSmart,        // 可选：扫描模式
+    Ping:  true,                 // 可选：ICMP 存活探测
 }
 
 results, err := engine.Workflow(ctx, workflow)

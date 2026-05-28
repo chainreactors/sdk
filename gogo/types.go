@@ -4,9 +4,17 @@ import (
 	"context"
 	"fmt"
 
+	gogopkg "github.com/chainreactors/gogo/v2/pkg"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/types"
+)
+
+const (
+	ModDefault    = gogopkg.Default
+	ModSmart      = gogopkg.SMART
+	ModSuperSmart = gogopkg.SUPERSMART
+	ModSmartB     = gogopkg.SUPERSMARTB
 )
 
 // ========================================
@@ -17,6 +25,8 @@ import (
 type Context struct {
 	ctx          context.Context
 	threads      int
+	mod          string
+	excludes     []string
 	opt          *types.GogoOption
 	statsHandler func(types.Stats)
 }
@@ -37,9 +47,23 @@ func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
 		ctx:          ctx,
 		threads:      c.threads,
+		mod:          c.mod,
+		excludes:     c.excludes,
 		opt:          types.CloneGogoOption(c.opt),
 		statsHandler: c.statsHandler,
 	}
+}
+
+// SetMod 设置扫描模式 ("s"=smart, "ss"=super-smart, "sc"=super-smart-B, ""=default)
+func (c *Context) SetMod(mod string) *Context {
+	c.mod = mod
+	return c
+}
+
+// SetExcludes 设置排除的 IP/CIDR 列表
+func (c *Context) SetExcludes(excludes ...string) *Context {
+	c.excludes = excludes
+	return c
 }
 
 func (c *Context) Context() context.Context {

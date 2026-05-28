@@ -11,6 +11,7 @@ import (
 	"github.com/chainreactors/gogo/v2/engine"
 	"github.com/chainreactors/gogo/v2/pkg"
 	"github.com/chainreactors/logs"
+	"github.com/chainreactors/utils"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/types"
@@ -271,7 +272,24 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *types.Workflo
 	if runCtx.opt == nil {
 		runCtx.opt = types.NewDefaultGogoOption()
 	}
+	if len(runCtx.excludes) > 0 {
+		excludes := utils.ParseCIDRs(runCtx.excludes)
+		runCtx.opt.ExcludeCIDRs = excludes
+	}
 	baseConfig := pkg.NewDefaultConfig(runCtx.opt)
+	if runCtx.mod != "" {
+		workflow.Mod = runCtx.mod
+	}
+	mod := workflow.Mod
+	isSmart := mod == ModSmart || mod == ModSuperSmart || mod == ModSmartB
+	if isSmart {
+		if workflow.PortProbe == "" {
+			workflow.PortProbe = ModDefault
+		}
+		if workflow.IpProbe == "" {
+			workflow.IpProbe = ModDefault
+		}
+	}
 	preparedConfig := workflow.PrepareConfig(baseConfig)
 
 	// 初始化配置
@@ -296,8 +314,40 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *types.Workflo
 
 	// 创建结果 channel
 	resultCh := make(chan types.Result, 100)
+	if isSmart {
+		go func() {
+			defer close(resultCh)
+			defer preparedConfig.Close()
+			if e.capacity != nil {
+				defer e.capacity.Release(threads)
+			}
 
-	// 启动扫描 goroutine
+			var aliveCount int32
+			started := time.Now()
+			defer func() {
+				runCtx.emitStats(types.Stats{
+					Engine:   e.Name(),
+					Task:     "scan",
+					Results:  int64(atomic.LoadInt32(&aliveCount)),
+					Duration: time.Since(started),
+				})
+			}()
+
+			initConfig.ResultCallback = func(result *pkg.Result) {
+				atomic.AddInt32(&aliveCount, 1)
+				select {
+				case resultCh <- newResult(true, nil, result.GOGOResult):
+				default:
+					logs.Log.Debugf("result channel full, dropping result for %s", result.GetTarget())
+				}
+			}
+
+			core.RunTask(*initConfig)
+		}()
+		return resultCh, nil
+	}
+
+	// default 模式：保持原有的手动遍历逻辑
 	go func() {
 		defer close(resultCh)
 		defer preparedConfig.Close()
