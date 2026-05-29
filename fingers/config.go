@@ -110,10 +110,11 @@ func (c *Config) Load(ctx context.Context) error {
 }
 
 type FullFinger struct {
-	Finger   *types.Finger
-	Alias    *types.Alias
-	Template *types.Template // fingerprinthub/xray 引擎的 neutron 模板
-	Engine   string          // 模板引擎类型: "fingerprinthub" 或 "xray" (仅 Template 非 nil 时有效)
+	Finger     *types.Finger
+	Alias      *types.Alias
+	Template   *types.Template // fingerprinthub/xray 引擎的已编译模板（用于被动匹配元数据）
+	RawContent string          // 模板原始 YAML（用于构建底层引擎，避免序列化丢失 variables）
+	Engine     string          // 模板引擎类型: "fingerprinthub" 或 "xray" (仅 Template 非 nil 时有效)
 }
 
 type FullFingers struct {
@@ -298,6 +299,7 @@ func (f FullFingers) MergeExports(exports []cyberhub.FingerprintExport, useDraft
 				tmpl := parseTemplate(rawContent, execOpts)
 				if tmpl != nil {
 					ff.Template = tmpl
+					ff.RawContent = rawContent
 					ff.Engine = r.Engine
 				}
 			}

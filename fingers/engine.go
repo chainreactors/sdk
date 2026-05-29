@@ -303,19 +303,24 @@ func buildEngineFromFullFingers(fullFingers FullFingers, matchDetail bool) (*fin
 	return engine, nil
 }
 
-// buildFingerPrintHubFromTemplates 从已解析的 Template 构建 FingerPrintHubEngine。
+// rawContentToMap 从原始 YAML 解析为 map，保留 variables 等不可序列化的字段。
+func rawContentToMap(rawYAML string) (map[string]interface{}, error) {
+	var m map[string]interface{}
+	if err := yaml.Unmarshal([]byte(rawYAML), &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// buildFingerPrintHubFromTemplates 从原始 RawContent 构建 FingerPrintHubEngine。
 func buildFingerPrintHubFromTemplates(items []*FullFinger) (*fingerprinthub.FingerPrintHubEngine, error) {
 	var webMaps, serviceMaps []map[string]interface{}
 	for _, item := range items {
-		if item.Template == nil {
+		if item.RawContent == "" {
 			continue
 		}
-		var tmplMap map[string]interface{}
-		data, err := yaml.Marshal(item.Template)
+		tmplMap, err := rawContentToMap(item.RawContent)
 		if err != nil {
-			continue
-		}
-		if err := yaml.Unmarshal(data, &tmplMap); err != nil {
 			continue
 		}
 		if isWebTemplate(tmplMap) {
@@ -328,7 +333,6 @@ func buildFingerPrintHubFromTemplates(items []*FullFinger) (*fingerprinthub.Fing
 	if len(webMaps) == 0 && len(serviceMaps) == 0 {
 		return nil, nil
 	}
-
 	if webMaps == nil {
 		webMaps = []map[string]interface{}{}
 	}
@@ -341,19 +345,15 @@ func buildFingerPrintHubFromTemplates(items []*FullFinger) (*fingerprinthub.Fing
 	return fingerprinthub.NewFingerPrintHubEngine(webJSON, svcJSON)
 }
 
-// buildXrayFromTemplates 从已解析的 Template 构建 XrayEngine。
+// buildXrayFromTemplates 从原始 RawContent 构建 XrayEngine。
 func buildXrayFromTemplates(items []*FullFinger) (*xray.XrayEngine, error) {
 	var tmplMaps []map[string]interface{}
 	for _, item := range items {
-		if item.Template == nil {
+		if item.RawContent == "" {
 			continue
 		}
-		var tmplMap map[string]interface{}
-		data, err := yaml.Marshal(item.Template)
+		tmplMap, err := rawContentToMap(item.RawContent)
 		if err != nil {
-			continue
-		}
-		if err := yaml.Unmarshal(data, &tmplMap); err != nil {
 			continue
 		}
 		tmplMaps = append(tmplMaps, tmplMap)
