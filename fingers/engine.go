@@ -9,15 +9,45 @@ import (
 	"strings"
 	"time"
 
+	"encoding/json"
+
 	fingersLib "github.com/chainreactors/fingers"
 	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/fingers/common"
 	"github.com/chainreactors/fingers/favicon"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
+	"github.com/chainreactors/fingers/fingerprinthub"
 	"github.com/chainreactors/fingers/resources"
+	"github.com/chainreactors/logs"
+	sdkhttpx "github.com/chainreactors/sdk/pkg/httpx"
 	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/utils/httputils"
+	"gopkg.in/yaml.v3"
 )
+
+// resolveClient 选择主动指纹探测使用的 HTTP 客户端：
+// Context 显式设置了 client 或 proxy 时用 Context 的客户端（ctx.proxy 优先）；
+// 否则回退到引擎级默认代理（Config.Proxy）；都没有则用 Context 默认客户端。
+func (e *Engine) resolveClient(ctx *Context) *http.Client {
+	if ctx.client != nil || ctx.proxy != "" {
+		return ctx.GetClient()
+	}
+	if e.config != nil && len(e.config.Proxy) > 0 {
+		timeout := time.Duration(ctx.timeout) * time.Second
+		if timeout <= 0 {
+			timeout = 10 * time.Second
+		}
+		if client, err := sdkhttpx.NewClient(sdkhttpx.Config{
+			Timeout:            timeout,
+			Proxy:              e.config.Proxy,
+			FollowRedirects:    true,
+			InsecureSkipVerify: true,
+		}); err == nil {
+			return client
+		}
+	}
+	return ctx.GetClient()
+}
 
 // ========================================
 // Engine - 统一的指纹引擎
@@ -46,9 +76,7 @@ func NewEngine(config *Config) (*Engine, error) {
 		}, nil
 	}
 
-	fingers := config.FullFingers.Fingers()
-	if len(fingers) == 0 {
-		// 返回空引擎，允许后续配置
+	if config.FullFingers.Len() == 0 {
 		return &Engine{
 			config: config,
 			engine: nil,
@@ -59,7 +87,7 @@ func NewEngine(config *Config) (*Engine, error) {
 		config: config,
 	}
 
-	engine, err := buildEngineFromFingers(fingers, config.FullFingers.Aliases(), config.MatchDetail)
+	engine, err := buildEngineFromFullFingers(config.FullFingers, config.MatchDetail)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +107,7 @@ func NewEngineWithFingers(fingers FullFingers) (*Engine, error) {
 	config := NewConfig()
 	config.FullFingers = fingers
 
-	engine, err := buildEngineFromFingers(fingers.Fingers(), fingers.Aliases(), false)
+	engine, err := buildEngineFromFullFingers(fingers, false)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +165,7 @@ func (e *Engine) Reload(ctx context.Context) error {
 		return err
 	}
 
-	engine, err := buildEngineFromFingers(e.config.FullFingers.Fingers(), e.config.FullFingers.Aliases(), e.config.MatchDetail)
+	engine, err := buildEngineFromFullFingers(e.config.FullFingers, e.config.MatchDetail)
 	if err != nil {
 		return err
 	}
@@ -147,40 +175,63 @@ func (e *Engine) Reload(ctx context.Context) error {
 	return nil
 }
 
-// buildEngineFromFingers 从指纹列表构建引擎
+// buildEngineFromFingers 兼容 wrapper，供 additions.go 等旧路径调用。
 func buildEngineFromFingers(fingers types.Fingers, aliases []*types.Alias, matchDetail bool) (*fingersLib.Engine, error) {
+	ff := (FullFingers{}).Merge(fingers, aliases)
+	return buildEngineFromFullFingers(ff, matchDetail)
+}
+
+// buildEngineFromFullFingers 从 FullFingers 构建多引擎。
+// 自动将原生 fingers 和 template 指纹分流到对应的底层引擎。
+func buildEngineFromFullFingers(fullFingers FullFingers, matchDetail bool) (*fingersLib.Engine, error) {
 	engine := &fingersLib.Engine{
 		EnginesImpl:  make(map[string]fingersLib.EngineImpl),
 		Enabled:      make(map[string]bool),
 		Capabilities: make(map[string]common.EngineCapability),
 	}
 
-	// 初始化 Favicon 引擎（Compile 需要）
 	faviconEngine := favicon.NewFavicons()
 	engine.EnginesImpl["favicon"] = faviconEngine
 	engine.Capabilities["favicon"] = faviconEngine.Capability()
 
-	var httpFingers, socketFingers types.Fingers
-	for _, finger := range fingers {
-		if finger.Protocol == "http" {
-			httpFingers = append(httpFingers, finger)
-		} else if finger.Protocol == "tcp" {
-			socketFingers = append(socketFingers, finger)
+	// --- 原生 fingers 引擎 ---
+	nativeFingers := fullFingers.NativeFingers()
+	var fEngine *fingersEngine.FingersEngine
+	if len(nativeFingers) > 0 {
+		var httpFingers, socketFingers types.Fingers
+		for _, finger := range nativeFingers {
+			if finger.Protocol == "http" {
+				httpFingers = append(httpFingers, finger)
+			} else if finger.Protocol == "tcp" {
+				socketFingers = append(socketFingers, finger)
+			}
+		}
+		_, err := resources.LoadPorts()
+		if err != nil {
+			return nil, err
+		}
+		fEngine, err = fingersEngine.NewEngine(httpFingers, socketFingers)
+		if err != nil {
+			return nil, err
+		}
+		engine.Register(fEngine)
+		if matchDetail {
+			fEngine.SetMatchDetailEnabled(true)
 		}
 	}
-	_, err := resources.LoadPorts()
-	if err != nil {
-		return nil, err
-	}
-	fEngine, err := fingersEngine.NewEngine(httpFingers, socketFingers)
-	if err != nil {
-		return nil, err
+
+	// --- fingerprinthub/xray 模板引擎 ---
+	templateItems := fullFingers.TemplateItems()
+	if len(templateItems) > 0 {
+		fpHubEngine, err := buildFingerPrintHubFromTemplates(templateItems)
+		if err != nil {
+			logs.Log.Warnf("fingerprinthub engine build failed: %v", err)
+		} else if fpHubEngine != nil && fpHubEngine.Len() > 0 {
+			engine.Register(fpHubEngine)
+		}
 	}
 
-	engine.Register(fEngine)
-
-	// 不调 engine.Compile()，避免隐式加载 embed aliases。
-	// 手动填充 favicon hash 并构造 aliases，只使用显式传入的数据。
+	// --- Favicon hash 填充 ---
 	if impl := engine.Fingers(); impl != nil {
 		for hash, name := range impl.Favicons.Md5Fingers {
 			engine.Favicon().Md5Fingers[hash] = name
@@ -191,12 +242,8 @@ func buildEngineFromFingers(fingers types.Fingers, aliases []*types.Alias, match
 	}
 	engine.Enabled["favicon"] = false
 
-	if matchDetail {
-		fEngine.SetMatchDetailEnabled(true)
-	}
-
-	// 先从 finger 列表生成基础 alias 映射，确保每个 finger 都能被 FindFramework 命中。
-	// 再用 Provider 传入的 aliases 覆盖（含 POC 等额外信息）。
+	// --- Alias 构建 ---
+	aliases := fullFingers.Aliases()
 	var baseAliases []*alias.Alias
 	if impl := engine.Fingers(); impl != nil {
 		for _, finger := range impl.HTTPFingers {
@@ -209,6 +256,22 @@ func buildEngineFromFingers(fingers types.Fingers, aliases []*types.Alias, match
 			})
 		}
 	}
+	for _, item := range templateItems {
+		name := templateItemName(item)
+		if name == "" {
+			continue
+		}
+		a := &alias.Alias{
+			Name: name,
+			AliasMap: map[string][]string{
+				"fingerprinthub": {name},
+			},
+		}
+		if item.Finger != nil {
+			a.Attributes = item.Finger.Attributes
+		}
+		baseAliases = append(baseAliases, a)
+	}
 	aliasEngine := &alias.Aliases{
 		Aliases: make(map[string]*alias.Alias, len(baseAliases)+len(aliases)),
 		Map:     make(map[string]map[string]string),
@@ -218,6 +281,67 @@ func buildEngineFromFingers(fingers types.Fingers, aliases []*types.Alias, match
 	engine.Aliases = aliasEngine
 
 	return engine, nil
+}
+
+// buildFingerPrintHubFromTemplates 从已解析的 Template 构建 FingerPrintHubEngine。
+func buildFingerPrintHubFromTemplates(items []*FullFinger) (*fingerprinthub.FingerPrintHubEngine, error) {
+	var webMaps, serviceMaps []map[string]interface{}
+	for _, item := range items {
+		if item.Template == nil {
+			continue
+		}
+		var tmplMap map[string]interface{}
+		data, err := yaml.Marshal(item.Template)
+		if err != nil {
+			continue
+		}
+		if err := yaml.Unmarshal(data, &tmplMap); err != nil {
+			continue
+		}
+		if isWebTemplate(tmplMap) {
+			webMaps = append(webMaps, tmplMap)
+		} else {
+			serviceMaps = append(serviceMaps, tmplMap)
+		}
+	}
+
+	if len(webMaps) == 0 && len(serviceMaps) == 0 {
+		return nil, nil
+	}
+
+	if webMaps == nil {
+		webMaps = []map[string]interface{}{}
+	}
+	if serviceMaps == nil {
+		serviceMaps = []map[string]interface{}{}
+	}
+
+	webJSON, _ := json.Marshal(webMaps)
+	svcJSON, _ := json.Marshal(serviceMaps)
+	return fingerprinthub.NewFingerPrintHubEngine(webJSON, svcJSON)
+}
+
+func templateItemName(item *FullFinger) string {
+	if item.Finger != nil && item.Finger.Name != "" {
+		return item.Finger.Name
+	}
+	if item.Template != nil {
+		if item.Template.Info.Name != "" {
+			return item.Template.Info.Name
+		}
+		return item.Template.Id
+	}
+	return ""
+}
+
+func isWebTemplate(tmpl map[string]interface{}) bool {
+	if _, ok := tmpl["http"]; ok {
+		return true
+	}
+	if _, ok := tmpl["requests"]; ok {
+		return true
+	}
+	return false
 }
 
 // Count 获取指纹总数
@@ -446,8 +570,8 @@ func (e *Engine) HTTPMatchStream(ctx *Context, urls []string) (<-chan *TargetRes
 		return nil, fmt.Errorf("http fingers not initialized")
 	}
 
-	// 从 Context 获取 HTTP 客户端
-	client := ctx.GetClient()
+	// 获取 HTTP 客户端（Context > 引擎级 Config 代理）
+	client := e.resolveClient(ctx)
 
 	// 创建结果 channel
 	resultCh := make(chan *TargetResult)

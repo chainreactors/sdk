@@ -91,6 +91,7 @@ func applyFilterParams(params url.Values, filter *ExportFilter) {
 	addDedup(params, "tags", filter.Tags)
 	addDedup(params, "sources", filter.Sources)
 	addDedup(params, "severities", filter.Severities)
+	addDedup(params, "engines", filter.Engines)
 	addDedup(params, "statuses", filter.Statuses)
 
 	if filter.POCType != "" {

@@ -8,6 +8,7 @@ type ExportFilter struct {
 	Tags         []string
 	Sources      []string
 	Severities   []string
+	Engines      []string // 按引擎类型过滤: "fingers", "fingerprinthub", "xray"
 	POCType      string
 	Statuses     []string
 	ReviewStatus string
@@ -87,5 +88,10 @@ func (f *ExportFilter) WithReviewStatus(status string) *ExportFilter {
 
 func (f *ExportFilter) WithDraft(draft bool) *ExportFilter {
 	f.Draft = draft
+	return f
+}
+
+func (f *ExportFilter) WithEngines(engines ...string) *ExportFilter {
+	f.Engines = engines
 	return f
 }

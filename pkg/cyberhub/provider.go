@@ -41,6 +41,11 @@ func (p *Provider) WithTimeout(d time.Duration) *Provider {
 	return p
 }
 
+// Filter 返回当前筛选条件
+func (p *Provider) Filter() *ExportFilter {
+	return p.filter
+}
+
 func (p *Provider) client() *client {
 	p.once.Do(func() {
 		p.cli = newClient(p.url, p.apiKey, p.timeout)
