@@ -113,6 +113,7 @@ type FullFinger struct {
 	Finger   *types.Finger
 	Alias    *types.Alias
 	Template *types.Template // fingerprinthub/xray 引擎的 neutron 模板
+	Engine   string          // 模板引擎类型: "fingerprinthub" 或 "xray" (仅 Template 非 nil 时有效)
 }
 
 type FullFingers struct {
@@ -238,16 +239,31 @@ func (f FullFingers) NativeFingers() types.Fingers {
 	return result
 }
 
-// TemplateItems returns FullFinger items with parsed Template.
-func (f FullFingers) TemplateItems() []*FullFinger {
+// TemplateItems returns FullFinger items with parsed Template, optionally filtered by engine.
+// If no engine names are given, returns all template items.
+func (f FullFingers) TemplateItems(engines ...string) []*FullFinger {
 	var result []*FullFinger
 	for _, item := range f.Items {
-		if item != nil && item.Template != nil {
-			result = append(result, item)
+		if item == nil || item.Template == nil {
+			continue
 		}
+		if len(engines) > 0 {
+			matched := false
+			for _, eng := range engines {
+				if item.Engine == eng {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+		result = append(result, item)
 	}
 	return result
 }
+
 
 // MergeExports merges CyberHub FingerprintExport records into FullFingers.
 // For fingerprinthub/xray engine records, RawContent is parsed into *Template.
@@ -282,6 +298,7 @@ func (f FullFingers) MergeExports(exports []cyberhub.FingerprintExport, useDraft
 				tmpl := parseTemplate(rawContent, execOpts)
 				if tmpl != nil {
 					ff.Template = tmpl
+					ff.Engine = r.Engine
 				}
 			}
 		default:

@@ -2,6 +2,7 @@ package cyberhub
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -88,9 +89,35 @@ func parseFinger(raw string) *types.Finger {
 	return nil
 }
 
-// ExportFingers 导出完整指纹记录，包含 RawContent 与 RawContentDraft
+// ExportFingers 导出完整指纹记录，包含 RawContent 与 RawContentDraft。
+// 自动修正 Engine 字段：CyberHub 可能将 xray 数据标记为 fingerprinthub，
+// 通过 Finger.Tags 中的 neutron/xray/ai_converted 标签识别并修正为 xray。
 func (p *Provider) ExportFingers(ctx context.Context) ([]FingerprintExport, error) {
-	return p.client().exportFingers(ctx, p.filter)
+	records, err := p.client().exportFingers(ctx, p.filter)
+	if err != nil {
+		return nil, err
+	}
+	for i := range records {
+		records[i].Engine = resolveEngine(records[i].Engine, records[i].Finger)
+	}
+	return records, nil
+}
+
+// resolveEngine 根据 tags 修正 CyberHub 返回的 engine 字段。
+func resolveEngine(engine string, finger *types.Finger) string {
+	if engine == "xray" || engine == "fingers" || engine == "" {
+		return engine
+	}
+	if finger == nil {
+		return engine
+	}
+	for _, tag := range finger.Tags {
+		switch strings.ToLower(tag) {
+		case "neutron", "xray", "ai_converted":
+			return "xray"
+		}
+	}
+	return engine
 }
 
 // POCs 导出 POC 模板数据

@@ -18,6 +18,7 @@ import (
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/fingerprinthub"
 	"github.com/chainreactors/fingers/resources"
+	"github.com/chainreactors/fingers/xray"
 	"github.com/chainreactors/logs"
 	sdkhttpx "github.com/chainreactors/sdk/pkg/httpx"
 	"github.com/chainreactors/sdk/pkg/types"
@@ -220,14 +221,25 @@ func buildEngineFromFullFingers(fullFingers FullFingers, matchDetail bool) (*fin
 		}
 	}
 
-	// --- fingerprinthub/xray 模板引擎 ---
-	templateItems := fullFingers.TemplateItems()
-	if len(templateItems) > 0 {
-		fpHubEngine, err := buildFingerPrintHubFromTemplates(templateItems)
+	// --- fingerprinthub 模板引擎 ---
+	fpHubItems := fullFingers.TemplateItems("fingerprinthub")
+	if len(fpHubItems) > 0 {
+		fpHubEngine, err := buildFingerPrintHubFromTemplates(fpHubItems)
 		if err != nil {
 			logs.Log.Warnf("fingerprinthub engine build failed: %v", err)
 		} else if fpHubEngine != nil && fpHubEngine.Len() > 0 {
 			engine.Register(fpHubEngine)
+		}
+	}
+
+	// --- xray 模板引擎 ---
+	xrayItems := fullFingers.TemplateItems("xray")
+	if len(xrayItems) > 0 {
+		xrayEngine, err := buildXrayFromTemplates(xrayItems)
+		if err != nil {
+			logs.Log.Warnf("xray engine build failed: %v", err)
+		} else if xrayEngine != nil && xrayEngine.Len() > 0 {
+			engine.Register(xrayEngine)
 		}
 	}
 
@@ -256,15 +268,19 @@ func buildEngineFromFullFingers(fullFingers FullFingers, matchDetail bool) (*fin
 			})
 		}
 	}
-	for _, item := range templateItems {
+	for _, item := range fullFingers.TemplateItems() {
 		name := templateItemName(item)
 		if name == "" {
 			continue
 		}
+		engineKey := item.Engine
+		if engineKey == "" {
+			engineKey = "fingerprinthub"
+		}
 		a := &alias.Alias{
 			Name: name,
 			AliasMap: map[string][]string{
-				"fingerprinthub": {name},
+				engineKey: {name},
 			},
 		}
 		if item.Finger != nil {
@@ -319,6 +335,30 @@ func buildFingerPrintHubFromTemplates(items []*FullFinger) (*fingerprinthub.Fing
 	webJSON, _ := json.Marshal(webMaps)
 	svcJSON, _ := json.Marshal(serviceMaps)
 	return fingerprinthub.NewFingerPrintHubEngine(webJSON, svcJSON)
+}
+
+// buildXrayFromTemplates 从已解析的 Template 构建 XrayEngine。
+func buildXrayFromTemplates(items []*FullFinger) (*xray.XrayEngine, error) {
+	var tmplMaps []map[string]interface{}
+	for _, item := range items {
+		if item.Template == nil {
+			continue
+		}
+		var tmplMap map[string]interface{}
+		data, err := yaml.Marshal(item.Template)
+		if err != nil {
+			continue
+		}
+		if err := yaml.Unmarshal(data, &tmplMap); err != nil {
+			continue
+		}
+		tmplMaps = append(tmplMaps, tmplMap)
+	}
+	if len(tmplMaps) == 0 {
+		return nil, nil
+	}
+	jsonData, _ := json.Marshal(tmplMaps)
+	return xray.NewXrayEngine(jsonData)
 }
 
 func templateItemName(item *FullFinger) string {
