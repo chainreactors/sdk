@@ -201,9 +201,13 @@ func buildEngineFromFullFingers(fullFingers FullFingers, matchDetail bool) (*fin
 	if len(nativeFingers) > 0 {
 		var httpFingers, socketFingers types.Fingers
 		for _, finger := range nativeFingers {
-			if finger.Protocol == "http" {
+			protocol := finger.Protocol
+			if protocol == "" {
+				protocol = "http" // 与 Finger.Compile() 默认值一致
+			}
+			if protocol == "http" {
 				httpFingers = append(httpFingers, finger)
-			} else if finger.Protocol == "tcp" {
+			} else if protocol == "tcp" {
 				socketFingers = append(socketFingers, finger)
 			}
 		}
