@@ -27,6 +27,7 @@ type SprayEngine struct {
 	resourceProvider func(string) []byte
 	capacity         *types.Capacity
 	matchDetail      bool
+	proxy            []string // 引擎级默认代理
 	mu               sync.Mutex
 }
 
@@ -42,6 +43,7 @@ func NewSprayEngine(config *Config) *SprayEngine {
 		fingersEngine:    config.FingersEngine,
 		resourceProvider: config.ResourceProvider,
 		matchDetail:      config.MatchDetail,
+		proxy:            config.Proxy,
 	}
 	if config.Capacity > 0 {
 		e.capacity = types.NewCapacity(config.Capacity)
@@ -290,6 +292,11 @@ func (e *SprayEngine) execute(ctx *Context, taskType string, urls []string, word
 	opt := cloneOption(ctx.opt)
 	opt.URL = urls
 	opt.PortRange = ""
+	// 解析代理：Context（已写入 opt.Proxies）> Config。Client 级代理在
+	// ensureSpray 时已下沉到 e.proxy。spray 在 NewRunner 内部自行构建代理链。
+	if len(opt.Proxies) == 0 && len(e.proxy) > 0 {
+		opt.Proxies = e.proxy
+	}
 	if opt.PoolSize <= 0 || opt.PoolSize > len(opt.URL) {
 		opt.PoolSize = len(opt.URL)
 	}

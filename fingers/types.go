@@ -2,11 +2,11 @@ package fingers
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"time"
 
+	sdkhttpx "github.com/chainreactors/sdk/pkg/httpx"
 	"github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/utils/httputils"
 )
@@ -109,30 +109,33 @@ func (c *Context) GetClient() *http.Client {
 }
 
 // buildDefaultClient 构建默认HTTP客户端
-// 根据当前的 timeout 和 proxy 配置创建客户端
+// 根据当前的 timeout 和 proxy 配置创建客户端。代理经 SDK 统一 httpx 桥接生效，
+// 因此主动指纹探测（GetClient）与 HTTPSender 行为一致，都会走代理。
 func (c *Context) buildDefaultClient() {
-	// 设置超时时间
 	timeout := time.Duration(c.timeout) * time.Second
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
 
-	// 创建基础 Transport
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
+	var proxies []string
+	if c.proxy != "" {
+		proxies = []string{c.proxy}
+	}
+	client, err := sdkhttpx.NewClient(sdkhttpx.Config{
+		Timeout:            timeout,
+		Proxy:              proxies,
+		FollowRedirects:    true,
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		// 代理解析失败时回退到无代理客户端，保持尽力而为语义。
+		client, _ = sdkhttpx.NewClient(sdkhttpx.Config{
+			Timeout:            timeout,
+			FollowRedirects:    true,
 			InsecureSkipVerify: true,
-		},
+		})
 	}
-
-	// TODO: 如果需要支持 proxy，可以在这里配置 transport.Proxy
-	// 目前 proxy 主要用于 HTTPSender，HTTP Client 暂不处理 proxy
-	// 如果用户需要 proxy，建议使用 WithClient() 提供自定义客户端
-
-	// 创建并存储默认客户端
-	c.defaultClient = &http.Client{
-		Timeout:   timeout,
-		Transport: transport,
-	}
+	c.defaultClient = client
 }
 
 // GetTimeout 获取超时时间（秒）

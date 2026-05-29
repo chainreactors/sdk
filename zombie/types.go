@@ -11,6 +11,7 @@ type Context struct {
 	ctx          context.Context
 	opt          *types.ZombieOption
 	statsHandler func(types.Stats)
+	proxy        []string // per-execution 代理覆盖（优先级高于 Config / Client）
 }
 
 var _ types.Context = (*Context)(nil)
@@ -27,7 +28,16 @@ func (c *Context) WithContext(ctx context.Context) *Context {
 		ctx:          ctx,
 		opt:          types.CloneZombieOption(c.opt),
 		statsHandler: c.statsHandler,
+		proxy:        c.proxy,
 	}
+}
+
+// SetProxy 设置本次执行使用的代理（支持多级代理链）。仅对支持代理的插件生效
+// （ssh/smb/vnc/ftp/rsync/redis 等原生 TCP 或可注入拨号器的插件）。
+// 传入空参数表示清除 Context 级代理，回退到 Config / Client 级配置。
+func (c *Context) SetProxy(proxies ...string) *Context {
+	c.proxy = proxies
+	return c
 }
 
 func (c *Context) Context() context.Context {
@@ -84,6 +94,7 @@ func (c *Context) emitStats(stats types.Stats) {
 type Config struct {
 	Capacity         int
 	ResourceProvider func(string) []byte
+	Proxy            []string // 引擎级默认代理，作用于该引擎所有执行（可被 Context 覆盖）
 }
 
 func NewConfig() *Config {
@@ -101,6 +112,12 @@ func (c *Config) WithCapacity(total int) *Config {
 
 func (c *Config) WithResourceProvider(provider func(string) []byte) *Config {
 	c.ResourceProvider = provider
+	return c
+}
+
+// WithProxy 设置引擎级默认代理（支持多级代理链）。可被 Context.SetProxy 覆盖。
+func (c *Config) WithProxy(proxies ...string) *Config {
+	c.Proxy = proxies
 	return c
 }
 

@@ -161,6 +161,18 @@ func (e *Engine) execute(ctx *Context, task *BruteTask) (<-chan types.Result, er
 		opt.Mod = types.ZombieModeBomb
 	}
 
+	// 解析代理：Context > Config。Client 级代理在 ensureZombie 时已下沉到 config。
+	if proxies := types.ResolveProxy(ctx.proxy, e.config.Proxy); len(proxies) > 0 {
+		dialer, err := types.NewProxyDialer(proxies)
+		if err != nil {
+			if e.capacity != nil {
+				e.capacity.Release(threads)
+			}
+			return nil, fmt.Errorf("apply proxy failed: %v", err)
+		}
+		opt.ProxyDial = dialer.DialContext
+	}
+
 	runner := zombiecore.NewRunner(opt)
 	runner.SetTargets(convertTargets(task.Targets))
 	if len(task.Users) > 0 {

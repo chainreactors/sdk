@@ -4,14 +4,14 @@ go 1.25.4
 
 require (
 	github.com/chainreactors/fingers v1.2.1-0.20260523084643-75e5a3f2065e
-	github.com/chainreactors/gogo/v2 v2.14.2-0.20260518120413-769f82fc91a6
+	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529071026-65d22e5a6ba3
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/neutron v0.0.0-20260521180819-72e24154b02f
+	github.com/chainreactors/neutron v0.0.0-20260529070459-2e4444b1ceb0
 	github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68
 	github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0
 	github.com/chainreactors/spray v1.2.6-0.20260523083907-546e8ab7756a
-	github.com/chainreactors/utils v0.0.0-20260520090033-cfefcb28cc6f
-	github.com/chainreactors/zombie v1.2.3-0.20260524062446-53a80b50a5ba
+	github.com/chainreactors/utils v0.0.0-20260529070435-f03100630384
+	github.com/chainreactors/zombie v1.2.3-0.20260529070819-21a4ec2cbbc8
 	github.com/panjf2000/ants/v2 v2.12.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -136,5 +136,3 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-replace github.com/chainreactors/gogo/v2 => /mnt/chainreactors/gogo/v2

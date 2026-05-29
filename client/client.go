@@ -21,6 +21,7 @@ type options struct {
 	providers        []types.Provider
 	resourceProvider func(string) []byte
 	indexOptions     *association.IndexOptions
+	proxy            []string // 全局默认代理，下沉到各引擎（可被引擎 Config / Context 覆盖）
 
 	fingersConfig *fingers.Config
 	neutronConfig *neutron.Config
@@ -35,6 +36,16 @@ func WithProvider(providers ...types.Provider) Option {
 
 func WithResourceProvider(rp func(string) []byte) Option {
 	return func(o *options) { o.resourceProvider = rp }
+}
+
+// WithProxy 设置全局默认代理（支持多级代理链），应用于 gogo / spray / zombie
+// 所有引擎。各引擎 Config.WithProxy 或 Context.SetProxy 可覆盖此默认值。
+// 支持 proxyclient 的全部协议，例如：
+//
+//	client.New(client.WithProxy("socks5://127.0.0.1:1080"))
+//	client.New(client.WithProxy("http://a:8080", "socks5://b:1080")) // 代理链
+func WithProxy(proxies ...string) Option {
+	return func(o *options) { o.proxy = proxies }
 }
 
 // WithIndex enables the association index on this client.
@@ -104,6 +115,9 @@ func (c *Client) ensureFingers() error {
 			cfg.WithProvider(c.opts.providers...)
 		}
 	}
+	if len(cfg.Proxy) == 0 && len(c.opts.proxy) > 0 {
+		cfg.Proxy = c.opts.proxy
+	}
 
 	eng, err := fingers.NewEngine(cfg)
 	if err != nil {
@@ -124,6 +138,9 @@ func (c *Client) ensureNeutron() error {
 		if len(c.opts.providers) > 0 {
 			cfg.WithProvider(c.opts.providers...)
 		}
+	}
+	if len(cfg.Proxy) == 0 && len(c.opts.proxy) > 0 {
+		cfg.Proxy = c.opts.proxy
 	}
 
 	eng, err := neutron.NewEngine(cfg)
@@ -183,6 +200,9 @@ func (c *Client) ensureGogo() error {
 	if cfg.ResourceProvider == nil && c.opts.resourceProvider != nil {
 		cfg.WithResourceProvider(c.opts.resourceProvider)
 	}
+	if len(cfg.Proxy) == 0 && len(c.opts.proxy) > 0 {
+		cfg.Proxy = c.opts.proxy
+	}
 
 	eng := gogo.NewGogoEngine(cfg)
 	if err := eng.Init(); err != nil {
@@ -214,6 +234,9 @@ func (c *Client) ensureSpray() error {
 	if cfg.ResourceProvider == nil && c.opts.resourceProvider != nil {
 		cfg.WithResourceProvider(c.opts.resourceProvider)
 	}
+	if len(cfg.Proxy) == 0 && len(c.opts.proxy) > 0 {
+		cfg.Proxy = c.opts.proxy
+	}
 
 	eng := spray.NewSprayEngine(cfg)
 	if err := eng.Init(); err != nil {
@@ -234,6 +257,9 @@ func (c *Client) ensureZombie() error {
 	}
 	if cfg.ResourceProvider == nil && c.opts.resourceProvider != nil {
 		cfg.WithResourceProvider(c.opts.resourceProvider)
+	}
+	if len(cfg.Proxy) == 0 && len(c.opts.proxy) > 0 {
+		cfg.Proxy = c.opts.proxy
 	}
 
 	eng := zombie.NewEngine(cfg)

@@ -1,14 +1,12 @@
 package fingers
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"time"
 
-	"github.com/chainreactors/proxyclient"
+	sdkhttpx "github.com/chainreactors/sdk/pkg/httpx"
 )
 
 // ========================================
@@ -36,36 +34,36 @@ func NewDefaultHTTPSender(timeout time.Duration, proxy string) *DefaultHTTPSende
 		timeout = 10 * time.Second // 默认10秒超时
 	}
 
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, // 跳过证书验证
-		},
+	var proxies []string
+	if proxy != "" {
+		proxies = []string{proxy}
+	}
+	// 委托 SDK 统一 httpx 桥接（底层 utils/httpx，零全局、并发安全）。
+	// 代理解析失败时回退到无代理客户端，保持原有“尽力而为”语义。
+	client, err := sdkhttpx.NewClient(sdkhttpx.Config{
+		Timeout:             timeout,
+		Proxy:               proxies,
+		FollowRedirects:     false,
+		InsecureSkipVerify:  true,
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 10,
 		IdleConnTimeout:     90 * time.Second,
-	}
-
-	// 如果配置了代理，使用proxyclient
-	if proxy != "" {
-		proxyURL, err := url.Parse(proxy)
-		if err == nil {
-			dial, err := proxyclient.NewClient(proxyURL)
-			if err == nil {
-				transport.DialContext = dial.DialContext
-			}
-		}
+	})
+	if err != nil {
+		client, _ = sdkhttpx.NewClient(sdkhttpx.Config{
+			Timeout:             timeout,
+			FollowRedirects:     false,
+			InsecureSkipVerify:  true,
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+		})
 	}
 
 	return &DefaultHTTPSender{
 		timeout: timeout,
 		proxy:   proxy,
-		client: &http.Client{
-			Timeout:   timeout,
-			Transport: transport,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse // 不自动跟随重定向
-			},
-		},
+		client:  client,
 	}
 }
 

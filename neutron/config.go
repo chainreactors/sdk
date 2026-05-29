@@ -47,6 +47,13 @@ func (c *Config) WithCapacity(total int) *Config {
 	return c
 }
 
+// WithProxy 设置引擎级默认代理（支持多级链）。模板在编译期注入该代理，
+// 故为 engine/Config 级粒度（编译期），不支持 per-Context 覆盖。
+func (c *Config) WithProxy(proxies ...string) *Config {
+	c.Proxy = proxies
+	return c
+}
+
 // Load 执行数据加载
 func (c *Config) Load(ctx context.Context) error {
 	if c == nil {

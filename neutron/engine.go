@@ -203,13 +203,18 @@ func (e *Engine) Close() error {
 // 按需加载 API
 // ========================================
 
-// compileOptions 返回编译选项
+// compileOptions 返回编译选项。当 Config.Proxy 非空时，解析出代理拨号器并注入
+// Options.DialContext —— 模板在编译期即带上该代理（engine/Config 级粒度）。
 func (e *Engine) compileOptions() *protocols.ExecuterOptions {
-	return &protocols.ExecuterOptions{
-		Options: &protocols.Options{
-			Timeout: int(e.config.Timeout.Seconds()),
-		},
+	opts := &protocols.Options{
+		Timeout: int(e.config.Timeout.Seconds()),
 	}
+	if e.config != nil && len(e.config.Proxy) > 0 {
+		if dialer, err := types.NewProxyDialer(e.config.Proxy); err == nil && dialer != nil {
+			opts.DialContext = dialer.DialContext
+		}
+	}
+	return &protocols.ExecuterOptions{Options: opts}
 }
 
 func (e *Engine) compileTemplates(allTemplates []*types.Template) []*types.Template {

@@ -90,6 +90,14 @@ func (c *Context) SetMatch(match string) *Context {
 	return c
 }
 
+// SetProxy 设置本次执行使用的代理（支持多级代理链）。
+// spray 在内部 NewRunner 时自行解析 opt.Proxies 构建 proxyclient 链。
+// 传入空参数表示清除 Context 级代理，回退到 Config / Client 级配置。
+func (c *Context) SetProxy(proxies ...string) *Context {
+	c.opt.Proxies = proxies
+	return c
+}
+
 // SetOption 设置完整选项
 func (c *Context) SetOption(opt *Option) *Context {
 	c.opt = cloneOption(opt)
@@ -212,6 +220,7 @@ type Config struct {
 	ResourceProvider func(string) []byte
 	Capacity         int
 	MatchDetail      bool
+	Proxy            []string // 引擎级默认代理，作用于该引擎所有执行（可被 Context 覆盖）
 }
 
 // NewConfig 创建默认配置
@@ -252,6 +261,12 @@ func (c *Config) WithResourceProvider(provider func(string) []byte) *Config {
 // count from this shared bucket and blocks if capacity is exhausted.
 func (c *Config) WithCapacity(total int) *Config {
 	c.Capacity = total
+	return c
+}
+
+// WithProxy 设置引擎级默认代理（支持多级代理链）。可被 Context.SetProxy 覆盖。
+func (c *Config) WithProxy(proxies ...string) *Config {
+	c.Proxy = proxies
 	return c
 }
 

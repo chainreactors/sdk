@@ -29,6 +29,7 @@ type Context struct {
 	excludes     []string
 	opt          *types.GogoOption
 	statsHandler func(types.Stats)
+	proxy        []string // per-execution 代理覆盖（优先级高于 Config / Client）
 }
 
 var _ types.Context = (*Context)(nil)
@@ -51,6 +52,7 @@ func (c *Context) WithContext(ctx context.Context) *Context {
 		excludes:     c.excludes,
 		opt:          types.CloneGogoOption(c.opt),
 		statsHandler: c.statsHandler,
+		proxy:        c.proxy,
 	}
 }
 
@@ -75,6 +77,14 @@ func (c *Context) SetThreads(threads int) *Context {
 	if threads > 0 {
 		c.threads = threads
 	}
+	return c
+}
+
+// SetProxy 设置本次执行使用的代理（支持多级代理链）。
+// 例如 SetProxy("socks5://127.0.0.1:1080") 或 SetProxy("http://a:8080", "socks5://b:1080")。
+// 传入空参数表示清除 Context 级代理，回退到 Config / Client 级配置。
+func (c *Context) SetProxy(proxies ...string) *Context {
+	c.proxy = proxies
 	return c
 }
 
@@ -133,6 +143,7 @@ type Config struct {
 	NeutronEngine    *neutron.Engine
 	ResourceProvider func(string) []byte
 	Capacity         int
+	Proxy            []string // 引擎级默认代理，作用于该引擎所有执行（可被 Context 覆盖）
 }
 
 // NewConfig 创建默认配置
@@ -173,6 +184,12 @@ func (c *Config) WithResourceProvider(provider func(string) []byte) *Config {
 // count from this shared bucket and blocks if capacity is exhausted.
 func (c *Config) WithCapacity(total int) *Config {
 	c.Capacity = total
+	return c
+}
+
+// WithProxy 设置引擎级默认代理（支持多级代理链）。可被 Context.SetProxy 覆盖。
+func (c *Config) WithProxy(proxies ...string) *Config {
+	c.Proxy = proxies
 	return c
 }
 

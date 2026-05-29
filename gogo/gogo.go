@@ -31,6 +31,7 @@ type GogoEngine struct {
 	neutronEngine    *neutron.Engine    // 可选的 neutron 引擎
 	resourceProvider func(string) []byte
 	capacity         *types.Capacity
+	proxy            []string // 引擎级默认代理
 }
 
 // NewGogoEngine 创建 GoGo 引擎
@@ -45,6 +46,7 @@ func NewGogoEngine(config *Config) *GogoEngine {
 		fingersEngine:    config.FingersEngine,
 		neutronEngine:    config.NeutronEngine,
 		resourceProvider: config.ResourceProvider,
+		proxy:            config.Proxy,
 	}
 	if config.Capacity > 0 {
 		e.capacity = types.NewCapacity(config.Capacity)
@@ -267,10 +269,29 @@ func (e *GogoEngine) executeWorkflow(ctx *Context, task *WorkflowTask) (<-chan t
 	return e.workflowStream(runCtx.Context(), task.Workflow, runCtx)
 }
 
+// applyProxy 按 Context > Config 优先级解析代理，并把拨号器写入 opt 的实例级
+// 代理字段。Client 级代理在创建引擎时已下沉到 e.proxy。
+func (e *GogoEngine) applyProxy(opt *types.GogoOption, ctxProxy []string) error {
+	proxies := types.ResolveProxy(ctxProxy, e.proxy)
+	if len(proxies) == 0 {
+		return nil
+	}
+	dialer, err := types.NewProxyDialer(proxies)
+	if err != nil {
+		return err
+	}
+	opt.ProxyDialContext = dialer.DialContext
+	opt.ProxyDialTimeout = dialer.DialTimeout
+	return nil
+}
+
 func (e *GogoEngine) workflowStream(ctx context.Context, workflow *types.Workflow, runCtx *Context) (<-chan types.Result, error) {
 	// 创建基础配置
 	if runCtx.opt == nil {
 		runCtx.opt = types.NewDefaultGogoOption()
+	}
+	if err := e.applyProxy(runCtx.opt, runCtx.proxy); err != nil {
+		return nil, fmt.Errorf("apply proxy failed: %v", err)
 	}
 	if len(runCtx.excludes) > 0 {
 		excludes := utils.ParseCIDRs(runCtx.excludes)
@@ -464,6 +485,13 @@ func (e *GogoEngine) ScanOne(ctx *Context, ip, port string) *types.GOGOResult {
 
 	if err := e.Init(); err != nil {
 		return result.GOGOResult
+	}
+
+	if runCtx.opt == nil {
+		runCtx.opt = types.NewDefaultGogoOption()
+	}
+	if err := e.applyProxy(runCtx.opt, runCtx.proxy); err != nil {
+		logs.Log.Warnf("apply proxy failed: %v", err)
 	}
 
 	engine.Dispatch(runCtx.opt, result)

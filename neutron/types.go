@@ -17,6 +17,9 @@ type Config struct {
 	Templates Templates
 	Capacity  int
 	Timeout   time.Duration
+	// Proxy 为引擎级默认代理（支持多级链）。注意：neutron 模板在编译期烘焙
+	// http client，故代理为 engine/Config 级（编译期）粒度，不支持 per-Context 覆盖。
+	Proxy []string
 }
 
 // ========================================

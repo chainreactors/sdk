@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/chainreactors/sdk/pkg/types"
 	"gopkg.in/yaml.v3"
@@ -21,7 +22,8 @@ func NewURLProvider(fingersURL, pocsURL string) *URLProvider {
 	return &URLProvider{
 		fingersURL: fingersURL,
 		pocsURL:    pocsURL,
-		client:     http.DefaultClient,
+		// per-instance 客户端，不共享 http.DefaultClient 全局。
+		client: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
