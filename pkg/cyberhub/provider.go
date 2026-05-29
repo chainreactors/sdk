@@ -104,17 +104,16 @@ func (p *Provider) ExportFingers(ctx context.Context) ([]FingerprintExport, erro
 }
 
 // resolveEngine 根据 tags 修正 CyberHub 返回的 engine 字段。
+// 只要 Finger.Tags 包含 "xray" 即修正为 xray 引擎。
 func resolveEngine(engine string, finger *types.Finger) string {
 	if engine == "xray" || engine == "fingers" || engine == "" {
 		return engine
 	}
-	if finger == nil {
-		return engine
-	}
-	for _, tag := range finger.Tags {
-		switch strings.ToLower(tag) {
-		case "neutron", "xray", "ai_converted":
-			return "xray"
+	if finger != nil {
+		for _, tag := range finger.Tags {
+			if strings.EqualFold(tag, "xray") {
+				return "xray"
+			}
 		}
 	}
 	return engine
