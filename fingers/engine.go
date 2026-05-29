@@ -378,6 +378,15 @@ func templateItemName(item *FullFinger) string {
 	return ""
 }
 
+func safeHTTPActiveMatch(fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			logs.Log.Debugf("active match panic recovered: %v", r)
+		}
+	}()
+	fn()
+}
+
 func isWebTemplate(tmpl map[string]interface{}) bool {
 	if _, ok := tmpl["http"]; ok {
 		return true
@@ -473,13 +482,12 @@ func (e *Engine) HTTPMatch(ctx *Context, urls []string) ([]*TargetResult, error)
 	return results, nil
 }
 
-// scanHTTPTarget 扫描单个 HTTP 目标（内部方法）
-func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int, client *http.Client, fEngine *types.FingersMatchEngine) *TargetResult {
+// scanHTTPTarget 扫描单个 HTTP 目标，自动对所有注册引擎执行主动探测。
+func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResult {
 	result := &TargetResult{
 		Target: url,
 	}
 
-	// 解析 URL 获取 base URL (scheme://host:port)
 	parsedURL, err := parseURL(url)
 	if err != nil {
 		result.Err = fmt.Errorf("invalid url: %w", err)
@@ -490,37 +498,66 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int, client *htt
 		baseURL += ":" + parsedURL.Port
 	}
 
-	// 创建 sender 函数
-	sender := fingersEngine.Sender(func(data []byte) ([]byte, bool) {
-		sendPath := string(data)
-		// 使用 pathJoin 连接基础路径和发送路径
-		fullPath := pathJoin(parsedURL.Path, sendPath)
-		fullURL := baseURL + fullPath
+	client := ctx.GetClient()
 
-		req, err := http.NewRequest(http.MethodGet, fullURL, nil)
-		if err != nil {
-			return nil, false
+	// 1. 原生 fingers 引擎
+	if fEngine := e.engine.Fingers(); fEngine != nil {
+		sender := fingersEngine.Sender(func(data []byte) ([]byte, bool) {
+			sendPath := string(data)
+			fullPath := pathJoin(parsedURL.Path, sendPath)
+			fullURL := baseURL + fullPath
+
+			req, err := http.NewRequest(http.MethodGet, fullURL, nil)
+			if err != nil {
+				return nil, false
+			}
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return nil, false
+			}
+			defer resp.Body.Close()
+
+			return httputils.ReadRaw(resp), true
+		})
+
+		for _, finger := range fEngine.HTTPFingers {
+			frame, vuln, ok := finger.ActiveMatch(level, sender)
+			if ok && frame != nil {
+				result.Results = append(result.Results, &types.ServiceResult{
+					Framework: frame,
+					Vuln:      vuln,
+				})
+			}
 		}
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	}
 
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, false
-		}
-		defer resp.Body.Close()
+	// 2. fingerprinthub / xray 模板引擎（共享同一个 Transport）
+	transport := client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
 
-		return httputils.ReadRaw(resp), true
-	})
-
-	// 执行主动探测
-	for _, finger := range fEngine.HTTPFingers {
-		frame, vuln, ok := finger.ActiveMatch(level, sender)
-		if ok && frame != nil {
+	activeCallback := func(frame *common.Framework, vuln *common.Vuln) {
+		if frame != nil {
 			result.Results = append(result.Results, &types.ServiceResult{
 				Framework: frame,
 				Vuln:      vuln,
 			})
 		}
+	}
+
+	if fpHub := e.engine.FingerPrintHub(); fpHub != nil {
+		safeHTTPActiveMatch(func() {
+			fpHub.HTTPActiveMatch(baseURL, level, transport, activeCallback)
+		})
+	}
+
+	if xrayEng := e.engine.Xray(); xrayEng != nil {
+		safeHTTPActiveMatch(func() {
+			xrayEng.HTTPActiveMatch(baseURL, level, transport, activeCallback)
+		})
 	}
 
 	return result
@@ -593,42 +630,28 @@ func (e *Engine) ServiceMatch(ctx *Context, targets []string) ([]*TargetResult, 
 //   - error: 错误信息（仅在引擎初始化失败等严重错误时返回）
 func (e *Engine) HTTPMatchStream(ctx *Context, urls []string) (<-chan *TargetResult, error) {
 	if e.engine == nil {
-		// 返回空 channel，允许引擎在未配置时也能使用
 		ch := make(chan *TargetResult)
 		close(ch)
 		return ch, nil
 	}
 
-	// 从 Context 获取 level (HTTP: 0-3)
 	level := ctx.GetLevel()
 	if level < 0 || level > 3 {
 		return nil, fmt.Errorf("invalid level: %d, must be 0-3", level)
 	}
 
-	// 获取 FingersEngine
-	fEngine, err := e.GetFingersEngine()
-	if err != nil {
-		return nil, err
-	}
-	if fEngine == nil || fEngine.HTTPFingers == nil {
-		return nil, fmt.Errorf("http fingers not initialized")
-	}
+	// 统一解析 client 并注入 ctx，所有引擎共享
+	resolvedClient := e.resolveClient(ctx)
+	ctx = ctx.clone().withResolvedClient(resolvedClient)
 
-	// 获取 HTTP 客户端（Context > 引擎级 Config 代理）
-	client := e.resolveClient(ctx)
-
-	// 创建结果 channel
 	resultCh := make(chan *TargetResult)
 
-	// 在 goroutine 中执行批量探测
 	go func() {
 		defer close(resultCh)
 
 		for _, url := range urls {
-			// 扫描单个目标
-			targetResult := e.scanHTTPTarget(ctx, url, level, client, fEngine)
+			targetResult := e.scanHTTPTarget(ctx, url, level)
 
-			// 发送结果到 channel
 			select {
 			case resultCh <- targetResult:
 			case <-ctx.Context().Done():

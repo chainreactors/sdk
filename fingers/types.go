@@ -161,6 +161,16 @@ func (c *Context) GetLevel() int {
 	return c.level
 }
 
+func (c *Context) clone() *Context {
+	cp := *c
+	return &cp
+}
+
+func (c *Context) withResolvedClient(client *http.Client) *Context {
+	c.client = client
+	return c
+}
+
 // ========================================
 // Result 实现
 // ========================================
