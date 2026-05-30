@@ -407,7 +407,10 @@ func (e *GogoEngine) workflowStream(ctx context.Context, workflow *types.Workflo
 			default:
 			}
 
-			ipPort := i.([]string)
+			ipPort, ok := i.([]string)
+			if !ok || len(ipPort) < 2 {
+				return
+			}
 			result := pkg.NewResult(ipPort[0], ipPort[1])
 
 			// 调用扫描引擎

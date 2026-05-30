@@ -378,10 +378,16 @@ func templateItemName(item *FullFinger) string {
 	return ""
 }
 
-func safeHTTPActiveMatch(fn func()) {
+// safeHTTPActiveMatch is a thin, non-load-bearing resilience boundary. The
+// concurrency root causes are fixed (per-execution client via ScanContext) and
+// known panic points are guarded, but the template engines also run untrusted /
+// wild templates, so one malformed template must not abort a whole multi-target
+// scan. Unlike before, a recovered panic is surfaced (Warn + which engine), not
+// silently swallowed — it signals a bug to harden, not a crutch to rely on.
+func safeHTTPActiveMatch(engine string, fn func()) {
 	defer func() {
 		if r := recover(); r != nil {
-			logs.Log.Debugf("active match panic recovered: %v", r)
+			logs.Log.Warnf("%s active match panicked on a template, skipped: %v", engine, r)
 		}
 	}()
 	fn()
@@ -549,13 +555,13 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 	}
 
 	if fpHub := e.engine.FingerPrintHub(); fpHub != nil {
-		safeHTTPActiveMatch(func() {
+		safeHTTPActiveMatch("fingerprinthub", func() {
 			fpHub.HTTPActiveMatch(baseURL, level, transport, activeCallback)
 		})
 	}
 
 	if xrayEng := e.engine.Xray(); xrayEng != nil {
-		safeHTTPActiveMatch(func() {
+		safeHTTPActiveMatch("xray", func() {
 			xrayEng.HTTPActiveMatch(baseURL, level, transport, activeCallback)
 		})
 	}
