@@ -3,6 +3,7 @@ package fingers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/chainreactors/logs"
 	"github.com/chainreactors/neutron/protocols"
@@ -293,14 +294,19 @@ func (f FullFingers) MergeExports(exports []cyberhub.FingerprintExport, useDraft
 			rawContent = r.RawContentDraft
 		}
 
-		switch r.Engine {
+		engine := r.Engine
+		if engine == "fingerprinthub" && hasTag(r.Finger, xrayRouteTag) {
+			engine = "xray"
+		}
+
+		switch engine {
 		case "fingerprinthub", "xray":
 			if rawContent != "" {
 				tmpl := parseTemplate(rawContent, execOpts)
 				if tmpl != nil {
 					ff.Template = tmpl
 					ff.RawContent = rawContent
-					ff.Engine = r.Engine
+					ff.Engine = engine
 				}
 			}
 		default:
@@ -315,6 +321,18 @@ func (f FullFingers) MergeExports(exports []cyberhub.FingerprintExport, useDraft
 		f = f.Append(ff)
 	}
 	return f
+}
+
+func hasTag(finger *types.Finger, tag string) bool {
+	if finger == nil {
+		return false
+	}
+	for _, t := range finger.Tags {
+		if strings.EqualFold(strings.TrimSpace(t), tag) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseTemplate(rawYAML string, opts *protocols.ExecuterOptions) *types.Template {
