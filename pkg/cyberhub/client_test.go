@@ -3,6 +3,8 @@ package cyberhub
 import (
 	"net/url"
 	"testing"
+
+	"github.com/chainreactors/sdk/pkg/types"
 )
 
 func TestApplyFilterParams_DedupTags(t *testing.T) {
@@ -150,5 +152,69 @@ func TestApplyDefaultPOCStatus_WithReviewStatus(t *testing.T) {
 
 	if params.Get("status") != "" {
 		t.Fatalf("expected no default status when review_status set, got %q", params.Get("status"))
+	}
+}
+
+func TestPOCTemplateFromResponsePrefersRawContent(t *testing.T) {
+	resp := pocResponse{
+		Template: &types.Template{Id: "json-template"},
+		RawContent: `id: raw-template
+info:
+  name: Raw Template
+variables:
+  s1: '{{rand_int(1000, 9999)}}'
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}/check?s={{s1}}'
+`,
+	}
+
+	tpl := pocTemplateFromResponse(resp, false)
+	if tpl == nil {
+		t.Fatal("expected template")
+	}
+	if tpl.Id != "raw-template" {
+		t.Fatalf("expected raw template id, got %q", tpl.Id)
+	}
+	if tpl.Variables.Len() == 0 {
+		t.Fatal("expected variables parsed from raw content")
+	}
+}
+
+func TestPOCTemplateFromResponseHonorsDraftRawContent(t *testing.T) {
+	resp := pocResponse{
+		RawContent: `id: active-template
+info:
+  name: Active Template
+http:
+  - method: GET
+`,
+		RawContentDraft: `id: draft-template
+info:
+  name: Draft Template
+http:
+  - method: POST
+`,
+	}
+
+	tpl := pocTemplateFromResponse(resp, true)
+	if tpl == nil {
+		t.Fatal("expected template")
+	}
+	if tpl.Id != "draft-template" {
+		t.Fatalf("expected draft template id, got %q", tpl.Id)
+	}
+}
+
+func TestPOCTemplateFromResponseFallsBackToStructuredTemplate(t *testing.T) {
+	resp := pocResponse{Template: &types.Template{Id: "json-template"}}
+
+	tpl := pocTemplateFromResponse(resp, true)
+	if tpl == nil {
+		t.Fatal("expected template")
+	}
+	if tpl.Id != "json-template" {
+		t.Fatalf("expected structured template id, got %q", tpl.Id)
 	}
 }
