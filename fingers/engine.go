@@ -15,8 +15,8 @@ import (
 	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/fingers/common"
 	"github.com/chainreactors/fingers/favicon"
-	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/fingerprinthub"
+	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/resources"
 	"github.com/chainreactors/fingers/xray"
 	"github.com/chainreactors/logs"
@@ -503,6 +503,7 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 	if parsedURL.Port != "" && parsedURL.Port != "80" && parsedURL.Port != "443" {
 		baseURL += ":" + parsedURL.Port
 	}
+	templateBaseURL := activeTemplateBaseURL(baseURL, parsedURL.Path)
 
 	client := ctx.GetClient()
 
@@ -544,6 +545,7 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
+	transport = wrapRedirectResolvingTransport(transport)
 
 	activeCallback := func(frame *common.Framework, vuln *common.Vuln) {
 		if frame != nil {
@@ -556,13 +558,13 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 
 	if fpHub := e.engine.FingerPrintHub(); fpHub != nil {
 		safeHTTPActiveMatch("fingerprinthub", func() {
-			fpHub.HTTPActiveMatch(baseURL, level, transport, activeCallback)
+			fpHub.HTTPActiveMatch(templateBaseURL, level, transport, activeCallback)
 		})
 	}
 
 	if xrayEng := e.engine.Xray(); xrayEng != nil {
 		safeHTTPActiveMatch("xray", func() {
-			xrayEng.HTTPActiveMatch(baseURL, level, transport, activeCallback)
+			xrayEng.HTTPActiveMatch(templateBaseURL, level, transport, activeCallback)
 		})
 	}
 
@@ -880,4 +882,32 @@ func pathJoin(base, append string) string {
 	}
 
 	return base + append
+}
+
+func activeTemplateBaseURL(baseURL, targetPath string) string {
+	if targetPath == "" || targetPath == "/" {
+		return baseURL
+	}
+	return baseURL + strings.TrimRight(targetPath, "/")
+}
+
+type redirectResolvingTransport struct {
+	base http.RoundTripper
+}
+
+func wrapRedirectResolvingTransport(base http.RoundTripper) http.RoundTripper {
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return redirectResolvingTransport{base: base}
+}
+
+func (t redirectResolvingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	client := &http.Client{
+		Transport: t.base,
+	}
+	clone := req.Clone(req.Context())
+	clone.Body = req.Body
+	clone.GetBody = req.GetBody
+	return client.Do(clone)
 }
