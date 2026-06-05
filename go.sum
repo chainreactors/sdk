@@ -125,8 +125,8 @@ github.com/chainreactors/logs v0.0.0-20250312104344-9f30fa69d3c9/go.mod h1:6Mv6W
 github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c h1:6Net2Mgo/qo6ADFBZJWWScKuMfZ0rbzLqSCVDuLKFdc=
 github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c/go.mod h1:VrXmYPbNN5AVoo1sc5aeyPVBYqubMdb3KO/tn5rRZpo=
 github.com/chainreactors/neutron v0.0.0-20260517173800-28516c3539a3/go.mod h1:U8ZyyTVaRvqGY224XAKENQZW4M3pqM9BzMt4phZzAgc=
-github.com/chainreactors/neutron v0.0.0-20260530143533-ea958251e73e h1:dteOg8UstPBxNjNqbz5TIui4nOty1crtdPnC5Hh5WVE=
-github.com/chainreactors/neutron v0.0.0-20260530143533-ea958251e73e/go.mod h1:6+ADabXxJWTHcyHr6Wpdlamy6bBN4Y44sBrCJvd6Igs=
+github.com/chainreactors/neutron v0.0.0-20260605022800-0c41c379805e h1:HuktfFn/xzm1I19n8iJ7cme0eu5/BCsfIoIb+S4XAoo=
+github.com/chainreactors/neutron v0.0.0-20260605022800-0c41c379805e/go.mod h1:6+ADabXxJWTHcyHr6Wpdlamy6bBN4Y44sBrCJvd6Igs=
 github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68 h1:WbG2RrE/a/zDTdXthEqp1Hbxryqrmxvh4ViTAvBsKb8=
 github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68/go.mod h1:Y5HpZLDOUm+hPvWfsxvVemPbe5iX0zDpimgdWRI1S/g=
 github.com/chainreactors/proton v0.0.0-20260521032855-e7e7b12b4506 h1:zFfjzsAeXc7cstWZWaVzUuXZ3OGk3ReVtAyJ5kNAssg=

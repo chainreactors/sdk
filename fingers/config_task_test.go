@@ -36,6 +36,88 @@ func TestConfigSourceSelectionAndFiltering(t *testing.T) {
 	}
 }
 
+func TestMergeExportsSource1OverridesEngineToXray(t *testing.T) {
+	rawTemplate := `id: source1-route-test
+info:
+  name: source1 route test
+  author: tester
+  severity: info
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers:
+      - type: word
+        words:
+          - source1-route-marker
+`
+
+	exports := []cyberhub.FingerprintExport{{
+		Finger: &types.Finger{
+			Name:     "source1 route test",
+			Protocol: "http",
+			Tags:     []string{"neutron", "source1"},
+		},
+		Engine:     "fingerprinthub",
+		RawContent: rawTemplate,
+	}}
+
+	full := (FullFingers{}).MergeExports(exports, false)
+	if got := len(full.TemplateItems("fingerprinthub")); got != 0 {
+		t.Fatalf("fingerprinthub template count = %d, want 0 (source1 overrides to xray)", got)
+	}
+	if got := len(full.TemplateItems("xray")); got != 1 {
+		t.Fatalf("xray template count = %d, want 1", got)
+	}
+}
+
+func TestMergeExportsWithoutSource1StaysFingerprinthub(t *testing.T) {
+	rawTemplate := `id: no-source1-test
+info:
+  name: no source1 test
+  author: tester
+  severity: info
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers:
+      - type: word
+        words:
+          - marker
+`
+
+	exports := []cyberhub.FingerprintExport{{
+		Finger: &types.Finger{
+			Name:     "no source1 test",
+			Protocol: "http",
+			Tags:     []string{"neutron"},
+		},
+		Engine:     "fingerprinthub",
+		RawContent: rawTemplate,
+	}}
+
+	full := (FullFingers{}).MergeExports(exports, false)
+	if got := len(full.TemplateItems("fingerprinthub")); got != 1 {
+		t.Fatalf("fingerprinthub template count = %d, want 1", got)
+	}
+	if got := len(full.TemplateItems("xray")); got != 0 {
+		t.Fatalf("xray template count = %d, want 0 (no source1 tag)", got)
+	}
+}
+
+func TestHasTag(t *testing.T) {
+	if hasTag(&types.Finger{Tags: []string{"xray"}}, "source1") {
+		t.Fatal("xray tag should not match source1")
+	}
+	if !hasTag(&types.Finger{Tags: []string{" source1 "}}, "source1") {
+		t.Fatal("source1 tag with whitespace should match")
+	}
+	if hasTag(nil, "source1") {
+		t.Fatal("nil finger should return false")
+	}
+}
+
 func TestExecuteMatchTaskUsesSDKResult(t *testing.T) {
 	eng := newDetailTestEngine(t, NewConfig(), &types.Finger{
 		Name:     "execute-app",

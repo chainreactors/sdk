@@ -219,10 +219,9 @@ func (e *Engine) compileOptions() *protocols.ExecuterOptions {
 
 func (e *Engine) compileTemplates(allTemplates []*types.Template) []*types.Template {
 	compiledTemplates := make([]*types.Template, 0, len(allTemplates))
-	options := e.compileOptions()
 
 	for _, t := range allTemplates {
-		if err := t.Compile(options); err != nil {
+		if err := t.Compile(e.compileOptions()); err != nil {
 			continue
 		}
 		compiledTemplates = append(compiledTemplates, t)

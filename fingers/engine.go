@@ -15,8 +15,8 @@ import (
 	"github.com/chainreactors/fingers/alias"
 	"github.com/chainreactors/fingers/common"
 	"github.com/chainreactors/fingers/favicon"
-	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/fingerprinthub"
+	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/resources"
 	"github.com/chainreactors/fingers/xray"
 	"github.com/chainreactors/logs"
@@ -503,7 +503,6 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 	if parsedURL.Port != "" && parsedURL.Port != "80" && parsedURL.Port != "443" {
 		baseURL += ":" + parsedURL.Port
 	}
-
 	client := ctx.GetClient()
 
 	// 1. 原生 fingers 引擎
@@ -544,7 +543,6 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
-
 	activeCallback := func(frame *common.Framework, vuln *common.Vuln) {
 		if frame != nil {
 			result.Results = append(result.Results, &types.ServiceResult{
@@ -881,3 +879,4 @@ func pathJoin(base, append string) string {
 
 	return base + append
 }
+

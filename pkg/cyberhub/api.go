@@ -24,6 +24,8 @@ type fingerprintListResponse struct {
 
 type pocResponse struct {
 	*types.Template `json:",inline" yaml:",inline"`
+	RawContent      string `json:"raw_content,omitempty" yaml:"raw_content,omitempty"`
+	RawContentDraft string `json:"raw_content_draft,omitempty" yaml:"raw_content_draft,omitempty"`
 }
 
 type pocListResponse struct {

@@ -2,7 +2,6 @@ package cyberhub
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -89,34 +88,43 @@ func parseFinger(raw string) *types.Finger {
 	return nil
 }
 
+func parsePOCTemplate(raw string) (tpl *types.Template) {
+	defer func() {
+		if recover() != nil {
+			tpl = nil
+		}
+	}()
+
+	var template types.Template
+	if err := yaml.Unmarshal([]byte(raw), &template); err == nil && (template.Id != "" || template.Info.Name != "") {
+		return &template
+	}
+	return nil
+}
+
+func pocTemplateFromResponse(resp pocResponse, useDraft bool) *types.Template {
+	if useDraft && resp.RawContentDraft != "" {
+		if tpl := parsePOCTemplate(resp.RawContentDraft); tpl != nil {
+			return tpl
+		}
+	}
+	if resp.RawContent != "" {
+		if tpl := parsePOCTemplate(resp.RawContent); tpl != nil {
+			return tpl
+		}
+	}
+	return resp.Template
+}
+
 // ExportFingers 导出完整指纹记录，包含 RawContent 与 RawContentDraft。
-// 自动修正 Engine 字段：CyberHub 可能将 xray 数据标记为 fingerprinthub，
-// 通过 Finger.Tags 中的 neutron/xray/ai_converted 标签识别并修正为 xray。
+// Engine 字段保持 CyberHub 原始值；source1 tag 的额外 xray 路由由
+// fingers.FullFingers 在合并时处理，避免把 fingerprinthub 被动能力替换掉。
 func (p *Provider) ExportFingers(ctx context.Context) ([]FingerprintExport, error) {
 	records, err := p.client().exportFingers(ctx, p.filter)
 	if err != nil {
 		return nil, err
 	}
-	for i := range records {
-		records[i].Engine = resolveEngine(records[i].Engine, records[i].Finger)
-	}
 	return records, nil
-}
-
-// resolveEngine 根据 tags 修正 CyberHub 返回的 engine 字段。
-// 只要 Finger.Tags 包含 "xray" 即修正为 xray 引擎。
-func resolveEngine(engine string, finger *types.Finger) string {
-	if engine == "xray" || engine == "fingers" || engine == "" {
-		return engine
-	}
-	if finger != nil {
-		for _, tag := range finger.Tags {
-			if strings.EqualFold(tag, "xray") {
-				return "xray"
-			}
-		}
-	}
-	return engine
 }
 
 // POCs 导出 POC 模板数据
@@ -125,10 +133,11 @@ func (p *Provider) POCs(ctx context.Context) ([]*types.Template, error) {
 	if err != nil {
 		return nil, err
 	}
+	useDraft := p.filter != nil && p.filter.Draft
 	tpls := make([]*types.Template, 0, len(responses))
 	for _, resp := range responses {
-		if resp.Template != nil {
-			tpls = append(tpls, resp.Template)
+		if tpl := pocTemplateFromResponse(resp, useDraft); tpl != nil {
+			tpls = append(tpls, tpl)
 		}
 	}
 	return tpls, nil

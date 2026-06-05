@@ -6,7 +6,7 @@ require (
 	github.com/chainreactors/fingers v1.2.1-0.20260530143622-9b9b6fe7ccf7
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529071026-65d22e5a6ba3
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/neutron v0.0.0-20260530143533-ea958251e73e
+	github.com/chainreactors/neutron v0.0.0-20260605022800-0c41c379805e
 	github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68
 	github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0
 	github.com/chainreactors/spray v1.2.6-0.20260523083907-546e8ab7756a
