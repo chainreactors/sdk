@@ -12,6 +12,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const xrayRouteTag = "source1"
+
 // NewConfig 创建默认配置
 func NewConfig() *Config {
 	return &Config{}

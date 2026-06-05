@@ -503,8 +503,6 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 	if parsedURL.Port != "" && parsedURL.Port != "80" && parsedURL.Port != "443" {
 		baseURL += ":" + parsedURL.Port
 	}
-	templateBaseURL := activeTemplateBaseURL(baseURL, parsedURL.Path)
-
 	client := ctx.GetClient()
 
 	// 1. 原生 fingers 引擎
@@ -545,8 +543,6 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
-	transport = wrapRedirectResolvingTransport(transport)
-
 	activeCallback := func(frame *common.Framework, vuln *common.Vuln) {
 		if frame != nil {
 			result.Results = append(result.Results, &types.ServiceResult{
@@ -558,13 +554,13 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 
 	if fpHub := e.engine.FingerPrintHub(); fpHub != nil {
 		safeHTTPActiveMatch("fingerprinthub", func() {
-			fpHub.HTTPActiveMatch(templateBaseURL, level, transport, activeCallback)
+			fpHub.HTTPActiveMatch(baseURL, level, transport, activeCallback)
 		})
 	}
 
 	if xrayEng := e.engine.Xray(); xrayEng != nil {
 		safeHTTPActiveMatch("xray", func() {
-			xrayEng.HTTPActiveMatch(templateBaseURL, level, transport, activeCallback)
+			xrayEng.HTTPActiveMatch(baseURL, level, transport, activeCallback)
 		})
 	}
 
@@ -884,30 +880,3 @@ func pathJoin(base, append string) string {
 	return base + append
 }
 
-func activeTemplateBaseURL(baseURL, targetPath string) string {
-	if targetPath == "" || targetPath == "/" {
-		return baseURL
-	}
-	return baseURL + strings.TrimRight(targetPath, "/")
-}
-
-type redirectResolvingTransport struct {
-	base http.RoundTripper
-}
-
-func wrapRedirectResolvingTransport(base http.RoundTripper) http.RoundTripper {
-	if base == nil {
-		base = http.DefaultTransport
-	}
-	return redirectResolvingTransport{base: base}
-}
-
-func (t redirectResolvingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	client := &http.Client{
-		Transport: t.base,
-	}
-	clone := req.Clone(req.Context())
-	clone.Body = req.Body
-	clone.GetBody = req.GetBody
-	return client.Do(clone)
-}
