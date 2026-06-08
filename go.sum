@@ -110,8 +110,8 @@ github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XL
 github.com/cespare/xxhash/v2 v2.1.2/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 h1:cU3sGEODXZsUZGBXfnz0nyxF6+37vA+ZGDx6L/FKN4o=
 github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0/go.mod h1:NSxGNMRWryAyrDzZpVwmujI22wbGw6c52bQOd5zEvyU=
-github.com/chainreactors/fingers v1.2.1-0.20260608084741-385e7d586d6f h1:YRhBdXcJN6Nt6wIrLG06eUUcj/rycBEmQXqyfQvlAV8=
-github.com/chainreactors/fingers v1.2.1-0.20260608084741-385e7d586d6f/go.mod h1:HL+9nwb5HNXJMboiQ7Kwy00ZSTXYTAuWw9IrYIoARH8=
+github.com/chainreactors/fingers v1.2.1 h1:fIBejnL7m1AMgn/8B/jL/yGUDnm/l2l8iaGIf7GQvrE=
+github.com/chainreactors/fingers v1.2.1/go.mod h1:HL+9nwb5HNXJMboiQ7Kwy00ZSTXYTAuWw9IrYIoARH8=
 github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c h1:JKTBb/O2XPZh9BsdkoTkR3KI9ZlLqsR2eUToE1qYm5Q=
 github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c/go.mod h1:PWgWQ3eqfz3474PscYtDAVJDn+ksi2ijL2wJ6Rz0qYY=
 github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c h1:6Net2Mgo/qo6ADFBZJWWScKuMfZ0rbzLqSCVDuLKFdc=
