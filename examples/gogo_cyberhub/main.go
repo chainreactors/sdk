@@ -27,7 +27,7 @@ func main() {
 	// 一行创建 Provider，gogo 内部自动加载 fingers + neutron
 	hub := cyberhub.NewProvider(hubURL, apiKey)
 
-	engine := gogo.NewEngine(gogo.NewConfig().WithProvider(hub))
+	engine, err := gogo.NewEngine(gogo.NewConfig().WithProvider(hub))
 	ctx := gogo.NewContext().SetThreads(500).SetVersionLevel(1)
 
 	results, err := engine.Scan(ctx, target, ports)

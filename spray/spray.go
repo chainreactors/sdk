@@ -32,7 +32,7 @@ type SprayEngine struct {
 }
 
 // NewSprayEngine 创建 Spray 引擎
-func NewSprayEngine(config *Config) *SprayEngine {
+func NewSprayEngine(config *Config) (*SprayEngine, error) {
 	if config == nil {
 		config = NewConfig()
 	}
@@ -48,11 +48,14 @@ func NewSprayEngine(config *Config) *SprayEngine {
 	if config.Capacity > 0 {
 		e.capacity = types.NewCapacity(config.Capacity)
 	}
-	return e
+	if err := e.Init(); err != nil {
+		return nil, err
+	}
+	return e, nil
 }
 
 // NewEngine 创建 Spray 引擎
-func NewEngine(config *Config) *SprayEngine {
+func NewEngine(config *Config) (*SprayEngine, error) {
 	return NewSprayEngine(config)
 }
 

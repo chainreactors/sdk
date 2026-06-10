@@ -186,8 +186,8 @@ func (c *Client) initGogo() (*gogo.GogoEngine, error) {
 		cfg.Proxy = c.opts.proxy
 	}
 
-	eng := gogo.NewGogoEngine(cfg)
-	if err := eng.Init(); err != nil {
+	eng, err := gogo.NewGogoEngine(cfg)
+	if err != nil {
 		return nil, fmt.Errorf("init gogo engine: %w", err)
 	}
 	return eng, nil
@@ -216,8 +216,8 @@ func (c *Client) initSpray() (*spray.SprayEngine, error) {
 		cfg.Proxy = c.opts.proxy
 	}
 
-	eng := spray.NewSprayEngine(cfg)
-	if err := eng.Init(); err != nil {
+	eng, err := spray.NewSprayEngine(cfg)
+	if err != nil {
 		return nil, fmt.Errorf("init spray engine: %w", err)
 	}
 	return eng, nil
@@ -235,8 +235,8 @@ func (c *Client) initZombie() (*zombie.Engine, error) {
 		cfg.Proxy = c.opts.proxy
 	}
 
-	eng := zombie.NewEngine(cfg)
-	if err := eng.Init(); err != nil {
+	eng, err := zombie.NewEngine(cfg)
+	if err != nil {
 		return nil, fmt.Errorf("init zombie engine: %w", err)
 	}
 	return eng, nil
@@ -251,8 +251,8 @@ func (c *Client) initProton() (*proton.Engine, error) {
 		cfg.WithResourceProvider(c.opts.resourceProvider)
 	}
 
-	eng := proton.NewEngine(cfg)
-	if err := eng.Init(); err != nil {
+	eng, err := proton.NewEngine(cfg)
+	if err != nil {
 		return nil, fmt.Errorf("init proton engine: %w", err)
 	}
 	return eng, nil

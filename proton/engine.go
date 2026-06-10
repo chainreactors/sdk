@@ -18,7 +18,7 @@ type Engine struct {
 	inited   bool
 }
 
-func NewEngine(config *Config) *Engine {
+func NewEngine(config *Config) (*Engine, error) {
 	if config == nil {
 		config = NewConfig()
 	}
@@ -26,13 +26,13 @@ func NewEngine(config *Config) *Engine {
 	if config.Capacity > 0 {
 		e.capacity = types.NewCapacity(config.Capacity)
 	}
-	return e
+	if err := e.init(); err != nil {
+		return nil, err
+	}
+	return e, nil
 }
 
-func (e *Engine) Init() error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
+func (e *Engine) init() error {
 	if e.inited {
 		return nil
 	}
@@ -70,7 +70,7 @@ func (e *Engine) Scanner() *file.Scanner {
 
 func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Result, error) {
 	if !e.inited {
-		if err := e.Init(); err != nil {
+		if err := e.init(); err != nil {
 			return nil, err
 		}
 	}
@@ -117,7 +117,7 @@ func (e *Engine) ScanStream(ctx *Context, target string) (<-chan *Finding, error
 
 func (e *Engine) ScanData(data []byte, filePath string) []Finding {
 	if !e.inited {
-		if err := e.Init(); err != nil {
+		if err := e.init(); err != nil {
 			return nil
 		}
 	}

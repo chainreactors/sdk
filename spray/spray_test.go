@@ -18,25 +18,25 @@ import (
 // TestNewSprayEngine 测试引擎创建
 func TestNewEngine(t *testing.T) {
 	// 测试使用默认配置
-	engine1 := NewEngine(nil)
+	engine1, _ := NewEngine(nil)
 	if engine1 == nil {
 		t.Fatal("NewEngine(nil) should not return nil")
 	}
-	if engine1.inited {
-		t.Error("Engine should not be initialized by default")
+	if !engine1.inited {
+		t.Error("Engine should be initialized after NewEngine")
 	}
 
 	// 测试使用自定义配置
 	opt := NewDefaultOption()
 	opt.Threads = 200
-	engine2 := NewEngine(NewConfig())
+	engine2, _ := NewEngine(NewConfig())
 	_ = opt
 	if engine2 == nil {
 		t.Fatal("NewEngine(NewConfig()) should not return nil")
 	}
 
 	// 测试兼容性 API
-	engine3 := NewEngine(nil)
+	engine3, _ := NewEngine(nil)
 	if engine3 == nil {
 		t.Fatal("NewEngine(nil) should not return nil")
 	}
@@ -44,14 +44,14 @@ func TestNewEngine(t *testing.T) {
 
 // TestSprayEngineName 测试引擎名称
 func TestSprayEngineName(t *testing.T) {
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 	if engine.Name() != "spray" {
 		t.Errorf("Expected engine name 'spray', got '%s'", engine.Name())
 	}
 }
 
 func TestExecuteInitializesWithEmptyCustomFingers(t *testing.T) {
-	engine := NewEngine(NewConfig().WithFingersEngine(&sdkfingers.Engine{}))
+	engine, _ := NewEngine(NewConfig().WithFingersEngine(&sdkfingers.Engine{}))
 	ctx := NewContext()
 	timeoutCtx, cancel := context.WithTimeout(ctx.Context(), time.Second)
 	defer cancel()
@@ -66,7 +66,7 @@ func TestExecuteInitializesWithEmptyCustomFingers(t *testing.T) {
 }
 
 func TestInitConcurrent(t *testing.T) {
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 	var wg sync.WaitGroup
 	errs := make(chan error, 8)
 	for i := 0; i < 8; i++ {
@@ -101,7 +101,7 @@ func TestSprayEngineConcurrentCheckAndBrute(t *testing.T) {
 	}))
 	defer server.Close()
 
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 	if err := engine.Init(); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
@@ -171,7 +171,7 @@ func TestSprayEngineConcurrentCancelledContexts(t *testing.T) {
 	}))
 	defer server.Close()
 
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 	const workers = 8
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
@@ -275,7 +275,7 @@ func TestSprayEngineBruteBatchUsesRunnerTaskPool(t *testing.T) {
 		baseURLs = append(baseURLs, server.URL)
 	}
 
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 	ctx := NewContext().
 		SetThreads(6).
 		SetTimeout(2).
@@ -315,7 +315,7 @@ func TestSprayEngineConcurrentExecuteWithSharedContext(t *testing.T) {
 	}))
 	defer server.Close()
 
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 	sharedCtx := NewContext().SetThreads(4).SetTimeout(1)
 
 	const workers = 8
@@ -426,7 +426,7 @@ func TestConfig(t *testing.T) {
 }
 
 func TestConfigWithCapacity(t *testing.T) {
-	engine := NewEngine(NewConfig().WithCapacity(50))
+	engine, _ := NewEngine(NewConfig().WithCapacity(50))
 	if engine.Capacity() == nil {
 		t.Fatal("engine should have a capacity after WithCapacity()")
 	}
@@ -436,7 +436,7 @@ func TestConfigWithCapacity(t *testing.T) {
 }
 
 func TestSetCapacityPostCreation(t *testing.T) {
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 	if engine.Capacity() != nil {
 		t.Fatal("engine should have no capacity by default")
 	}
@@ -468,7 +468,7 @@ func TestCapacityThrottlesConcurrentChecks(t *testing.T) {
 	defer server.Close()
 
 	// Capacity=4, threads=4 per check → only 1 check at a time
-	engine := NewEngine(NewConfig().WithCapacity(4))
+	engine, _ := NewEngine(NewConfig().WithCapacity(4))
 	if err := engine.Init(); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
@@ -507,7 +507,7 @@ func TestCapacityThrottlesConcurrentChecks(t *testing.T) {
 }
 
 func TestCapacityContextCancellation(t *testing.T) {
-	engine := NewEngine(NewConfig().WithCapacity(4))
+	engine, _ := NewEngine(NewConfig().WithCapacity(4))
 	if err := engine.Init(); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
@@ -608,7 +608,7 @@ func TestResult(t *testing.T) {
 }
 
 func TestSpray(t *testing.T) {
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 
 	// 2. 初始化（加载指纹库等）
 	if err := engine.Init(); err != nil {

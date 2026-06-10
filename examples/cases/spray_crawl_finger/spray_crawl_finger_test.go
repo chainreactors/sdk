@@ -57,8 +57,8 @@ func TestSprayCrawlAndDeepFinger(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sprayEng := spray.NewEngine(spray.NewConfig().WithFingersEngine(fingersEng).WithMatchDetail())
-	if err := sprayEng.Init(); err != nil {
+	sprayEng, err := spray.NewEngine(spray.NewConfig().WithFingersEngine(fingersEng).WithMatchDetail())
+	if err != nil {
 		t.Fatal(err)
 	}
 

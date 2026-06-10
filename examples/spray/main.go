@@ -89,11 +89,7 @@ func main() {
 	}
 
 	// 2. 创建 Spray 引擎
-	sprayEngine := spray.NewEngine(nil)
-	if err := sprayEngine.Init(); err != nil {
-		fmt.Printf("Error initializing spray: %v\n", err)
-		os.Exit(1)
-	}
+	sprayEngine, err := spray.NewEngine(nil)
 
 	// 3. 配置扫描参数
 	sprayCtx := spray.NewContext().

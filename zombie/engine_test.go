@@ -10,10 +10,7 @@ import (
 )
 
 func TestEngineInitAndValidate(t *testing.T) {
-	engine := NewEngine(NewConfig())
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init zombie engine: %v", err)
-	}
+	engine, _ := NewEngine(NewConfig())
 	if engine.Name() != "zombie" {
 		t.Fatalf("unexpected engine name: %s", engine.Name())
 	}
@@ -25,7 +22,7 @@ func TestEngineInitAndValidate(t *testing.T) {
 }
 
 func TestConfigWithCapacity(t *testing.T) {
-	engine := NewEngine(NewConfig().WithCapacity(200))
+	engine, _ := NewEngine(NewConfig().WithCapacity(200))
 	if engine.Capacity() == nil {
 		t.Fatal("engine should have a capacity after WithCapacity()")
 	}
@@ -35,7 +32,7 @@ func TestConfigWithCapacity(t *testing.T) {
 }
 
 func TestSetCapacityPostCreation(t *testing.T) {
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 	if engine.Capacity() != nil {
 		t.Fatal("engine should have no capacity by default")
 	}
@@ -49,10 +46,7 @@ func TestSetCapacityPostCreation(t *testing.T) {
 }
 
 func TestCapacityContextCancellation(t *testing.T) {
-	engine := NewEngine(NewConfig().WithCapacity(10))
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init zombie engine: %v", err)
-	}
+	engine, _ := NewEngine(NewConfig().WithCapacity(10))
 
 	if err := engine.Capacity().Acquire(context.Background(), 10); err != nil {
 		t.Fatal(err)
@@ -71,14 +65,14 @@ func TestCapacityContextCancellation(t *testing.T) {
 }
 
 func TestNoCapacityByDefault(t *testing.T) {
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 	if engine.Capacity() != nil {
 		t.Fatal("engine should have no capacity by default")
 	}
 }
 
 func TestExecuteAutoInit(t *testing.T) {
-	engine := NewEngine(nil)
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -95,10 +89,7 @@ func TestExecuteAutoInit(t *testing.T) {
 }
 
 func TestExecuteNilContext(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	task := NewBruteTask([]Target{{IP: "127.0.0.1", Port: "1", Service: "redis"}})
 	task.Passwords = []string{"x"}
@@ -112,10 +103,7 @@ func TestExecuteNilContext(t *testing.T) {
 }
 
 func TestExecuteUnsupportedTaskType(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	_, err := engine.Execute(NewContext(), &dummyTask{})
 	if err == nil {
@@ -129,10 +117,7 @@ func (d *dummyTask) Type() string    { return "dummy" }
 func (d *dummyTask) Validate() error { return nil }
 
 func TestExecuteUnsupportedContextType(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	task := NewBruteTask([]Target{{IP: "127.0.0.1", Service: "ssh"}})
 	_, err := engine.Execute(&dummyContext{}, task)
@@ -146,10 +131,7 @@ type dummyContext struct{}
 func (d *dummyContext) Context() context.Context { return context.Background() }
 
 func TestBruteWithCustomUsersPasswords(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -165,10 +147,7 @@ func TestBruteWithCustomUsersPasswords(t *testing.T) {
 }
 
 func TestBruteStream(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -186,10 +165,7 @@ func TestBruteStream(t *testing.T) {
 }
 
 func TestPitchfork(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -206,10 +182,7 @@ func TestPitchfork(t *testing.T) {
 }
 
 func TestPitchforkStream(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -229,10 +202,7 @@ func TestPitchforkStream(t *testing.T) {
 }
 
 func TestSniper(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -250,10 +220,7 @@ func TestSniper(t *testing.T) {
 }
 
 func TestSniperStream(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -274,10 +241,7 @@ func TestSniperStream(t *testing.T) {
 }
 
 func TestStatsCallback(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

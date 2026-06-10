@@ -35,7 +35,7 @@ type GogoEngine struct {
 }
 
 // NewGogoEngine 创建 GoGo 引擎
-func NewGogoEngine(config *Config) *GogoEngine {
+func NewGogoEngine(config *Config) (*GogoEngine, error) {
 	if config == nil {
 		config = NewConfig()
 	}
@@ -51,7 +51,10 @@ func NewGogoEngine(config *Config) *GogoEngine {
 	if config.Capacity > 0 {
 		e.capacity = types.NewCapacity(config.Capacity)
 	}
-	return e
+	if err := e.Init(); err != nil {
+		return nil, err
+	}
+	return e, nil
 }
 
 // buildTemplateMap 构建 template map（按 finger、id、tag 分类）
@@ -82,7 +85,7 @@ func buildTemplateMap(templates []*types.Template) map[string][]*types.Template 
 }
 
 // NewEngine 创建 GoGo 引擎
-func NewEngine(config *Config) *GogoEngine {
+func NewEngine(config *Config) (*GogoEngine, error) {
 	return NewGogoEngine(config)
 }
 

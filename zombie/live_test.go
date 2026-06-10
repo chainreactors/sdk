@@ -9,10 +9,7 @@ import (
 )
 
 func TestLiveBruteSSH(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -34,10 +31,7 @@ func TestLiveBruteSSH(t *testing.T) {
 }
 
 func TestLiveSniperSSH(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -57,10 +51,7 @@ func TestLiveSniperSSH(t *testing.T) {
 }
 
 func TestLivePitchforkSSH(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -82,10 +73,7 @@ func TestLivePitchforkSSH(t *testing.T) {
 }
 
 func TestLiveBruteWithStats(t *testing.T) {
-	engine := NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		t.Fatalf("init: %v", err)
-	}
+	engine, _ := NewEngine(nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

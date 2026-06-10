@@ -192,8 +192,8 @@ func writeTempTemplates(t *testing.T, templates map[string]string) string {
 
 func mustEngine(t *testing.T, cfg *Config) *Engine {
 	t.Helper()
-	eng := NewEngine(cfg)
-	if err := eng.Init(); err != nil {
+	eng, err := NewEngine(cfg)
+	if err != nil {
 		t.Fatalf("engine init: %v", err)
 	}
 	return eng
@@ -701,7 +701,7 @@ func TestEngine_ConfigFilter_IDs(t *testing.T) {
 // ========================================
 
 func TestEngine_Name(t *testing.T) {
-	eng := NewEngine(NewConfig())
+	eng, _ := NewEngine(NewConfig())
 	if eng.Name() != "proton" {
 		t.Fatalf("unexpected name: %s", eng.Name())
 	}

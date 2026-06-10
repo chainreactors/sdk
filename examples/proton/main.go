@@ -37,8 +37,8 @@ func main() {
 		config.WithTags(strings.Split(*tags, ",")...)
 	}
 
-	engine := proton.NewEngine(config)
-	if err := engine.Init(); err != nil {
+	engine, err := proton.NewEngine(config)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing engine: %v\n", err)
 		os.Exit(1)
 	}

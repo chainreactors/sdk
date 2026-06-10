@@ -39,9 +39,9 @@ func main() {
 
 	// 创建 Spray 引擎
 	fmt.Println("🔧 Initializing Spray engine...")
-	engine := spray.NewEngine(nil)
-	if err := engine.Init(); err != nil {
-		fmt.Printf("❌ Error initializing engine: %v\n", err)
+	engine, err := spray.NewEngine(nil)
+	if err != nil {
+		fmt.Printf("Error initializing engine: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("✓ Engine initialized\n")

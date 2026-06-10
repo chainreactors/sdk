@@ -91,12 +91,8 @@ func main() {
 	if fEngine != nil {
 		gogoConfig.WithFingersEngine(fEngine)
 	}
-	gogoEngine := gogo.NewEngine(gogoConfig)
+	gogoEngine, err := gogo.NewEngine(gogoConfig)
 
-	if err := gogoEngine.Init(); err != nil {
-		fmt.Printf("Error initializing gogo: %v\n", err)
-		os.Exit(1)
-	}
 
 	if !*jsonOut {
 		fmt.Println("✅ GoGo engine initialized")

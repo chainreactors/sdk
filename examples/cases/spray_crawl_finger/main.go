@@ -21,8 +21,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	sprayEng := spray.NewEngine(spray.NewConfig().WithMatchDetail())
-	if err := sprayEng.Init(); err != nil {
+	sprayEng, err := spray.NewEngine(spray.NewConfig().WithMatchDetail())
+	if err != nil {
 		fmt.Printf("spray engine init failed: %v\n", err)
 		os.Exit(1)
 	}
