@@ -112,8 +112,7 @@ func (e *Engine) Scan(ctx *Context, target string) ([]*Finding, error) {
 }
 
 func (e *Engine) ScanStream(ctx *Context, target string) (<-chan *Finding, error) {
-	task := NewScanTask(target)
-	return e.typedStream(ctx, task)
+	return e.typedStream(ctx, NewScanTask(target))
 }
 
 func (e *Engine) ScanData(data []byte, filePath string) []Finding {
@@ -156,7 +155,7 @@ func (e *Engine) executeScan(ctx *Context, task *ScanTask) (<-chan types.Result,
 		e.scanner.Scan(task.Target, func(f Finding) {
 			findingCount++
 			select {
-			case resultCh <- &ScanResult{success: true, data: &f}:
+			case resultCh <- types.NewResult(true, nil, &f):
 			case <-ctx.Context().Done():
 				return
 			}
@@ -198,7 +197,7 @@ func (e *Engine) executeScanData(ctx *Context, task *ScanDataTask) (<-chan types
 			for i := range findings {
 				findingCount++
 				select {
-				case resultCh <- &ScanResult{success: true, data: &findings[i]}:
+				case resultCh <- types.NewResult(true, nil, &findings[i]):
 				case <-ctx.Context().Done():
 					return
 				}

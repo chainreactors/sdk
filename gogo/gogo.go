@@ -61,29 +61,24 @@ func buildTemplateMap(templates []*types.Template) map[string][]*types.Template 
 	for _, template := range templates {
 		// 按 fingers 归类
 		for _, finger := range template.Fingers {
-			key := toLowerKey(finger)
+			key := finger
 			templateMap[key] = append(templateMap[key], template)
 		}
 
 		// 按 id 归类
 		if template.Id != "" {
-			key := toLowerKey(template.Id)
+			key := template.Id
 			templateMap[key] = append(templateMap[key], template)
 		}
 
 		// 按 tags 归类
 		for _, tag := range template.GetTags() {
-			key := toLowerKey(tag)
+			key := tag
 			templateMap[key] = append(templateMap[key], template)
 		}
 	}
 
 	return templateMap
-}
-
-func toLowerKey(s string) string {
-	// 简单的 toLowerCase 实现
-	return s // gogo 内部会处理大小写
 }
 
 // NewEngine 创建 GoGo 引擎
@@ -145,12 +140,6 @@ func (e *GogoEngine) InstallResourceProvider() {
 		return
 	}
 	e.installResourceProvider()
-}
-
-func (e *GogoEngine) applyInjectedEngines() error {
-	e.applyInjectedFingers()
-	e.applyInjectedNeutron()
-	return nil
 }
 
 func (e *GogoEngine) applyInjectedFingers() bool {

@@ -104,17 +104,3 @@ func (t *ScanDataTask) Validate() error {
 	return nil
 }
 
-// ========================================
-// Result
-// ========================================
-
-type ScanResult struct {
-	success bool
-	err     error
-	data    *Finding
-}
-
-func (r *ScanResult) Success() bool    { return r.success }
-func (r *ScanResult) Error() error     { return r.err }
-func (r *ScanResult) Data() interface{} { return r.data }
-func (r *ScanResult) Finding() *Finding { return r.data }

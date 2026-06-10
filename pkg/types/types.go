@@ -15,8 +15,6 @@ import (
 	templateNetwork "github.com/chainreactors/neutron/protocols/network"
 	"github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/parsers"
-	protonFile "github.com/chainreactors/proton/proton/file"
-	protonTemplate "github.com/chainreactors/proton/template"
 	zombiecore "github.com/chainreactors/zombie/core"
 )
 
@@ -39,10 +37,6 @@ type (
 
 	Context interface {
 		Context() context.Context
-	}
-
-	Config interface {
-		Validate() error
 	}
 
 	Task interface {
@@ -237,16 +231,3 @@ var (
 	ZombieModeSniper    = zombiecore.ModSniper
 )
 
-// ====================
-// Proton
-// ====================
-
-type (
-	ProtonTemplate  = protonTemplate.Template
-	ProtonFinding   = protonFile.Finding
-	ProtonMatchEvent = protonFile.MatchEvent
-	ProtonScanStats = protonFile.ScanStats
-	ProtonRule      = protonFile.Rule
-	ProtonRequest   = protonFile.Request
-	ProtonScanner   = protonFile.Scanner
-)

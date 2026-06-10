@@ -22,32 +22,22 @@ func (l *lazy[T]) get() (T, error) {
 	return v, nil
 }
 
-func (l *lazy[T]) set(v T) {
-	l.val = v
-	l.loaded = true
-}
-
 func (l *lazy[T]) isLoaded() bool {
 	return l.loaded
-}
-
-func (l *lazy[T]) reset() {
-	var zero T
-	l.val = zero
-	l.loaded = false
 }
 
 func (l *lazy[T]) close() error {
 	if !l.loaded {
 		return nil
 	}
+	var err error
 	if any(l.val) != nil {
 		if c, ok := any(l.val).(io.Closer); ok {
-			err := c.Close()
-			l.reset()
-			return err
+			err = c.Close()
 		}
 	}
-	l.reset()
-	return nil
+	var zero T
+	l.val = zero
+	l.loaded = false
+	return err
 }
