@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/chainreactors/neutron/protocols"
-	"github.com/chainreactors/proton/proton/file"
 	"github.com/chainreactors/proton/template"
 	"gopkg.in/yaml.v3"
 )
@@ -15,7 +14,7 @@ import (
 type Config struct {
 	TemplatePaths    []string           // paths to YAML template files or directories
 	TemplateData     [][]byte           // raw YAML data (each entry is a YAML array of templates)
-	Rules            []file.Rule        // pre-compiled rules (skip template parsing)
+	Rules            []Rule        // pre-compiled rules (skip template parsing)
 	ResourceProvider func(string) []byte // loader for embedded template data
 	Categories       []string           // categories to load via ResourceProvider (e.g. "keys", "spray")
 
@@ -48,7 +47,7 @@ func (c *Config) WithTemplateData(data ...[]byte) *Config {
 	return c
 }
 
-func (c *Config) WithRules(rules ...file.Rule) *Config {
+func (c *Config) WithRules(rules ...Rule) *Config {
 	c.Rules = append(c.Rules, rules...)
 	return c
 }
@@ -93,7 +92,7 @@ func (c *Config) WithExcludeIDs(ids ...string) *Config {
 	return c
 }
 
-func (c *Config) Load() ([]file.Rule, error) {
+func (c *Config) Load() ([]Rule, error) {
 	execOpts := &protocols.ExecuterOptions{
 		Options: &protocols.Options{TextOnly: c.TextOnly},
 	}
@@ -133,9 +132,9 @@ func (c *Config) Load() ([]file.Rule, error) {
 
 	tmpls = filterTemplates(tmpls, c)
 
-	var rules []file.Rule
+	var rules []Rule
 	for _, tmpl := range tmpls {
-		rules = append(rules, file.Rule{
+		rules = append(rules, Rule{
 			ID:       tmpl.Id,
 			Name:     tmpl.Info.Name,
 			Severity: tmpl.Info.Severity,

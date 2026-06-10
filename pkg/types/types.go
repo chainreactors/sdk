@@ -15,6 +15,7 @@ import (
 	templateNetwork "github.com/chainreactors/neutron/protocols/network"
 	"github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/parsers"
+	protonFile "github.com/chainreactors/proton/proton/file"
 	zombiecore "github.com/chainreactors/zombie/core"
 )
 
@@ -229,5 +230,16 @@ var (
 	ZombieModeBomb      = zombiecore.ModBomb
 	ZombieModePitchFork = zombiecore.ModPitchFork
 	ZombieModeSniper    = zombiecore.ModSniper
+)
+
+// ====================
+// Proton
+// ====================
+
+type (
+	ProtonFinding    = protonFile.Finding
+	ProtonMatchEvent = protonFile.MatchEvent
+	ProtonScanStats  = protonFile.ScanStats
+	ProtonRule       = protonFile.Rule
 )
 

@@ -4,19 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/chainreactors/proton/proton/file"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
 // ========================================
-// Type aliases
+// Type aliases — 统一引用 types 包
 // ========================================
 
 type (
-	Finding    = file.Finding
-	MatchEvent = file.MatchEvent
-	ScanStats  = file.ScanStats
-	Rule       = file.Rule
+	Finding    = types.ProtonFinding
+	MatchEvent = types.ProtonMatchEvent
+	ScanStats  = types.ProtonScanStats
+	Rule       = types.ProtonRule
 )
 
 // ========================================
@@ -103,4 +102,3 @@ func (t *ScanDataTask) Validate() error {
 	}
 	return nil
 }
-
