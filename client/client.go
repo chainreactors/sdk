@@ -91,8 +91,8 @@ type Client struct {
 
 	fingers lazy[*fingers.Engine]
 	neutron lazy[*neutron.Engine]
-	gogo    lazy[*gogo.GogoEngine]
-	spray   lazy[*spray.SprayEngine]
+	gogo    lazy[*gogo.Engine]
+	spray   lazy[*spray.Engine]
 	zombie  lazy[*zombie.Engine]
 	proton  lazy[*proton.Engine]
 	index   lazy[*association.Index]
@@ -156,7 +156,7 @@ func (c *Client) initNeutron() (*neutron.Engine, error) {
 	return eng, nil
 }
 
-func (c *Client) initGogo() (*gogo.GogoEngine, error) {
+func (c *Client) initGogo() (*gogo.Engine, error) {
 	fingersEng, err := c.fingers.get()
 	if err != nil {
 		return nil, fmt.Errorf("gogo requires fingers: %w", err)
@@ -186,14 +186,14 @@ func (c *Client) initGogo() (*gogo.GogoEngine, error) {
 		cfg.Proxy = c.opts.proxy
 	}
 
-	eng, err := gogo.NewGogoEngine(cfg)
+	eng, err := gogo.NewEngine(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("init gogo engine: %w", err)
 	}
 	return eng, nil
 }
 
-func (c *Client) initSpray() (*spray.SprayEngine, error) {
+func (c *Client) initSpray() (*spray.Engine, error) {
 	fingersEng, err := c.fingers.get()
 	if err != nil {
 		return nil, fmt.Errorf("spray requires fingers: %w", err)
@@ -216,7 +216,7 @@ func (c *Client) initSpray() (*spray.SprayEngine, error) {
 		cfg.Proxy = c.opts.proxy
 	}
 
-	eng, err := spray.NewSprayEngine(cfg)
+	eng, err := spray.NewEngine(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("init spray engine: %w", err)
 	}
@@ -293,13 +293,13 @@ func (c *Client) Neutron() (*neutron.Engine, error) {
 	return c.neutron.get()
 }
 
-func (c *Client) Gogo() (*gogo.GogoEngine, error) {
+func (c *Client) Gogo() (*gogo.Engine, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.gogo.get()
 }
 
-func (c *Client) Spray() (*spray.SprayEngine, error) {
+func (c *Client) Spray() (*spray.Engine, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.spray.get()

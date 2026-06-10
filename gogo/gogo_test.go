@@ -22,7 +22,7 @@ func testConfig() *Config {
 	return NewConfig().WithProvider(provider.NewEmbedProvider())
 }
 
-// TestNewGogoEngine 测试引擎创建
+// TestNewEngine 测试引擎创建
 func TestNewEngine(t *testing.T) {
 	// 测试使用默认配置
 	engine1, _ := NewEngine(nil)
@@ -51,8 +51,8 @@ func TestNewEngine(t *testing.T) {
 	}
 }
 
-// TestGogoEngineName 测试引擎名称
-func TestGogoEngineName(t *testing.T) {
+// TestEngineName 测试引擎名称
+func TestEngineName(t *testing.T) {
 	engine, _ := NewEngine(testConfig())
 	if engine.Name() != "gogo" {
 		t.Errorf("Expected engine name 'gogo', got '%s'", engine.Name())
@@ -94,7 +94,7 @@ func TestInitConcurrent(t *testing.T) {
 	}
 }
 
-func TestGogoEngineConcurrentScanScenarios(t *testing.T) {
+func TestEngineConcurrentScanScenarios(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("gogo-sdk-concurrency"))
 	}))
@@ -161,7 +161,7 @@ func TestGogoEngineConcurrentScanScenarios(t *testing.T) {
 	}
 }
 
-func TestGogoEngineConcurrentCancelledContexts(t *testing.T) {
+func TestEngineConcurrentCancelledContexts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(25 * time.Millisecond)
 		_, _ = w.Write([]byte("delayed"))
@@ -232,7 +232,7 @@ func splitTestServerHostPort(t *testing.T, rawURL string) (string, string) {
 	return host, port
 }
 
-// TestGogoEngineSetThreads 测试设置线程数
+// TestEngineSetThreads 测试设置线程数
 func TestContextSetThreads(t *testing.T) {
 	ctx := NewContext()
 

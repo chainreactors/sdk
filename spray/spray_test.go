@@ -15,7 +15,7 @@ import (
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
-// TestNewSprayEngine 测试引擎创建
+// TestNewEngine 测试引擎创建
 func TestNewEngine(t *testing.T) {
 	// 测试使用默认配置
 	engine1, _ := NewEngine(nil)
@@ -42,8 +42,8 @@ func TestNewEngine(t *testing.T) {
 	}
 }
 
-// TestSprayEngineName 测试引擎名称
-func TestSprayEngineName(t *testing.T) {
+// TestEngineName 测试引擎名称
+func TestEngineName(t *testing.T) {
 	engine, _ := NewEngine(nil)
 	if engine.Name() != "spray" {
 		t.Errorf("Expected engine name 'spray', got '%s'", engine.Name())
@@ -85,7 +85,7 @@ func TestInitConcurrent(t *testing.T) {
 	}
 }
 
-func TestSprayEngineConcurrentCheckAndBrute(t *testing.T) {
+func TestEngineConcurrentCheckAndBrute(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/":
@@ -164,7 +164,7 @@ func TestSprayEngineConcurrentCheckAndBrute(t *testing.T) {
 	}
 }
 
-func TestSprayEngineConcurrentCancelledContexts(t *testing.T) {
+func TestEngineConcurrentCancelledContexts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(25 * time.Millisecond)
 		_, _ = w.Write([]byte("delayed"))
@@ -220,7 +220,7 @@ func TestSprayEngineConcurrentCancelledContexts(t *testing.T) {
 	}
 }
 
-func TestSprayEngineBruteBatchUsesRunnerTaskPool(t *testing.T) {
+func TestEngineBruteBatchUsesRunnerTaskPool(t *testing.T) {
 	type overlapTracker struct {
 		mu               sync.Mutex
 		activeByServer   map[int]int
@@ -302,7 +302,7 @@ func TestSprayEngineBruteBatchUsesRunnerTaskPool(t *testing.T) {
 	}
 }
 
-func TestSprayEngineConcurrentExecuteWithSharedContext(t *testing.T) {
+func TestEngineConcurrentExecuteWithSharedContext(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/":

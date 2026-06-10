@@ -19,8 +19,8 @@ import (
 // Engine 实现
 // ========================================
 
-// SprayEngine Spray 引擎实现
-type SprayEngine struct {
+// Engine Spray 引擎实现
+type Engine struct {
 	inited           bool
 	providers        []types.Provider
 	fingersEngine    *sdkfingers.Engine // 可选的自定义 fingers 引擎
@@ -31,13 +31,13 @@ type SprayEngine struct {
 	mu               sync.Mutex
 }
 
-// NewSprayEngine 创建 Spray 引擎
-func NewSprayEngine(config *Config) (*SprayEngine, error) {
+// NewEngine 创建 Spray 引擎
+func NewEngine(config *Config) (*Engine, error) {
 	if config == nil {
 		config = NewConfig()
 	}
 
-	e := &SprayEngine{
+	e := &Engine{
 		inited:           false,
 		providers:        config.Providers,
 		fingersEngine:    config.FingersEngine,
@@ -54,13 +54,8 @@ func NewSprayEngine(config *Config) (*SprayEngine, error) {
 	return e, nil
 }
 
-// NewEngine 创建 Spray 引擎
-func NewEngine(config *Config) (*SprayEngine, error) {
-	return NewSprayEngine(config)
-}
-
 // Init 初始化引擎（加载指纹库等）
-func (e *SprayEngine) Init() error {
+func (e *Engine) Init() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -89,7 +84,7 @@ func (e *SprayEngine) Init() error {
 	return nil
 }
 
-func (e *SprayEngine) configureSDKGlobals() {
+func (e *Engine) configureSDKGlobals() {
 	opt := NewDefaultOption()
 	baseline.Distance = uint8(opt.SimhashDistance)
 	if opt.MaxBodyLength == -1 {
@@ -116,7 +111,7 @@ func combinedReconExtractors() []*types.Extractor {
 	return reconExtractors
 }
 
-func (e *SprayEngine) installResourceProvider() {
+func (e *Engine) installResourceProvider() {
 	if e.resourceProvider == nil {
 		return
 	}
@@ -126,14 +121,14 @@ func (e *SprayEngine) installResourceProvider() {
 // InstallResourceProvider installs the configured resource provider without
 // initializing scanner globals. CLI wrappers call this before core parsing so
 // direct commands load aiscan-managed templates during their own Prepare path.
-func (e *SprayEngine) InstallResourceProvider() {
+func (e *Engine) InstallResourceProvider() {
 	if e == nil {
 		return
 	}
 	e.installResourceProvider()
 }
 
-func (e *SprayEngine) applyInjectedFingers() bool {
+func (e *Engine) applyInjectedFingers() bool {
 	if e.fingersEngine == nil {
 		return false
 	}
@@ -148,7 +143,7 @@ func (e *SprayEngine) applyInjectedFingers() bool {
 	return true
 }
 
-func (e *SprayEngine) applyMatchDetail() {
+func (e *Engine) applyMatchDetail() {
 	if !e.matchDetail || pkg.FingerEngine == nil {
 		return
 	}
@@ -159,7 +154,7 @@ func (e *SprayEngine) applyMatchDetail() {
 	fingersEngine.SetMatchDetailEnabled(true)
 }
 
-func (e *SprayEngine) refreshActivePath() {
+func (e *Engine) refreshActivePath() {
 	if pkg.FingerEngine != nil {
 		if fingers := pkg.FingerEngine.Fingers(); fingers != nil {
 			seen := make(map[string]struct{}, len(pkg.ActivePath))
@@ -187,23 +182,23 @@ func (e *SprayEngine) refreshActivePath() {
 	}
 }
 
-func (e *SprayEngine) Name() string {
+func (e *Engine) Name() string {
 	return "spray"
 }
 
 // SetCapacity configures a capacity limit on an already-created engine.
-func (e *SprayEngine) SetCapacity(total int) {
+func (e *Engine) SetCapacity(total int) {
 	if total > 0 {
 		e.capacity = types.NewCapacity(total)
 	}
 }
 
 // Capacity returns the engine's capacity bucket, or nil if unconfigured.
-func (e *SprayEngine) Capacity() *types.Capacity {
+func (e *Engine) Capacity() *types.Capacity {
 	return e.capacity
 }
 
-func (e *SprayEngine) Execute(ctx types.Context, task types.Task) (<-chan types.Result, error) {
+func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Result, error) {
 	if e == nil {
 		return nil, fmt.Errorf("spray engine is nil")
 	}
@@ -241,7 +236,7 @@ func (e *SprayEngine) Execute(ctx types.Context, task types.Task) (<-chan types.
 	}
 }
 
-func (e *SprayEngine) Close() error {
+func (e *Engine) Close() error {
 	return nil
 }
 
@@ -253,7 +248,7 @@ func newResult(success bool, err error, data *types.SprayResult) types.Result {
 	return types.NewResult(success, err, data)
 }
 
-func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan types.Result) {
+func (e *Engine) handler(ctx context.Context, runner *core.Runner, ch chan types.Result) {
 	// 启动结果处理 goroutine - 处理 OutputCh
 	go func() {
 		for bl := range runner.OutputCh {
@@ -281,17 +276,17 @@ func (e *SprayEngine) handler(ctx context.Context, runner *core.Runner, ch chan 
 	}()
 }
 
-func (e *SprayEngine) executeCheck(ctx *Context, task *CheckTask) (<-chan types.Result, error) {
+func (e *Engine) executeCheck(ctx *Context, task *CheckTask) (<-chan types.Result, error) {
 	return e.execute(ctx, task.Type(), task.URLs, nil)
 }
 
-func (e *SprayEngine) executeBrute(ctx *Context, task *BruteTask) (<-chan types.Result, error) {
+func (e *Engine) executeBrute(ctx *Context, task *BruteTask) (<-chan types.Result, error) {
 	return e.execute(ctx, task.Type(), task.urls(), task.Wordlist)
 }
 
 // execute 是 check/brute 的统一执行路径.
 // wordlist == nil 表示 check 模式, 否则 brute 模式.
-func (e *SprayEngine) execute(ctx *Context, taskType string, urls []string, wordlist []string) (<-chan types.Result, error) {
+func (e *Engine) execute(ctx *Context, taskType string, urls []string, wordlist []string) (<-chan types.Result, error) {
 	opt := cloneOption(ctx.opt)
 	opt.URL = urls
 	opt.PortRange = ""
@@ -362,7 +357,7 @@ func (e *SprayEngine) execute(ctx *Context, taskType string, urls []string, word
 // ========================================
 
 // Check URL 批量检测（同步）
-func (e *SprayEngine) Check(ctx *Context, urls []string) ([]*types.SprayResult, error) {
+func (e *Engine) Check(ctx *Context, urls []string) ([]*types.SprayResult, error) {
 	task := NewCheckTask(urls)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -382,7 +377,7 @@ func (e *SprayEngine) Check(ctx *Context, urls []string) ([]*types.SprayResult, 
 }
 
 // CheckStream URL 批量检测（流式）
-func (e *SprayEngine) CheckStream(ctx *Context, urls []string) (<-chan *types.SprayResult, error) {
+func (e *Engine) CheckStream(ctx *Context, urls []string) (<-chan *types.SprayResult, error) {
 	task := NewCheckTask(urls)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -404,7 +399,7 @@ func (e *SprayEngine) CheckStream(ctx *Context, urls []string) (<-chan *types.Sp
 }
 
 // Brute 暴力破解（同步）
-func (e *SprayEngine) Brute(ctx *Context, baseURL string, wordlist []string) ([]*types.SprayResult, error) {
+func (e *Engine) Brute(ctx *Context, baseURL string, wordlist []string) ([]*types.SprayResult, error) {
 	task := NewBruteTask(baseURL, wordlist)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -422,7 +417,7 @@ func (e *SprayEngine) Brute(ctx *Context, baseURL string, wordlist []string) ([]
 	return sprayResults, nil
 }
 
-func (e *SprayEngine) BruteMany(ctx *Context, baseURLs []string, wordlist []string) ([]*types.SprayResult, error) {
+func (e *Engine) BruteMany(ctx *Context, baseURLs []string, wordlist []string) ([]*types.SprayResult, error) {
 	task := NewBruteTasks(baseURLs, wordlist)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -440,7 +435,7 @@ func (e *SprayEngine) BruteMany(ctx *Context, baseURLs []string, wordlist []stri
 }
 
 // BruteStream 暴力破解（流式）
-func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []string) (<-chan *types.SprayResult, error) {
+func (e *Engine) BruteStream(ctx *Context, baseURL string, wordlist []string) (<-chan *types.SprayResult, error) {
 	task := NewBruteTask(baseURL, wordlist)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -461,7 +456,7 @@ func (e *SprayEngine) BruteStream(ctx *Context, baseURL string, wordlist []strin
 	return sprayResultCh, nil
 }
 
-func (e *SprayEngine) BruteManyStream(ctx *Context, baseURLs []string, wordlist []string) (<-chan *types.SprayResult, error) {
+func (e *Engine) BruteManyStream(ctx *Context, baseURLs []string, wordlist []string) (<-chan *types.SprayResult, error) {
 	task := NewBruteTasks(baseURLs, wordlist)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -481,7 +476,7 @@ func (e *SprayEngine) BruteManyStream(ctx *Context, baseURLs []string, wordlist 
 	return sprayResultCh, nil
 }
 
-func (e *SprayEngine) closeRunner(runner *core.Runner) {
+func (e *Engine) closeRunner(runner *core.Runner) {
 	if runner.OutputFile != nil {
 		runner.OutputFile.Close()
 	}
