@@ -68,8 +68,8 @@ func TestGogoResolvesDependencies(t *testing.T) {
 	c := New()
 	defer c.Close()
 
-	if c.fingers != nil || c.neutron != nil {
-		t.Fatal("engines should be nil before first access")
+	if c.fingers.isLoaded() || c.neutron.isLoaded() {
+		t.Fatal("engines should not be loaded before first access")
 	}
 
 	_, err := c.Gogo()
@@ -78,8 +78,8 @@ func TestGogoResolvesDependencies(t *testing.T) {
 	}
 
 	c.mu.Lock()
-	hasFinger := c.fingers != nil
-	hasNeutron := c.neutron != nil
+	hasFinger := c.fingers.isLoaded()
+	hasNeutron := c.neutron.isLoaded()
 	c.mu.Unlock()
 
 	if !hasFinger {
@@ -100,7 +100,7 @@ func TestSprayResolvesFingersDependency(t *testing.T) {
 	}
 
 	c.mu.Lock()
-	hasFinger := c.fingers != nil
+	hasFinger := c.fingers.isLoaded()
 	c.mu.Unlock()
 
 	if !hasFinger {
@@ -117,11 +117,11 @@ func TestCloseResetsEngines(t *testing.T) {
 	}
 
 	c.mu.Lock()
-	isNil := c.fingers == nil
+	isReset := !c.fingers.isLoaded()
 	c.mu.Unlock()
 
-	if !isNil {
-		t.Fatal("expected engines to be nil after Close")
+	if !isReset {
+		t.Fatal("expected engines to be reset after Close")
 	}
 }
 
@@ -151,8 +151,8 @@ func TestIndexEnabledWithOption(t *testing.T) {
 	}
 
 	c.mu.Lock()
-	hasFinger := c.fingers != nil
-	hasNeutron := c.neutron != nil
+	hasFinger := c.fingers.isLoaded()
+	hasNeutron := c.neutron.isLoaded()
 	c.mu.Unlock()
 
 	if !hasFinger {
@@ -228,5 +228,31 @@ func TestLookupByCVE(t *testing.T) {
 	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestLoadByName(t *testing.T) {
+	c := New()
+	defer c.Close()
+
+	if c.fingers.isLoaded() {
+		t.Fatal("fingers should not be loaded before Load")
+	}
+
+	if err := c.Load("fingers"); err != nil {
+		t.Fatalf("load fingers: %v", err)
+	}
+
+	if !c.fingers.isLoaded() {
+		t.Fatal("fingers should be loaded after Load")
+	}
+}
+
+func TestLoadUnknownEngine(t *testing.T) {
+	c := New()
+	defer c.Close()
+
+	if err := c.Load("nonexistent"); err == nil {
+		t.Fatal("expected error for unknown engine name")
 	}
 }

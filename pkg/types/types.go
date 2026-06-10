@@ -10,12 +10,14 @@ import (
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	gogopkg "github.com/chainreactors/gogo/v2/pkg"
 	"github.com/chainreactors/neutron/operators"
-	zombiecore "github.com/chainreactors/zombie/core"
 	"github.com/chainreactors/neutron/protocols"
 	templateHTTP "github.com/chainreactors/neutron/protocols/http"
 	templateNetwork "github.com/chainreactors/neutron/protocols/network"
 	"github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/parsers"
+	protonFile "github.com/chainreactors/proton/proton/file"
+	protonTemplate "github.com/chainreactors/proton/template"
+	zombiecore "github.com/chainreactors/zombie/core"
 )
 
 // ====================
@@ -233,4 +235,18 @@ var (
 	ZombieModeBomb      = zombiecore.ModBomb
 	ZombieModePitchFork = zombiecore.ModPitchFork
 	ZombieModeSniper    = zombiecore.ModSniper
+)
+
+// ====================
+// Proton
+// ====================
+
+type (
+	ProtonTemplate  = protonTemplate.Template
+	ProtonFinding   = protonFile.Finding
+	ProtonMatchEvent = protonFile.MatchEvent
+	ProtonScanStats = protonFile.ScanStats
+	ProtonRule      = protonFile.Rule
+	ProtonRequest   = protonFile.Request
+	ProtonScanner   = protonFile.Scanner
 )

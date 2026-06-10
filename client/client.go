@@ -11,6 +11,7 @@ import (
 	"github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/association"
 	"github.com/chainreactors/sdk/pkg/types"
+	"github.com/chainreactors/sdk/proton"
 	"github.com/chainreactors/sdk/spray"
 	"github.com/chainreactors/sdk/zombie"
 )
@@ -28,6 +29,7 @@ type options struct {
 	gogoConfig    *gogo.Config
 	sprayConfig   *spray.Config
 	zombieConfig  *zombie.Config
+	protonConfig  *proton.Config
 }
 
 func WithProvider(providers ...types.Provider) Option {
@@ -79,16 +81,21 @@ func WithZombieConfig(cfg *zombie.Config) Option {
 	return func(o *options) { o.zombieConfig = cfg }
 }
 
+func WithProtonConfig(cfg *proton.Config) Option {
+	return func(o *options) { o.protonConfig = cfg }
+}
+
 type Client struct {
 	opts options
 	mu   sync.Mutex
 
-	fingers *fingers.Engine
-	neutron *neutron.Engine
-	gogo    *gogo.GogoEngine
-	spray   *spray.SprayEngine
-	zombie  *zombie.Engine
-	index   *association.Index
+	fingers lazy[*fingers.Engine]
+	neutron lazy[*neutron.Engine]
+	gogo    lazy[*gogo.GogoEngine]
+	spray   lazy[*spray.SprayEngine]
+	zombie  lazy[*zombie.Engine]
+	proton  lazy[*proton.Engine]
+	index   lazy[*association.Index]
 }
 
 func New(opts ...Option) *Client {
@@ -96,18 +103,22 @@ func New(opts ...Option) *Client {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return &Client{opts: o}
+	c := &Client{opts: o}
+	c.fingers.initFn = c.initFingers
+	c.neutron.initFn = c.initNeutron
+	c.gogo.initFn = c.initGogo
+	c.spray.initFn = c.initSpray
+	c.zombie.initFn = c.initZombie
+	c.proton.initFn = c.initProton
+	c.index.initFn = c.initIndex
+	return c
 }
 
 // ========================================
-// 依赖解析
+// 引擎工厂（自动加载：首次访问时按需创建）
 // ========================================
 
-func (c *Client) ensureFingers() error {
-	if c.fingers != nil {
-		return nil
-	}
-
+func (c *Client) initFingers() (*fingers.Engine, error) {
 	cfg := c.opts.fingersConfig
 	if cfg == nil {
 		cfg = fingers.NewConfig()
@@ -121,17 +132,12 @@ func (c *Client) ensureFingers() error {
 
 	eng, err := fingers.NewEngine(cfg)
 	if err != nil {
-		return fmt.Errorf("create fingers engine: %w", err)
+		return nil, fmt.Errorf("create fingers engine: %w", err)
 	}
-	c.fingers = eng
-	return nil
+	return eng, nil
 }
 
-func (c *Client) ensureNeutron() error {
-	if c.neutron != nil {
-		return nil
-	}
-
+func (c *Client) initNeutron() (*neutron.Engine, error) {
 	cfg := c.opts.neutronConfig
 	if cfg == nil {
 		cfg = neutron.NewConfig()
@@ -145,43 +151,19 @@ func (c *Client) ensureNeutron() error {
 
 	eng, err := neutron.NewEngine(cfg)
 	if err != nil {
-		return fmt.Errorf("create neutron engine: %w", err)
+		return nil, fmt.Errorf("create neutron engine: %w", err)
 	}
-	c.neutron = eng
-	return nil
+	return eng, nil
 }
 
-func (c *Client) ensureIndex() error {
-	if c.index != nil {
-		return nil
+func (c *Client) initGogo() (*gogo.GogoEngine, error) {
+	fingersEng, err := c.fingers.get()
+	if err != nil {
+		return nil, fmt.Errorf("gogo requires fingers: %w", err)
 	}
-	if c.opts.indexOptions == nil {
-		return nil
-	}
-
-	if err := c.ensureFingers(); err != nil {
-		return fmt.Errorf("index requires fingers: %w", err)
-	}
-	if err := c.ensureNeutron(); err != nil {
-		return fmt.Errorf("index requires neutron: %w", err)
-	}
-
-	idx := association.NewIndexWithOptions(*c.opts.indexOptions)
-	idx.BuildWithFingers(c.fingers.Fingers(), c.fingers.Aliases(), c.neutron.Get())
-	c.index = idx
-	return nil
-}
-
-func (c *Client) ensureGogo() error {
-	if c.gogo != nil {
-		return nil
-	}
-
-	if err := c.ensureFingers(); err != nil {
-		return fmt.Errorf("gogo requires fingers: %w", err)
-	}
-	if err := c.ensureNeutron(); err != nil {
-		return fmt.Errorf("gogo requires neutron: %w", err)
+	neutronEng, err := c.neutron.get()
+	if err != nil {
+		return nil, fmt.Errorf("gogo requires neutron: %w", err)
 	}
 
 	cfg := c.opts.gogoConfig
@@ -189,10 +171,10 @@ func (c *Client) ensureGogo() error {
 		cfg = gogo.NewConfig()
 	}
 	if cfg.FingersEngine == nil {
-		cfg.WithFingersEngine(c.fingers)
+		cfg.WithFingersEngine(fingersEng)
 	}
 	if cfg.NeutronEngine == nil {
-		cfg.WithNeutronEngine(c.neutron)
+		cfg.WithNeutronEngine(neutronEng)
 	}
 	if len(cfg.Providers) == 0 && len(c.opts.providers) > 0 {
 		cfg.WithProvider(c.opts.providers...)
@@ -206,19 +188,15 @@ func (c *Client) ensureGogo() error {
 
 	eng := gogo.NewGogoEngine(cfg)
 	if err := eng.Init(); err != nil {
-		return fmt.Errorf("init gogo engine: %w", err)
+		return nil, fmt.Errorf("init gogo engine: %w", err)
 	}
-	c.gogo = eng
-	return nil
+	return eng, nil
 }
 
-func (c *Client) ensureSpray() error {
-	if c.spray != nil {
-		return nil
-	}
-
-	if err := c.ensureFingers(); err != nil {
-		return fmt.Errorf("spray requires fingers: %w", err)
+func (c *Client) initSpray() (*spray.SprayEngine, error) {
+	fingersEng, err := c.fingers.get()
+	if err != nil {
+		return nil, fmt.Errorf("spray requires fingers: %w", err)
 	}
 
 	cfg := c.opts.sprayConfig
@@ -229,7 +207,7 @@ func (c *Client) ensureSpray() error {
 		cfg.WithProvider(c.opts.providers...)
 	}
 	if cfg.FingersEngine == nil {
-		cfg.WithFingersEngine(c.fingers)
+		cfg.WithFingersEngine(fingersEng)
 	}
 	if cfg.ResourceProvider == nil && c.opts.resourceProvider != nil {
 		cfg.WithResourceProvider(c.opts.resourceProvider)
@@ -240,17 +218,12 @@ func (c *Client) ensureSpray() error {
 
 	eng := spray.NewSprayEngine(cfg)
 	if err := eng.Init(); err != nil {
-		return fmt.Errorf("init spray engine: %w", err)
+		return nil, fmt.Errorf("init spray engine: %w", err)
 	}
-	c.spray = eng
-	return nil
+	return eng, nil
 }
 
-func (c *Client) ensureZombie() error {
-	if c.zombie != nil {
-		return nil
-	}
-
+func (c *Client) initZombie() (*zombie.Engine, error) {
 	cfg := c.opts.zombieConfig
 	if cfg == nil {
 		cfg = zombie.NewConfig()
@@ -264,59 +237,172 @@ func (c *Client) ensureZombie() error {
 
 	eng := zombie.NewEngine(cfg)
 	if err := eng.Init(); err != nil {
-		return fmt.Errorf("init zombie engine: %w", err)
+		return nil, fmt.Errorf("init zombie engine: %w", err)
 	}
-	c.zombie = eng
-	return nil
+	return eng, nil
+}
+
+func (c *Client) initProton() (*proton.Engine, error) {
+	cfg := c.opts.protonConfig
+	if cfg == nil {
+		cfg = proton.NewConfig()
+	}
+	if cfg.ResourceProvider == nil && c.opts.resourceProvider != nil {
+		cfg.WithResourceProvider(c.opts.resourceProvider)
+	}
+
+	eng := proton.NewEngine(cfg)
+	if err := eng.Init(); err != nil {
+		return nil, fmt.Errorf("init proton engine: %w", err)
+	}
+	return eng, nil
+}
+
+func (c *Client) initIndex() (*association.Index, error) {
+	if c.opts.indexOptions == nil {
+		return nil, nil
+	}
+
+	fingersEng, err := c.fingers.get()
+	if err != nil {
+		return nil, fmt.Errorf("index requires fingers: %w", err)
+	}
+	neutronEng, err := c.neutron.get()
+	if err != nil {
+		return nil, fmt.Errorf("index requires neutron: %w", err)
+	}
+
+	idx := association.NewIndexWithOptions(*c.opts.indexOptions)
+	idx.BuildWithFingers(fingersEng.Fingers(), fingersEng.Aliases(), neutronEng.Get())
+	return idx, nil
 }
 
 // ========================================
-// 引擎访问
+// 引擎访问（自动加载：首次调用触发初始化）
 // ========================================
 
 func (c *Client) Fingers() (*fingers.Engine, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.ensureFingers(); err != nil {
-		return nil, err
-	}
-	return c.fingers, nil
-}
-
-func (c *Client) Gogo() (*gogo.GogoEngine, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.ensureGogo(); err != nil {
-		return nil, err
-	}
-	return c.gogo, nil
-}
-
-func (c *Client) Spray() (*spray.SprayEngine, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.ensureSpray(); err != nil {
-		return nil, err
-	}
-	return c.spray, nil
+	return c.fingers.get()
 }
 
 func (c *Client) Neutron() (*neutron.Engine, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.ensureNeutron(); err != nil {
-		return nil, err
-	}
-	return c.neutron, nil
+	return c.neutron.get()
+}
+
+func (c *Client) Gogo() (*gogo.GogoEngine, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.gogo.get()
+}
+
+func (c *Client) Spray() (*spray.SprayEngine, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.spray.get()
 }
 
 func (c *Client) Zombie() (*zombie.Engine, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.ensureZombie(); err != nil {
-		return nil, err
+	return c.zombie.get()
+}
+
+func (c *Client) Proton() (*proton.Engine, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.proton.get()
+}
+
+// ========================================
+// 手动加载（人工配置后显式预加载，提前捕获错误）
+// ========================================
+
+// Load 按名称预加载指定引擎，在启动阶段提前发现配置错误。
+// 不传参数则加载所有已配置的引擎。
+//
+//	c.Load("proton", "zombie")           // 仅加载指定引擎
+//	c.Load()                              // 加载全部已配置引擎
+func (c *Client) Load(names ...string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(names) == 0 {
+		return c.loadConfigured()
 	}
-	return c.zombie, nil
+	for _, name := range names {
+		if err := c.loadByName(name); err != nil {
+			return fmt.Errorf("load %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (c *Client) loadByName(name string) error {
+	switch name {
+	case "fingers":
+		_, err := c.fingers.get()
+		return err
+	case "neutron":
+		_, err := c.neutron.get()
+		return err
+	case "gogo":
+		_, err := c.gogo.get()
+		return err
+	case "spray":
+		_, err := c.spray.get()
+		return err
+	case "zombie":
+		_, err := c.zombie.get()
+		return err
+	case "proton":
+		_, err := c.proton.get()
+		return err
+	default:
+		return fmt.Errorf("unknown engine: %s", name)
+	}
+}
+
+func (c *Client) loadConfigured() error {
+	if c.opts.fingersConfig != nil || len(c.opts.providers) > 0 {
+		if _, err := c.fingers.get(); err != nil {
+			return fmt.Errorf("load fingers: %w", err)
+		}
+	}
+	if c.opts.neutronConfig != nil || len(c.opts.providers) > 0 {
+		if _, err := c.neutron.get(); err != nil {
+			return fmt.Errorf("load neutron: %w", err)
+		}
+	}
+	if c.opts.gogoConfig != nil {
+		if _, err := c.gogo.get(); err != nil {
+			return fmt.Errorf("load gogo: %w", err)
+		}
+	}
+	if c.opts.sprayConfig != nil {
+		if _, err := c.spray.get(); err != nil {
+			return fmt.Errorf("load spray: %w", err)
+		}
+	}
+	if c.opts.zombieConfig != nil {
+		if _, err := c.zombie.get(); err != nil {
+			return fmt.Errorf("load zombie: %w", err)
+		}
+	}
+	if c.opts.protonConfig != nil {
+		if _, err := c.proton.get(); err != nil {
+			return fmt.Errorf("load proton: %w", err)
+		}
+	}
+	if c.opts.indexOptions != nil {
+		if _, err := c.index.get(); err != nil {
+			return fmt.Errorf("load index: %w", err)
+		}
+	}
+	return nil
 }
 
 // ========================================
@@ -328,10 +414,7 @@ func (c *Client) Zombie() (*zombie.Engine, error) {
 func (c *Client) Index() (*association.Index, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.ensureIndex(); err != nil {
-		return nil, err
-	}
-	return c.index, nil
+	return c.index.get()
 }
 
 // Lookup queries the association index with the given query.
@@ -339,13 +422,14 @@ func (c *Client) Index() (*association.Index, error) {
 func (c *Client) Lookup(q *association.Query) (*association.QueryResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.ensureIndex(); err != nil {
+	idx, err := c.index.get()
+	if err != nil {
 		return nil, err
 	}
-	if c.index == nil {
+	if idx == nil {
 		return nil, fmt.Errorf("index not enabled: use WithIndex() when creating client")
 	}
-	return c.index.Lookup(q), nil
+	return idx.Lookup(q), nil
 }
 
 // LookupResult extracts association terms from an engine result and
@@ -372,15 +456,17 @@ func (c *Client) BuildIndex(ctx context.Context, opts ...association.IndexOption
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if err := c.ensureFingers(); err != nil {
+	fingersEng, err := c.fingers.get()
+	if err != nil {
 		return nil, err
 	}
-	if err := c.ensureNeutron(); err != nil {
+	neutronEng, err := c.neutron.get()
+	if err != nil {
 		return nil, err
 	}
 
 	idx := association.NewIndex(opts...)
-	idx.BuildWithFingers(c.fingers.Fingers(), c.fingers.Aliases(), c.neutron.Get())
+	idx.BuildWithFingers(fingersEng.Fingers(), fingersEng.Aliases(), neutronEng.Get())
 	return idx, nil
 }
 
@@ -391,30 +477,12 @@ func (c *Client) BuildIndex(ctx context.Context, opts ...association.IndexOption
 func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	var errs []error
-	if c.gogo != nil {
-		errs = append(errs, c.gogo.Close())
-	}
-	if c.spray != nil {
-		errs = append(errs, c.spray.Close())
-	}
-	if c.neutron != nil {
-		errs = append(errs, c.neutron.Close())
-	}
-	if c.fingers != nil {
-		errs = append(errs, c.fingers.Close())
-	}
-	if c.zombie != nil {
-		errs = append(errs, c.zombie.Close())
-	}
-
-	c.gogo = nil
-	c.spray = nil
-	c.neutron = nil
-	c.fingers = nil
-	c.zombie = nil
-	c.index = nil
-
-	return errors.Join(errs...)
+	return errors.Join(
+		c.gogo.close(),
+		c.spray.close(),
+		c.neutron.close(),
+		c.fingers.close(),
+		c.zombie.close(),
+		c.proton.close(),
+	)
 }

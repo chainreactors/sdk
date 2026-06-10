@@ -63,6 +63,7 @@ jobs:
               _ "github.com/chainreactors/sdk/fingers"
               _ "github.com/chainreactors/sdk/gogo"
               _ "github.com/chainreactors/sdk/neutron"
+              _ "github.com/chainreactors/sdk/proton"
               _ "github.com/chainreactors/sdk/spray"
               _ "github.com/chainreactors/sdk/zombie"
           )
