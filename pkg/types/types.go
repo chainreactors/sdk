@@ -206,6 +206,7 @@ const (
 	SizeMatcher    = operators.SizeMatcher
 	DSLMatcher     = operators.DSLMatcher
 	FaviconMatcher = operators.FaviconMatcher
+	JSONMatcher    = operators.JSONMatcher
 	XPathMatcher   = operators.XPathMatcher
 
 	ANDCondition = operators.ANDCondition

@@ -43,11 +43,19 @@ func TestNewTypeAliasesExist(t *testing.T) {
 	var _ types.SSLTemplateRequest
 	var _ types.ExtractorType = types.XPathExtractor
 	var _ types.MatcherType = types.XPathMatcher
+	var _ types.ExtractorType = types.JSONExtractor
+	var _ types.MatcherType = types.JSONMatcher
 
 	if types.XPathExtractor == 0 {
 		t.Fatal("XPathExtractor should be non-zero")
 	}
 	if types.XPathMatcher == 0 {
 		t.Fatal("XPathMatcher should be non-zero")
+	}
+	if types.JSONExtractor == 0 {
+		t.Fatal("JSONExtractor should be non-zero")
+	}
+	if types.JSONMatcher == 0 {
+		t.Fatal("JSONMatcher should be non-zero")
 	}
 }
