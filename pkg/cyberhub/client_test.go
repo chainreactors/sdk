@@ -105,7 +105,7 @@ func TestApplyFilterParams_Statuses(t *testing.T) {
 
 func TestApplyFilterParams_ReviewStatus(t *testing.T) {
 	params := url.Values{}
-	filter := &ExportFilter{ReviewStatus: "approved"}
+	filter := &ExportFilter{ReviewStatus: types.ReviewStatusApproved}
 	applyFilterParams(params, filter)
 
 	if params.Get("review_status") != "approved" {

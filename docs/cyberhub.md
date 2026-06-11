@@ -46,7 +46,7 @@ filter := types.NewExportFilter().
     WithSeverities("high", "critical").     // 按严重程度
     WithPOCType("http").                    // POC 类型
     WithStatuses("active").                 // POC 状态
-    WithReviewStatus("reviewed").           // 审核状态
+    WithReviewStatus(types.ReviewStatusApproved). // 审核状态
     WithCreatedAfter(time.Now().AddDate(0, -1, 0)).  // 创建时间
     WithUpdatedAfter(time.Now().AddDate(0, 0, -7)).  // 更新时间
     WithLimit(100)                          // 最大数量

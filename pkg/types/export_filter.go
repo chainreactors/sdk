@@ -2,6 +2,16 @@ package types
 
 import "time"
 
+// ReviewStatus 审核状态常量
+const (
+	ReviewStatusNone      = "none"
+	ReviewStatusDraft     = "draft"
+	ReviewStatusPending   = "pending"
+	ReviewStatusApproved  = "approved"
+	ReviewStatusRejected  = "rejected"
+	ReviewStatusCancelled = "cancelled"
+)
+
 // ExportFilter is the SDK-wide filter used when exporting remote CyberHub data.
 type ExportFilter struct {
 	Names        []string
