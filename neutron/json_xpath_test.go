@@ -1,6 +1,8 @@
 package neutron
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/chainreactors/sdk/pkg/types"
@@ -150,5 +152,187 @@ http:
 	}
 	if len(m.XPath) != 1 || m.XPath[0] != "//div[@class='error']" {
 		t.Fatalf("unexpected xpath: %v", m.XPath)
+	}
+}
+
+func TestJSONExtractorExecute(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"version":"1.2.3","name":"test"}}`))
+	}))
+	defer server.Close()
+
+	tpl := parseTemplateForTest(t, `id: json-extract-e2e
+info:
+  name: JSON Extract E2E
+  severity: info
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers:
+      - type: status
+        status:
+          - 200
+    extractors:
+      - type: json
+        json:
+          - ".data.version"
+`)
+
+	engine := &Engine{config: NewConfig()}
+	compiled := engine.compileTemplates([]*types.Template{tpl})
+	if len(compiled) != 1 {
+		t.Fatalf("expected 1 compiled template, got %d", len(compiled))
+	}
+
+	result, err := compiled[0].Execute(server.URL, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result == nil || !result.Matched {
+		t.Fatal("expected json extractor template to match")
+	}
+	found := false
+	for _, vals := range result.Extracts {
+		for _, v := range vals {
+			if v == "1.2.3" {
+				found = true
+			}
+		}
+	}
+	for _, v := range result.OutputExtracts {
+		if v == "1.2.3" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected json extractor to extract '1.2.3', got extracts=%v output=%v", result.Extracts, result.OutputExtracts)
+	}
+}
+
+func TestJSONMatcherExecute(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","count":42}`))
+	}))
+	defer server.Close()
+
+	tpl := parseTemplateForTest(t, `id: json-match-e2e
+info:
+  name: JSON Match E2E
+  severity: info
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers:
+      - type: json
+        json:
+          - ".status == \"ok\""
+`)
+
+	engine := &Engine{config: NewConfig()}
+	compiled := engine.compileTemplates([]*types.Template{tpl})
+	if len(compiled) != 1 {
+		t.Fatalf("expected 1 compiled template, got %d", len(compiled))
+	}
+
+	result, err := compiled[0].Execute(server.URL, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result == nil || !result.Matched {
+		t.Fatal("expected json matcher to match .status == \"ok\"")
+	}
+}
+
+func TestXPathExtractorExecute(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><head><title>TestPage</title></head><body></body></html>`))
+	}))
+	defer server.Close()
+
+	tpl := parseTemplateForTest(t, `id: xpath-extract-e2e
+info:
+  name: XPath Extract E2E
+  severity: info
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers:
+      - type: status
+        status:
+          - 200
+    extractors:
+      - type: xpath
+        xpath:
+          - "//title"
+`)
+
+	engine := &Engine{config: NewConfig()}
+	compiled := engine.compileTemplates([]*types.Template{tpl})
+	if len(compiled) != 1 {
+		t.Fatalf("expected 1 compiled template, got %d", len(compiled))
+	}
+
+	result, err := compiled[0].Execute(server.URL, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result == nil || !result.Matched {
+		t.Fatal("expected xpath extractor template to match")
+	}
+	found := false
+	for _, vals := range result.Extracts {
+		for _, v := range vals {
+			if v == "TestPage" {
+				found = true
+			}
+		}
+	}
+	for _, v := range result.OutputExtracts {
+		if v == "TestPage" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected xpath extractor to extract 'TestPage', got extracts=%v output=%v", result.Extracts, result.OutputExtracts)
+	}
+}
+
+func TestXPathMatcherExecute(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><body><div class="error">something wrong</div></body></html>`))
+	}))
+	defer server.Close()
+
+	tpl := parseTemplateForTest(t, `id: xpath-match-e2e
+info:
+  name: XPath Match E2E
+  severity: info
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers:
+      - type: xpath
+        xpath:
+          - "//div[@class='error']"
+`)
+
+	engine := &Engine{config: NewConfig()}
+	compiled := engine.compileTemplates([]*types.Template{tpl})
+	if len(compiled) != 1 {
+		t.Fatalf("expected 1 compiled template, got %d", len(compiled))
+	}
+
+	result, err := compiled[0].Execute(server.URL, nil)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result == nil || !result.Matched {
+		t.Fatal("expected xpath matcher to match //div[@class='error']")
 	}
 }

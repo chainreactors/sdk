@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	_ "github.com/chainreactors/neutron/operators/full"
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/sdk/pkg/types"
 )
