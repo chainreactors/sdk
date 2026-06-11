@@ -3,6 +3,8 @@ module github.com/chainreactors/sdk
 go 1.25.4
 
 require (
+	github.com/antchfx/htmlquery v1.3.6
+	github.com/antchfx/xmlquery v1.5.1
 	github.com/chainreactors/fingers v1.2.1
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
@@ -13,6 +15,7 @@ require (
 	github.com/chainreactors/spray v1.3.1-0.20260608085629-66dafe7eab4f
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
 	github.com/chainreactors/zombie v1.2.3-0.20260608085910-705f548f7da1
+	github.com/itchyny/gojq v0.12.19
 	github.com/panjf2000/ants/v2 v2.12.1
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -27,6 +30,7 @@ require (
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
+	github.com/antchfx/xpath v1.3.6 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/sevenzip v1.6.4 // indirect
@@ -62,6 +66,7 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gookit/config/v2 v2.2.8 // indirect
@@ -76,6 +81,7 @@ require (
 	github.com/hirochachacha/go-smb2 v1.1.0 // indirect
 	github.com/huin/asn1ber v0.0.0-20120622192748-af09f62e6358 // indirect
 	github.com/icodeface/tls v0.0.0-20230910023335-34df9250cd12 // indirect
+	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/jessevdk/go-flags v1.6.1 // indirect
 	github.com/jlaffaye/ftp v0.2.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
