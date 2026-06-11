@@ -9,7 +9,7 @@ require (
 	github.com/chainreactors/neutron v0.0.0-20260611015444-55dd3cf86e5b
 	github.com/chainreactors/neutron/operators/full v0.0.0-20260611050540-e112381dac6b
 	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe
-	github.com/chainreactors/proton v0.2.1-0.20260608085216-03df34ba928d
+	github.com/chainreactors/proton v0.3.0
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/spray v1.3.1-0.20260608085629-66dafe7eab4f
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
@@ -24,7 +24,6 @@ require (
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
 	github.com/M09ic/go-ntlmssp v0.0.0-20230312133735-dcccd454dfe0 // indirect
-	github.com/STARRY-S/zip v0.2.3 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
@@ -32,9 +31,6 @@ require (
 	github.com/antchfx/xmlquery v1.5.1 // indirect
 	github.com/antchfx/xpath v1.3.6 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
-	github.com/bodgit/plumbing v1.3.0 // indirect
-	github.com/bodgit/sevenzip v1.6.4 // indirect
-	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20260422231931-4d751bb6e37c // indirect
 	github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 // indirect
 	github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4 // indirect
@@ -77,7 +73,6 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
-	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hirochachacha/go-smb2 v1.1.0 // indirect
 	github.com/huin/asn1ber v0.0.0-20120622192748-af09f62e6358 // indirect
 	github.com/icodeface/tls v0.0.0-20230910023335-34df9250cd12 // indirect
@@ -86,7 +81,6 @@ require (
 	github.com/jessevdk/go-flags v1.6.1 // indirect
 	github.com/jlaffaye/ftp v0.2.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
-	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/knadh/go-pop3 v1.0.2 // indirect
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
@@ -94,26 +88,18 @@ require (
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/mholt/archiver v3.1.1+incompatible // indirect
-	github.com/mholt/archives v0.1.5 // indirect
-	github.com/mikelolasagasti/xz v1.0.1 // indirect
-	github.com/minio/minlz v1.1.1 // indirect
 	github.com/mitchellh/go-vnc v0.0.0-20150629162542-723ed9867aed // indirect
 	github.com/montanaflynn/stats v0.9.0 // indirect
 	github.com/mozillazg/go-pinyin v0.21.0 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/nwaples/rardecode v1.1.3 // indirect
-	github.com/nwaples/rardecode/v2 v2.2.2 // indirect
 	github.com/nxadm/tail v1.4.11 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
-	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414 // indirect
 	github.com/sijms/go-ora/v2 v2.9.0 // indirect
-	github.com/sorairolake/lzip-go v0.3.8 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/spf13/afero v1.15.0 // indirect
-	github.com/stangelandcl/ppmd v0.1.0 // indirect
 	github.com/streadway/amqp v1.1.0 // indirect
 	github.com/tetratelabs/wazero v1.11.0 // indirect
 	github.com/twmb/murmur3 v1.1.8 // indirect
@@ -132,7 +118,6 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
