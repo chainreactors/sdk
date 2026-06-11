@@ -110,9 +110,10 @@ func (c *Context) SetStatsHandler(handler func(types.Stats)) *Context {
 }
 
 func (c *Context) emitStats(stats types.Stats) {
-	if c != nil && c.statsHandler != nil {
-		c.statsHandler(stats)
+	if c == nil || c.statsHandler == nil || c.ctx.Err() != nil {
+		return
 	}
+	c.statsHandler(stats)
 }
 
 // ========================================
