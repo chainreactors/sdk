@@ -13,6 +13,7 @@ import (
 	"github.com/chainreactors/neutron/protocols"
 	templateHTTP "github.com/chainreactors/neutron/protocols/http"
 	templateNetwork "github.com/chainreactors/neutron/protocols/network"
+	templateSSL "github.com/chainreactors/neutron/protocols/ssl"
 	"github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/parsers"
 	protonFile "github.com/chainreactors/proton/proton/file"
@@ -169,6 +170,7 @@ type (
 	TemplateRequest        = protocols.Request
 	HTTPTemplateRequest    = templateHTTP.Request
 	NetworkTemplateRequest = templateNetwork.Request
+	SSLTemplateRequest     = templateSSL.Request
 )
 
 // ====================
@@ -195,6 +197,7 @@ const (
 	KValExtractor  = operators.KValExtractor
 	JSONExtractor  = operators.JSONExtractor
 	DSLExtractor   = operators.DSLExtractor
+	XPathExtractor = operators.XPathExtractor
 
 	WordsMatcher   = operators.WordsMatcher
 	RegexMatcher   = operators.RegexMatcher
@@ -203,6 +206,7 @@ const (
 	SizeMatcher    = operators.SizeMatcher
 	DSLMatcher     = operators.DSLMatcher
 	FaviconMatcher = operators.FaviconMatcher
+	XPathMatcher   = operators.XPathMatcher
 
 	ANDCondition = operators.ANDCondition
 	ORCondition  = operators.ORCondition
