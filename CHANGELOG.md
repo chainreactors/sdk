@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.3.1 (2026-06-12)
+
+修复 xray 指纹引擎的模板路由和误报问题，新增统一主动探测 API。
+
+### Bug Fixes
+
+- **fingers**: CyberHub 平台使用 `xray` tag 标记模板，但 SDK 仅识别 `source1` tag，导致 5400+ xray 模板全部错误路由到 fingerprinthub 引擎。现在同时支持 `source1` 和 `xray` 两个路由 tag
+- **neutron**: 转换后的 xray 多步模板在中间 request 上带有 `internal-matchers: true` 标志，但 neutron 的 `Request` 结构体无此字段，YAML 反序列化时被静默丢弃。中间 request 的通用 word matcher（如 `location.href`）被当作正常 matcher 执行，导致大量误报。新增 `InternalMatchers bool` 字段，当为 true 时 matcher 仍执行（保证 extractor 和 req-condition 数据正常），但不上报 `Matched=true`
+
+### New Features
+
+- **fingers**: 新增 `Engine.ActiveMatch(baseURL, level, transport)` 统一主动探测 API。调用方只需提供 URL、探测级别和自定义 `http.RoundTripper`，内部自动调度 native fingers、fingerprinthub、xray 三个引擎的 `HTTPActiveMatch`，无需感知底层引擎差异。内部 `scanHTTPTarget` 已重构为委托调用此 API
+
+### Dependencies
+
+- neutron `e112381` → `1a0a5a8`（internal-matchers 支持）
+
 ## v0.3.0 (2026-06-11)
 
 本版本包含 **Breaking Changes**。核心变更：集成 proton 敏感信息扫描引擎，neutron 新增 SSL/TLS 协议和 JSON/XPath 匹配能力，全引擎 API 统一重命名。
