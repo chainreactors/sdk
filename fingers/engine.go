@@ -464,6 +464,77 @@ func (e *Engine) MatchHTTP(resp *http.Response) (types.Frameworks, error) {
 	return e.engine.DetectContent(data)
 }
 
+// ActiveMatch 对单个目标执行所有引擎的主动指纹探测。
+// 调用方只需提供 baseURL、探测级别和自定义 RoundTripper，无需感知底层引擎。
+// 内部自动调度 native fingers、fingerprinthub、xray 三个引擎的 HTTPActiveMatch。
+func (e *Engine) ActiveMatch(baseURL string, level int, transport http.RoundTripper) []*types.ServiceResult {
+	if e.engine == nil || transport == nil {
+		return nil
+	}
+
+	var results []*types.ServiceResult
+
+	// 1. native fingers 引擎 — 通过 Sender 回调发包
+	if fEngine := e.engine.Fingers(); fEngine != nil {
+		client := &http.Client{Transport: transport}
+		sender := fingersEngine.Sender(func(data []byte) ([]byte, bool) {
+			sendPath := string(data)
+			if sendPath == "" {
+				sendPath = "/"
+			}
+			fullURL := strings.TrimSuffix(baseURL, "/") + sendPath
+
+			req, err := http.NewRequest(http.MethodGet, fullURL, nil)
+			if err != nil {
+				return nil, false
+			}
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				return nil, false
+			}
+			defer resp.Body.Close()
+
+			return httputils.ReadRaw(resp), true
+		})
+
+		for _, finger := range fEngine.HTTPFingers {
+			frame, vuln, ok := finger.ActiveMatch(level, sender)
+			if ok && frame != nil {
+				results = append(results, &types.ServiceResult{
+					Framework: frame,
+					Vuln:      vuln,
+				})
+			}
+		}
+	}
+
+	// 2. fingerprinthub / xray 模板引擎 — 共享同一个 Transport
+	activeCallback := func(frame *common.Framework, vuln *common.Vuln) {
+		if frame != nil {
+			results = append(results, &types.ServiceResult{
+				Framework: frame,
+				Vuln:      vuln,
+			})
+		}
+	}
+
+	if fpHub := e.engine.FingerPrintHub(); fpHub != nil {
+		safeHTTPActiveMatch("fingerprinthub", func() {
+			fpHub.HTTPActiveMatch(baseURL, level, transport, activeCallback)
+		})
+	}
+
+	if xrayEng := e.engine.Xray(); xrayEng != nil {
+		safeHTTPActiveMatch("xray", func() {
+			xrayEng.HTTPActiveMatch(baseURL, level, transport, activeCallback)
+		})
+	}
+
+	return results
+}
+
 // HTTPMatch HTTP/HTTPS 主动探测指纹识别（批量同步版本）
 // 参数:
 //   - ctx: 上下文（包含 timeout、level 等配置）
@@ -503,67 +574,14 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 	if parsedURL.Port != "" && parsedURL.Port != "80" && parsedURL.Port != "443" {
 		baseURL += ":" + parsedURL.Port
 	}
+
 	client := ctx.GetClient()
-
-	// 1. 原生 fingers 引擎
-	if fEngine := e.engine.Fingers(); fEngine != nil {
-		sender := fingersEngine.Sender(func(data []byte) ([]byte, bool) {
-			sendPath := string(data)
-			fullPath := pathJoin(parsedURL.Path, sendPath)
-			fullURL := baseURL + fullPath
-
-			req, err := http.NewRequest(http.MethodGet, fullURL, nil)
-			if err != nil {
-				return nil, false
-			}
-			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-
-			resp, err := client.Do(req)
-			if err != nil {
-				return nil, false
-			}
-			defer resp.Body.Close()
-
-			return httputils.ReadRaw(resp), true
-		})
-
-		for _, finger := range fEngine.HTTPFingers {
-			frame, vuln, ok := finger.ActiveMatch(level, sender)
-			if ok && frame != nil {
-				result.Results = append(result.Results, &types.ServiceResult{
-					Framework: frame,
-					Vuln:      vuln,
-				})
-			}
-		}
-	}
-
-	// 2. fingerprinthub / xray 模板引擎（共享同一个 Transport）
 	transport := client.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
-	activeCallback := func(frame *common.Framework, vuln *common.Vuln) {
-		if frame != nil {
-			result.Results = append(result.Results, &types.ServiceResult{
-				Framework: frame,
-				Vuln:      vuln,
-			})
-		}
-	}
 
-	if fpHub := e.engine.FingerPrintHub(); fpHub != nil {
-		safeHTTPActiveMatch("fingerprinthub", func() {
-			fpHub.HTTPActiveMatch(baseURL, level, transport, activeCallback)
-		})
-	}
-
-	if xrayEng := e.engine.Xray(); xrayEng != nil {
-		safeHTTPActiveMatch("xray", func() {
-			xrayEng.HTTPActiveMatch(baseURL, level, transport, activeCallback)
-		})
-	}
-
+	result.Results = e.ActiveMatch(baseURL, level, transport)
 	return result
 }
 
