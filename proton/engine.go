@@ -2,6 +2,7 @@ package proton
 
 import (
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -90,8 +91,6 @@ func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Resul
 	}
 
 	switch t := task.(type) {
-	case *ScanTask:
-		return e.executeScan(runCtx, t)
 	case *ScanDataTask:
 		return e.executeScanData(runCtx, t)
 	default:
@@ -103,19 +102,8 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-// ========================================
-// Convenience API
-// ========================================
-
-func (e *Engine) Scan(ctx *Context, target string) ([]*Finding, error) {
-	return e.collect(e.ScanStream(ctx, target))
-}
-
-func (e *Engine) ScanStream(ctx *Context, target string) (<-chan *Finding, error) {
-	return e.typedStream(ctx, NewScanTask(target))
-}
-
-func (e *Engine) ScanData(data []byte, filePath string) []Finding {
+// ScanData 对内存数据执行敏感信息匹配，label 用于标记数据来源（如文件名）。
+func (e *Engine) ScanData(data []byte, label string) []Finding {
 	if !e.inited {
 		if err := e.init(); err != nil {
 			return nil
@@ -126,53 +114,38 @@ func (e *Engine) ScanData(data []byte, filePath string) []Finding {
 	}
 	var findings []Finding
 	for _, group := range e.scanner.Groups {
-		findings = append(findings, e.scanner.ScanData(data, filePath, group)...)
+		findings = append(findings, e.scanner.ScanData(data, label, group)...)
 	}
 	return findings
 }
 
-// ========================================
-// Internal execution
-// ========================================
-
-func (e *Engine) executeScan(ctx *Context, task *ScanTask) (<-chan types.Result, error) {
-	if e.capacity != nil {
-		if err := e.capacity.Acquire(ctx.Context(), 1); err != nil {
-			return nil, err
+// ScanBlock 对二进制数据块执行滑动窗口匹配（适用于进程内存、网络流等非文本数据）。
+func (e *Engine) ScanBlock(data []byte, label string) []Finding {
+	if !e.inited {
+		if err := e.init(); err != nil {
+			return nil
 		}
 	}
+	if e.scanner == nil || len(e.scanner.Groups) == 0 {
+		return nil
+	}
+	var findings []Finding
+	for _, group := range e.scanner.Groups {
+		findings = append(findings, e.scanner.ScanBlock(data, label, group)...)
+	}
+	return findings
+}
 
-	started := time.Now()
-	resultCh := make(chan types.Result, 100)
+// NewLineWriter 返回流式文本扫描器（io.WriteCloser）。
+// 写入的数据按行缓冲，每行完成时自动匹配，Close 时 flush 剩余数据。
+func (e *Engine) NewLineWriter(label string, callback func(Finding)) io.WriteCloser {
+	return e.scanner.NewLineWriter(label, callback)
+}
 
-	go func() {
-		defer close(resultCh)
-		if e.capacity != nil {
-			defer e.capacity.Release(1)
-		}
-
-		var findingCount int64
-		e.scanner.Scan(task.Target, func(f Finding) {
-			findingCount++
-			select {
-			case resultCh <- types.NewResult(true, nil, &f):
-			case <-ctx.Context().Done():
-				return
-			}
-		})
-
-		ctx.emitStats(types.Stats{
-			Engine:   e.Name(),
-			Task:     task.Type(),
-			Targets:  1,
-			Tasks:    e.scanner.Stats.Files,
-			Requests: e.scanner.Stats.Files,
-			Results:  findingCount,
-			Duration: time.Since(started),
-		})
-	}()
-
-	return resultCh, nil
+// NewBlockWriter 返回流式二进制扫描器（io.WriteCloser）。
+// 写入的数据以滑动窗口方式匹配，适用于进程内存、网络流等非文本数据。
+func (e *Engine) NewBlockWriter(label string, callback func(Finding)) io.WriteCloser {
+	return e.scanner.NewBlockWriter(label, callback)
 }
 
 func (e *Engine) executeScanData(ctx *Context, task *ScanDataTask) (<-chan types.Result, error) {
@@ -193,7 +166,7 @@ func (e *Engine) executeScanData(ctx *Context, task *ScanDataTask) (<-chan types
 
 		var findingCount int64
 		for _, group := range e.scanner.Groups {
-			findings := e.scanner.ScanData(task.Data, task.FilePath, group)
+			findings := e.scanner.ScanData(task.Data, task.Label, group)
 			for i := range findings {
 				findingCount++
 				select {
@@ -205,42 +178,13 @@ func (e *Engine) executeScanData(ctx *Context, task *ScanDataTask) (<-chan types
 		}
 
 		ctx.emitStats(types.Stats{
-			Engine:   e.Name(),
-			Task:     task.Type(),
-			Targets:  1,
-			Results:  findingCount,
+			Engine:  e.Name(),
+			Task:    task.Type(),
+			Targets: 1,
+			Results: findingCount,
 			Duration: time.Since(started),
 		})
 	}()
 
 	return resultCh, nil
-}
-
-func (e *Engine) typedStream(ctx *Context, task types.Task) (<-chan *Finding, error) {
-	resultCh, err := e.Execute(ctx, task)
-	if err != nil {
-		return nil, err
-	}
-
-	findingCh := make(chan *Finding, 100)
-	go func() {
-		defer close(findingCh)
-		for result := range resultCh {
-			if data, ok := types.ResultData[*Finding](result); result.Success() && ok && data != nil {
-				findingCh <- data
-			}
-		}
-	}()
-	return findingCh, nil
-}
-
-func (e *Engine) collect(ch <-chan *Finding, err error) ([]*Finding, error) {
-	if err != nil {
-		return nil, err
-	}
-	var findings []*Finding
-	for f := range ch {
-		findings = append(findings, f)
-	}
-	return findings, nil
 }

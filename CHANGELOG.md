@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.3.0 (2026-06-11)
+
+### Breaking Changes
+
+- **gogo/spray/zombie**: `GogoEngine`、`SprayEngine` 统一重命名为 `Engine`；`NewEngine` 签名统一返回 `(*Engine, error)`
+- **proton**: `ProtonFinding` 重命名为 `ProtonResult`
+- **types**: 移除 `pkg/types/registry.go`，各引擎 init 注册逻辑移除
+
+### Features
+
+- **proton**: 集成 proton 文件扫描引擎到 SDK，支持本地文件敏感信息扫描（密码、密钥、凭证等）
+- **neutron**: 新增 JSON/XPath extractor 和 matcher 支持（通过 `neutron/operators/full` 引入 gojq/antchfx）
+- **neutron**: 新增 SSL/TLS 探测协议、RootURL 挂载、DSL cert_* 函数、动态协议注册
+- **types**: 新增 `ReviewStatus` 常量替代审核状态 magic string
+
+### Refactor
+
+- 移除未使用代码和冗余抽象（-284 行）
+- 各引擎 init.go 注册逻辑移除，简化初始化流程
+- proton 类型统一收归 `pkg/types`，与其他引擎风格一致
+
+### Tests
+
+- 新增 neutron SSL/RootURL/DSL/registrar 测试
+- 新增 JSON/XPath YAML 解析测试
+- proton engine 集成测试（734 行）
+
+### Dependencies
+
+- fingers `v1.2.1` → `v1.2.2-0.2026..f5c144e`（remote 依赖更新）
+- neutron `c816917` → `e112381`（SSL 协议 + JSON/XPath operators/full + Go 1.11 兼容修复）
+- proton `03df34b` → `89c10c8`（FFI export + pure matching SDK + Template.Execute bugfix）
+- zombie `705f548` → `bdd2cdf`（ProxyDial 注入 + 依赖更新）
+
 ## v0.2.4 (2026-06-08)
 
 ### Features

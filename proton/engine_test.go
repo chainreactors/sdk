@@ -3,7 +3,6 @@ package proton
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -99,21 +98,6 @@ const tmplArrayYAML = `
           group: 1
 `
 
-const tmplExtFilter = `
-id: yaml-only
-info:
-  name: YAML Only Check
-  severity: info
-file:
-  - extensions:
-      - .yaml
-      - .yml
-    matchers:
-      - type: word
-        words:
-          - "secret"
-`
-
 const tmplRegexMatcher = `
 id: regex-matcher
 info:
@@ -152,27 +136,10 @@ file:
 // 辅助函数
 // ========================================
 
-func writeTempDir(t *testing.T, files map[string]string) string {
-	t.Helper()
-	dir := t.TempDir()
-	for name, content := range files {
-		sub := filepath.Dir(name)
-		if sub != "." {
-			if err := os.MkdirAll(filepath.Join(dir, sub), 0755); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return dir
-}
-
 func writeTempTemplate(t *testing.T, yamlContent string) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "template.yaml")
+	path := dir + "/template.yaml"
 	if err := os.WriteFile(path, []byte(yamlContent), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +150,7 @@ func writeTempTemplates(t *testing.T, templates map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
 	for name, content := range templates {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+		if err := os.WriteFile(dir+"/"+name, []byte(content), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -199,7 +166,7 @@ func mustEngine(t *testing.T, cfg *Config) *Engine {
 	return eng
 }
 
-func sortFindings(findings []*Finding) {
+func sortFindings(findings []Finding) {
 	sort.Slice(findings, func(i, j int) bool {
 		if findings[i].TemplateID != findings[j].TemplateID {
 			return findings[i].TemplateID < findings[j].TemplateID
@@ -214,24 +181,14 @@ func sortFindings(findings []*Finding) {
 
 func TestEngine_LoadFromTemplatePath(t *testing.T) {
 	tmplPath := writeTempTemplate(t, tmplPrivateKey)
-	dir := writeTempDir(t, map[string]string{
-		"secret.pem": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAK\n-----END RSA PRIVATE KEY-----\n",
-		"clean.txt":  "nothing here\n",
-	})
-
 	eng := mustEngine(t, NewConfig().WithTemplatePaths(tmplPath))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+
+	findings := eng.ScanData([]byte("-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAK\n-----END RSA PRIVATE KEY-----\n"), "secret.pem")
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
 	if findings[0].TemplateID != "private-key-detect" {
 		t.Fatalf("unexpected template ID: %s", findings[0].TemplateID)
-	}
-	if filepath.Base(findings[0].FilePath) != "secret.pem" {
-		t.Fatalf("unexpected file: %s", findings[0].FilePath)
 	}
 }
 
@@ -240,15 +197,9 @@ func TestEngine_LoadFromTemplateDir(t *testing.T) {
 		"privkey.yaml":  tmplPrivateKey,
 		"password.yaml": tmplPasswordExtract,
 	})
-	dir := writeTempDir(t, map[string]string{
-		"config.env": "password = hunter2\n-----BEGIN PRIVATE KEY-----\n",
-	})
 
 	eng := mustEngine(t, NewConfig().WithTemplatePaths(tmplDir))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+	findings := eng.ScanData([]byte("password = hunter2\n-----BEGIN PRIVATE KEY-----\n"), "config.env")
 	sortFindings(findings)
 
 	if len(findings) != 2 {
@@ -262,15 +213,8 @@ func TestEngine_LoadFromTemplateDir(t *testing.T) {
 }
 
 func TestEngine_LoadFromTemplateData(t *testing.T) {
-	dir := writeTempDir(t, map[string]string{
-		"app.conf": "SECRET_TOKEN=abc123\napi_key = my_secret_key_999\n",
-	})
-
 	eng := mustEngine(t, NewConfig().WithTemplateData([]byte(tmplArrayYAML)))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+	findings := eng.ScanData([]byte("SECRET_TOKEN=abc123\napi_key = my_secret_key_999\n"), "app.conf")
 	sortFindings(findings)
 
 	if len(findings) != 2 {
@@ -295,10 +239,6 @@ func TestEngine_LoadFromTemplateData(t *testing.T) {
 }
 
 func TestEngine_WithPrecompiledRules(t *testing.T) {
-	dir := writeTempDir(t, map[string]string{
-		"test.txt": "PRIVATE KEY found\n",
-	})
-
 	tmplPath := writeTempTemplate(t, tmplPrivateKey)
 	rules, err := NewConfig().WithTemplatePaths(tmplPath).Load()
 	if err != nil {
@@ -306,10 +246,7 @@ func TestEngine_WithPrecompiledRules(t *testing.T) {
 	}
 
 	eng := mustEngine(t, NewConfig().WithRules(rules...))
-	findings, scanErr := eng.Scan(NewContext(), dir)
-	if scanErr != nil {
-		t.Fatalf("scan: %v", scanErr)
-	}
+	findings := eng.ScanData([]byte("PRIVATE KEY found\n"), "test.txt")
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
@@ -320,57 +257,37 @@ func TestEngine_WithPrecompiledRules(t *testing.T) {
 // ========================================
 
 func TestEngine_WordMatcher_AND(t *testing.T) {
-	tmplPath := writeTempTemplate(t, tmplANDCondition)
-	dir := writeTempDir(t, map[string]string{
-		"both.txt":    "password=secret123\nusername=admin\n",
-		"partial.txt": "password=secret123\nno user here\n",
-	})
+	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplANDCondition)))
 
-	eng := mustEngine(t, NewConfig().WithTemplatePaths(tmplPath))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+	findings := eng.ScanData([]byte("password=secret123\nusername=admin\n"), "both.txt")
 	if len(findings) != 1 {
 		t.Fatalf("AND condition: expected 1 finding, got %d", len(findings))
 	}
-	if !pathContains(findings[0].FilePath, "both.txt") {
-		t.Fatalf("expected both.txt, got %s", findings[0].FilePath)
+
+	findings = eng.ScanData([]byte("password=secret123\nno user here\n"), "partial.txt")
+	if len(findings) != 0 {
+		t.Fatalf("AND condition partial: expected 0 findings, got %d", len(findings))
 	}
 }
 
 func TestEngine_RegexMatcher(t *testing.T) {
-	tmplPath := writeTempTemplate(t, tmplRegexMatcher)
-	dir := writeTempDir(t, map[string]string{
-		"match.txt":   "token = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4'\n",
-		"nomatch.txt": "token = short\n",
-	})
+	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplRegexMatcher)))
 
-	eng := mustEngine(t, NewConfig().WithTemplatePaths(tmplPath))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+	findings := eng.ScanData([]byte("token = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4'\n"), "match.txt")
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
-	if !pathContains(findings[0].FilePath, "match.txt") {
-		t.Fatalf("expected match.txt, got %s", findings[0].FilePath)
+
+	findings = eng.ScanData([]byte("token = short\n"), "nomatch.txt")
+	if len(findings) != 0 {
+		t.Fatalf("expected 0 findings, got %d", len(findings))
 	}
 }
 
 func TestEngine_AWSKeyDetection(t *testing.T) {
-	tmplPath := writeTempTemplate(t, tmplAWSKey)
-	dir := writeTempDir(t, map[string]string{
-		"credentials": "aws_access_key_id = AKIAIOSFODNN7EXAMPLE\n",
-		"clean.txt":   "no keys here\n",
-	})
+	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplAWSKey)))
 
-	eng := mustEngine(t, NewConfig().WithTemplatePaths(tmplPath))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+	findings := eng.ScanData([]byte("aws_access_key_id = AKIAIOSFODNN7EXAMPLE\n"), "credentials")
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
@@ -392,43 +309,10 @@ func TestEngine_AWSKeyDetection(t *testing.T) {
 	}
 }
 
-func TestEngine_ExtensionFilter(t *testing.T) {
-	tmplPath := writeTempTemplate(t, tmplExtFilter)
-	dir := writeTempDir(t, map[string]string{
-		"config.yaml": "secret: my_token\n",
-		"config.yml":  "secret: another_token\n",
-		"config.json": "secret: should_not_match\n",
-		"config.txt":  "secret: should_not_match\n",
-	})
-
-	eng := mustEngine(t, NewConfig().WithTemplatePaths(tmplPath))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
-	if len(findings) != 2 {
-		t.Fatalf("expected 2 findings (yaml + yml only), got %d", len(findings))
-	}
-	for _, f := range findings {
-		base := filepath.Base(f.FilePath)
-		if base != "config.yaml" && base != "config.yml" {
-			t.Fatalf("unexpected file matched: %s", base)
-		}
-	}
-}
-
 func TestEngine_NoFindings(t *testing.T) {
-	tmplPath := writeTempTemplate(t, tmplPrivateKey)
-	dir := writeTempDir(t, map[string]string{
-		"clean1.txt": "just regular text\n",
-		"clean2.txt": "nothing secret here\n",
-	})
+	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPrivateKey)))
 
-	eng := mustEngine(t, NewConfig().WithTemplatePaths(tmplPath))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+	findings := eng.ScanData([]byte("just regular text\n"), "clean.txt")
 	if len(findings) != 0 {
 		t.Fatalf("expected 0 findings, got %d", len(findings))
 	}
@@ -436,79 +320,16 @@ func TestEngine_NoFindings(t *testing.T) {
 
 func TestEngine_EmptyTemplates(t *testing.T) {
 	eng := mustEngine(t, NewConfig())
-	dir := writeTempDir(t, map[string]string{
-		"secret.txt": "PRIVATE KEY\npassword=test\n",
-	})
 
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+	findings := eng.ScanData([]byte("PRIVATE KEY\npassword=test\n"), "secret.txt")
 	if len(findings) != 0 {
 		t.Fatalf("expected 0 findings with no templates, got %d", len(findings))
 	}
 }
 
 // ========================================
-// ScanData 内存扫描
-// ========================================
-
-func TestEngine_ScanData(t *testing.T) {
-	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPasswordExtract)))
-
-	data := []byte("database_password = s3cret_v4lue\nother_line\n")
-	findings := eng.ScanData(data, "virtual/config.env")
-
-	if len(findings) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(findings))
-	}
-	if findings[0].Result.OutputExtracts[0] != "s3cret_v4lue" {
-		t.Fatalf("unexpected extract: %s", findings[0].Result.OutputExtracts[0])
-	}
-}
-
-func TestEngine_ScanData_NoMatch(t *testing.T) {
-	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPrivateKey)))
-
-	findings := eng.ScanData([]byte("nothing interesting here\n"), "virtual/clean.txt")
-	if len(findings) != 0 {
-		t.Fatalf("expected 0 findings, got %d", len(findings))
-	}
-}
-
-// ========================================
 // Execute 接口 (types.Engine)
 // ========================================
-
-func TestEngine_Execute_ScanTask(t *testing.T) {
-	dir := writeTempDir(t, map[string]string{
-		"key.pem": "-----BEGIN PRIVATE KEY-----\ndata\n-----END PRIVATE KEY-----\n",
-	})
-
-	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPrivateKey)))
-	resultCh, err := eng.Execute(NewContext(), NewScanTask(dir))
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-
-	var count int
-	for r := range resultCh {
-		if !r.Success() {
-			t.Fatalf("unexpected error: %v", r.Error())
-		}
-		f, ok := r.Data().(*Finding)
-		if !ok {
-			t.Fatalf("unexpected data type: %T", r.Data())
-		}
-		if f.TemplateID != "private-key-detect" {
-			t.Fatalf("unexpected template: %s", f.TemplateID)
-		}
-		count++
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 result, got %d", count)
-	}
-}
 
 func TestEngine_Execute_ScanDataTask(t *testing.T) {
 	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPasswordExtract)))
@@ -532,37 +353,11 @@ func TestEngine_Execute_ScanDataTask(t *testing.T) {
 func TestEngine_Execute_ValidationError(t *testing.T) {
 	eng := mustEngine(t, NewConfig())
 
-	if _, err := eng.Execute(NewContext(), NewScanTask("")); err == nil {
-		t.Fatal("expected validation error for empty target")
-	}
 	if _, err := eng.Execute(NewContext(), NewScanDataTask(nil, "test.txt")); err == nil {
 		t.Fatal("expected validation error for empty data")
 	}
-}
-
-// ========================================
-// ScanStream 流式 API
-// ========================================
-
-func TestEngine_ScanStream(t *testing.T) {
-	dir := writeTempDir(t, map[string]string{
-		"a.txt": "PRIVATE KEY\n",
-		"b.txt": "PRIVATE KEY\n",
-		"c.txt": "nothing\n",
-	})
-
-	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPrivateKey)))
-	ch, err := eng.ScanStream(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan stream: %v", err)
-	}
-
-	var count int
-	for range ch {
-		count++
-	}
-	if count != 2 {
-		t.Fatalf("expected 2 streamed findings, got %d", count)
+	if _, err := eng.Execute(NewContext(), NewScanDataTask([]byte("data"), "")); err == nil {
+		t.Fatal("expected validation error for empty label")
 	}
 }
 
@@ -571,18 +366,12 @@ func TestEngine_ScanStream(t *testing.T) {
 // ========================================
 
 func TestEngine_ContextCancel(t *testing.T) {
-	dir := writeTempDir(t, map[string]string{
-		"a.txt": "PRIVATE KEY\n",
-		"b.txt": "PRIVATE KEY\n",
-		"c.txt": "PRIVATE KEY\n",
-	})
-
 	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPrivateKey)))
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancel immediately
+	cancel()
 
-	resultCh, err := eng.Execute(NewContext().WithContext(ctx), NewScanTask(dir))
+	resultCh, err := eng.Execute(NewContext().WithContext(ctx), NewScanDataTask([]byte("PRIVATE KEY\n"), "test.txt"))
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -590,7 +379,6 @@ func TestEngine_ContextCancel(t *testing.T) {
 	for range resultCh {
 		count++
 	}
-	// cancelled context may produce 0 or partial results — just must not hang
 	t.Logf("cancelled scan produced %d results (expected 0 or partial)", count)
 }
 
@@ -599,10 +387,6 @@ func TestEngine_ContextCancel(t *testing.T) {
 // ========================================
 
 func TestEngine_StatsCallback(t *testing.T) {
-	dir := writeTempDir(t, map[string]string{
-		"secret.txt": "PRIVATE KEY\n",
-	})
-
 	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPrivateKey)))
 
 	var called int32
@@ -613,12 +397,16 @@ func TestEngine_StatsCallback(t *testing.T) {
 		}
 	})
 
-	findings, err := eng.Scan(ctx, dir)
+	resultCh, err := eng.Execute(ctx, NewScanDataTask([]byte("PRIVATE KEY\n"), "secret.txt"))
 	if err != nil {
-		t.Fatalf("scan: %v", err)
+		t.Fatalf("execute: %v", err)
 	}
-	if len(findings) != 1 {
-		t.Fatalf("expected 1 finding, got %d", len(findings))
+	var count int
+	for range resultCh {
+		count++
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 finding, got %d", count)
 	}
 	if atomic.LoadInt32(&called) == 0 {
 		t.Fatal("stats callback was not invoked")
@@ -635,15 +423,9 @@ func TestEngine_ConfigFilter_Tags(t *testing.T) {
 		"aws.yaml":      tmplAWSKey,
 		"password.yaml": tmplPasswordExtract,
 	})
-	dir := writeTempDir(t, map[string]string{
-		"all.txt": "PRIVATE KEY\nAKIAIOSFODNN7EXAMPLE\npassword = test\n",
-	})
 
 	eng := mustEngine(t, NewConfig().WithTemplatePaths(tmplDir).WithTags("cloud"))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+	findings := eng.ScanData([]byte("PRIVATE KEY\nAKIAIOSFODNN7EXAMPLE\npassword = test\n"), "all.txt")
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding (only cloud tag), got %d", len(findings))
 	}
@@ -657,15 +439,9 @@ func TestEngine_ConfigFilter_ExcludeTags(t *testing.T) {
 		"privkey.yaml": tmplPrivateKey,
 		"aws.yaml":     tmplAWSKey,
 	})
-	dir := writeTempDir(t, map[string]string{
-		"all.txt": "PRIVATE KEY\nAKIAIOSFODNN7EXAMPLE\n",
-	})
 
 	eng := mustEngine(t, NewConfig().WithTemplatePaths(tmplDir).WithExcludeTags("cloud"))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+	findings := eng.ScanData([]byte("PRIVATE KEY\nAKIAIOSFODNN7EXAMPLE\n"), "all.txt")
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding (cloud excluded), got %d", len(findings))
 	}
@@ -679,15 +455,9 @@ func TestEngine_ConfigFilter_IDs(t *testing.T) {
 		"privkey.yaml":  tmplPrivateKey,
 		"password.yaml": tmplPasswordExtract,
 	})
-	dir := writeTempDir(t, map[string]string{
-		"all.txt": "PRIVATE KEY\npassword = test\n",
-	})
 
 	eng := mustEngine(t, NewConfig().WithTemplatePaths(tmplDir).WithIDs("password-extract"))
-	findings, err := eng.Scan(NewContext(), dir)
-	if err != nil {
-		t.Fatalf("scan: %v", err)
-	}
+	findings := eng.ScanData([]byte("PRIVATE KEY\npassword = test\n"), "all.txt")
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
@@ -707,28 +477,70 @@ func TestEngine_Name(t *testing.T) {
 	}
 }
 
-func TestEngine_Scanner_Stats(t *testing.T) {
-	dir := writeTempDir(t, map[string]string{
-		"a.txt": "PRIVATE KEY\n",
-		"b.txt": "nothing\n",
-	})
-
+func TestEngine_ScanBlock(t *testing.T) {
 	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPrivateKey)))
-	_, _ = eng.Scan(NewContext(), dir)
 
-	s := eng.Scanner()
-	if s == nil {
-		t.Fatal("Scanner() returned nil after Init")
-	}
-	if s.Stats.Files == 0 {
-		t.Fatal("expected Stats.Files > 0 after scan")
+	findings := eng.ScanBlock([]byte("PRIVATE KEY"), "mem:pid1234")
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
 }
 
 // ========================================
-// helpers
+// 流式接口
 // ========================================
 
-func pathContains(path, sub string) bool {
-	return filepath.Base(path) == sub
+func TestEngine_NewLineWriter(t *testing.T) {
+	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPasswordExtract)))
+
+	var findings []Finding
+	w := eng.NewLineWriter("stream:env", func(f Finding) {
+		findings = append(findings, f)
+	})
+
+	w.Write([]byte("some_var=hello\n"))
+	w.Write([]byte("database_password = s3cret\n"))
+	w.Write([]byte("other_var=world\n"))
+	w.Close()
+
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	if findings[0].Result.OutputExtracts[0] != "s3cret" {
+		t.Fatalf("unexpected extract: %s", findings[0].Result.OutputExtracts[0])
+	}
+}
+
+func TestEngine_NewLineWriter_SplitChunks(t *testing.T) {
+	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPrivateKey)))
+
+	var findings []Finding
+	w := eng.NewLineWriter("stream:chunked", func(f Finding) {
+		findings = append(findings, f)
+	})
+
+	// 一行被拆成两个 chunk 写入
+	w.Write([]byte("-----BEGIN PRIV"))
+	w.Write([]byte("ATE KEY-----\n"))
+	w.Close()
+
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding from split chunks, got %d", len(findings))
+	}
+}
+
+func TestEngine_NewBlockWriter(t *testing.T) {
+	eng := mustEngine(t, NewConfig().WithTemplatePaths(writeTempTemplate(t, tmplPrivateKey)))
+
+	var findings []Finding
+	w := eng.NewBlockWriter("mem:pid5678", func(f Finding) {
+		findings = append(findings, f)
+	})
+
+	w.Write([]byte("some binary data PRIVATE KEY more binary data"))
+	w.Close()
+
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
 }

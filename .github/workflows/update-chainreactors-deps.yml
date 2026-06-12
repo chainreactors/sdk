@@ -28,8 +28,9 @@ jobs:
             github.com/chainreactors/fingers@master \
             github.com/chainreactors/gogo/v2@master \
             github.com/chainreactors/logs@master \
-            github.com/chainreactors/neutron@codex/remove-files-dependency \
-            github.com/chainreactors/parsers@codex/remove-files-dependency \
+            github.com/chainreactors/neutron@master \
+            github.com/chainreactors/parsers@master \
+            github.com/chainreactors/proton@master \
             github.com/chainreactors/proxyclient@master \
             github.com/chainreactors/spray@master \
             github.com/chainreactors/utils@master \

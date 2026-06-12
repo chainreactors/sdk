@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -10,18 +11,17 @@ import (
 )
 
 var (
-	target       = flag.String("target", "", "Target directory or file to scan")
+	input        = flag.String("input", "", "File to scan (use - for stdin)")
 	templatePath = flag.String("templates", "", "Path to template files or directory")
 	category     = flag.String("category", "keys", "Template category (keys, spray)")
-	severity     = flag.String("severity", "", "Filter by severity (comma-separated)")
 	tags         = flag.String("tags", "", "Filter by tags (comma-separated)")
 )
 
 func main() {
 	flag.Parse()
 
-	if *target == "" {
-		fmt.Println("Usage: proton -target <path> [-templates <path>] [-category <name>]")
+	if *input == "" {
+		fmt.Println("Usage: proton -input <file|-> [-templates <path>] [-category <name>]")
 		os.Exit(1)
 	}
 
@@ -43,12 +43,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := proton.NewContext()
-	findings, err := engine.Scan(ctx, *target)
+	var data []byte
+	label := *input
+	if *input == "-" {
+		data, err = io.ReadAll(os.Stdin)
+		label = "stdin"
+	} else {
+		data, err = os.ReadFile(*input)
+	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error scanning: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
 		os.Exit(1)
 	}
+
+	findings := engine.ScanData(data, label)
 
 	for _, f := range findings {
 		sev := f.Severity
@@ -66,7 +74,5 @@ func main() {
 		}
 	}
 
-	stats := engine.Scanner().Stats
-	fmt.Printf("\nScan complete: %d files (%s), %d findings\n",
-		stats.Files, stats.HumanBytes(), stats.Findings)
+	fmt.Printf("\nScan complete: %d findings\n", len(findings))
 }

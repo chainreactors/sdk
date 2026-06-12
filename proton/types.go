@@ -58,37 +58,16 @@ func (c *Context) emitStats(stats types.Stats) {
 }
 
 // ========================================
-// Task - ScanTask
-// ========================================
-
-type ScanTask struct {
-	Target string
-}
-
-func NewScanTask(target string) *ScanTask {
-	return &ScanTask{Target: target}
-}
-
-func (t *ScanTask) Type() string { return "scan" }
-
-func (t *ScanTask) Validate() error {
-	if t.Target == "" {
-		return fmt.Errorf("target cannot be empty")
-	}
-	return nil
-}
-
-// ========================================
 // Task - ScanDataTask
 // ========================================
 
 type ScanDataTask struct {
-	Data     []byte
-	FilePath string
+	Data  []byte
+	Label string
 }
 
-func NewScanDataTask(data []byte, filePath string) *ScanDataTask {
-	return &ScanDataTask{Data: data, FilePath: filePath}
+func NewScanDataTask(data []byte, label string) *ScanDataTask {
+	return &ScanDataTask{Data: data, Label: label}
 }
 
 func (t *ScanDataTask) Type() string { return "scan-data" }
@@ -97,8 +76,8 @@ func (t *ScanDataTask) Validate() error {
 	if len(t.Data) == 0 {
 		return fmt.Errorf("data cannot be empty")
 	}
-	if t.FilePath == "" {
-		return fmt.Errorf("file path cannot be empty")
+	if t.Label == "" {
+		return fmt.Errorf("label cannot be empty")
 	}
 	return nil
 }
