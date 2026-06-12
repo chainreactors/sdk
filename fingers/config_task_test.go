@@ -106,14 +106,17 @@ http:
 	}
 }
 
-func TestHasTag(t *testing.T) {
-	if hasTag(&types.Finger{Tags: []string{"xray"}}, "source1") {
-		t.Fatal("xray tag should not match source1")
+func TestHasAnyTag(t *testing.T) {
+	if hasAnyTag(&types.Finger{Tags: []string{"unrelated"}}, xrayRouteTags) {
+		t.Fatal("unrelated tag should not match xray route tags")
 	}
-	if !hasTag(&types.Finger{Tags: []string{" source1 "}}, "source1") {
+	if !hasAnyTag(&types.Finger{Tags: []string{" source1 "}}, xrayRouteTags) {
 		t.Fatal("source1 tag with whitespace should match")
 	}
-	if hasTag(nil, "source1") {
+	if !hasAnyTag(&types.Finger{Tags: []string{"xray"}}, xrayRouteTags) {
+		t.Fatal("xray tag should match xray route tags")
+	}
+	if hasAnyTag(nil, xrayRouteTags) {
 		t.Fatal("nil finger should return false")
 	}
 }

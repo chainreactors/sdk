@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const xrayRouteTag = "source1"
+var xrayRouteTags = []string{"source1", "xray"}
 
 // NewConfig 创建默认配置
 func NewConfig() *Config {
@@ -297,7 +297,7 @@ func (f FullFingers) MergeExports(exports []cyberhub.FingerprintExport, useDraft
 		}
 
 		engine := r.Engine
-		if engine == "fingerprinthub" && hasTag(r.Finger, xrayRouteTag) {
+		if engine == "fingerprinthub" && hasAnyTag(r.Finger, xrayRouteTags) {
 			engine = "xray"
 		}
 
@@ -325,13 +325,16 @@ func (f FullFingers) MergeExports(exports []cyberhub.FingerprintExport, useDraft
 	return f
 }
 
-func hasTag(finger *types.Finger, tag string) bool {
+func hasAnyTag(finger *types.Finger, tags []string) bool {
 	if finger == nil {
 		return false
 	}
 	for _, t := range finger.Tags {
-		if strings.EqualFold(strings.TrimSpace(t), tag) {
-			return true
+		trimmed := strings.TrimSpace(t)
+		for _, tag := range tags {
+			if strings.EqualFold(trimmed, tag) {
+				return true
+			}
 		}
 	}
 	return false
