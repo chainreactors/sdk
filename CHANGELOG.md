@@ -21,11 +21,16 @@
 - 各引擎 init.go 注册逻辑移除，简化初始化流程
 - proton 类型统一收归 `pkg/types`，与其他引擎风格一致
 
+### Bug Fixes
+
+- **spray**: 修复 context 取消后 `emitStats` panic 的问题
+
 ### Tests
 
 - 新增 neutron SSL/RootURL/DSL/registrar 测试
 - 新增 JSON/XPath YAML 解析测试
 - proton engine 集成测试（734 行）
+- 新增 spray context cancel panic 复现测试
 
 ### Dependencies
 
