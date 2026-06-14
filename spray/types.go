@@ -110,7 +110,8 @@ func (c *Context) SetStatsHandler(handler func(types.Stats)) *Context {
 }
 
 func (c *Context) emitStats(stats types.Stats) {
-	if c == nil || c.statsHandler == nil || c.ctx.Err() != nil {
+	// ctx 已取消（consumer 已拆掉它的 channel）时跳过统计回调，避免 send on closed channel panic
+	if c == nil || c.statsHandler == nil || c.ctx == nil || c.ctx.Err() != nil {
 		return
 	}
 	c.statsHandler(stats)
