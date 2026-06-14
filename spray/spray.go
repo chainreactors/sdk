@@ -1,7 +1,6 @@
 package spray
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -138,6 +137,9 @@ func (e *Engine) applyInjectedFingers() bool {
 	}
 	pkg.FingerEngine = libEngine
 	pkg.ActivePath = pkg.ActivePath[:0]
+	// 当注入了自定义 fingers 引擎（含 fingerprinthub 等子引擎）时，
+	// 强制开启多引擎指纹识别，确保 CyberHub 的 fingerprinthub 模板被动匹配生效。
+	pkg.EnableAllFingerEngine = true
 	logs.Log.Infof("resources type=fingers source=custom %s", libEngine.String())
 	e.refreshActivePath()
 	return true
@@ -248,14 +250,19 @@ func newResult(success bool, err error, data *types.SprayResult) types.Result {
 	return types.NewResult(success, err, data)
 }
 
-func (e *Engine) handler(ctx context.Context, runner *core.Runner, ch chan types.Result) {
+func (e *Engine) handler(ctx *Context, runner *core.Runner, ch chan types.Result) {
+	var done <-chan struct{}
+	if ctx != nil && ctx.Context() != nil {
+		done = ctx.Context().Done()
+	}
 	// 启动结果处理 goroutine - 处理 OutputCh
 	go func() {
 		for bl := range runner.OutputCh {
+			result := bl.SprayResult
 			select {
-			case ch <- newResult(bl.IsValid, nil, bl.SprayResult):
+			case ch <- newResult(bl.IsValid, nil, result):
 				runner.OutWg.Done()
-			case <-ctx.Done():
+			case <-done:
 				runner.OutWg.Done()
 				continue
 			}
@@ -265,15 +272,55 @@ func (e *Engine) handler(ctx context.Context, runner *core.Runner, ch chan types
 	// 启动结果处理 goroutine - 处理 FuzzyCh
 	go func() {
 		for bl := range runner.FuzzyCh {
+			result := bl.SprayResult
 			select {
-			case ch <- newResult(bl.IsValid, nil, bl.SprayResult):
+			case ch <- newResult(bl.IsValid, nil, result):
 				runner.OutWg.Done()
-			case <-ctx.Done():
+			case <-done:
 				runner.OutWg.Done()
 				continue
 			}
 		}
 	}()
+}
+
+func (e *Engine) mergeActiveFingers(ctx *Context, result *types.SprayResult) *types.SprayResult {
+	if e == nil || e.fingersEngine == nil || result == nil || result.UrlString == "" {
+		return result
+	}
+	if !result.IsValid && result.Status == 0 {
+		return result
+	}
+	fctx := sdkfingers.NewContext().WithLevel(1)
+	if ctx != nil {
+		fctx = fctx.WithContext(ctx.Context())
+		if ctx.opt != nil {
+			if ctx.opt.Timeout > 0 {
+				fctx = fctx.WithTimeout(ctx.opt.Timeout)
+			}
+			if len(ctx.opt.Proxies) > 0 {
+				fctx = fctx.WithProxy(ctx.opt.Proxies[0])
+			}
+		}
+	}
+	matches, err := e.fingersEngine.HTTPMatch(fctx, []string{result.UrlString})
+	if err != nil {
+		return result
+	}
+	if result.Frameworks == nil {
+		result.Frameworks = make(types.Frameworks)
+	}
+	for _, target := range matches {
+		if target == nil {
+			continue
+		}
+		for _, match := range target.Results {
+			if match != nil && match.Framework != nil {
+				result.Frameworks.Add(match.Framework)
+			}
+		}
+	}
+	return result
 }
 
 func (e *Engine) executeCheck(ctx *Context, task *CheckTask) (<-chan types.Result, error) {
@@ -314,6 +361,12 @@ func (e *Engine) execute(ctx *Context, taskType string, urls []string, wordlist 
 		return nil, fmt.Errorf("create runner failed: %v", err)
 	}
 
+	// NewRunner 内部的 Prepare → LoadDynamicFingers 会重建 pkg.FingerEngine
+	// 为只含原生 fingers 的引擎，丢失 fingerprinthub 等子引擎。
+	// 在此处重新注入 SDK 构建的完整多引擎，确保 CyberHub fingerprinthub
+	// 模板在被动匹配阶段生效。
+	e.applyInjectedFingers()
+
 	if wordlist != nil {
 		runner.Wordlist = wordlist
 		runner.Total = len(wordlist)
@@ -341,7 +394,7 @@ func (e *Engine) execute(ctx *Context, taskType string, urls []string, wordlist 
 				Duration: time.Since(started),
 			})
 		}()
-		e.handler(ctx.Context(), runner, ch)
+		e.handler(ctx, runner, ch)
 
 		if runner.IsCheck {
 			runner.RunWithCheck(ctx.Context())

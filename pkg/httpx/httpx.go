@@ -67,5 +67,7 @@ func NewClient(cfg Config) (*http.Client, error) {
 			uc.DialContext = dialer.DialContext
 		}
 	}
-	return utilshttpx.NewHTTPClient(uc), nil
+	client := utilshttpx.NewHTTPClient(uc)
+	wrapProfileTransport(client)
+	return client, nil
 }

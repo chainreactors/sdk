@@ -74,8 +74,7 @@ func (s *DefaultHTTPSender) Send(url string) (*http.Response, error) {
 		return nil, fmt.Errorf("create request failed: %w", err)
 	}
 
-	// 设置默认User-Agent
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	sdkhttpx.ApplyBrowserProfileHeaders(req.Header)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -92,7 +91,7 @@ func (s *DefaultHTTPSender) SendWithMethod(url, method string, body io.Reader) (
 		return nil, fmt.Errorf("create request failed: %w", err)
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	sdkhttpx.ApplyBrowserProfileHeaders(req.Header)
 
 	resp, err := s.client.Do(req)
 	if err != nil {

@@ -1,13 +1,18 @@
 package fingers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 
 	"encoding/json"
 
@@ -477,10 +482,13 @@ func (e *Engine) ActiveMatch(baseURL string, level int, transport http.RoundTrip
 	// 1. native fingers 引擎 — 通过 Sender 回调发包
 	if fEngine := e.engine.Fingers(); fEngine != nil {
 		client := &http.Client{Transport: transport}
-		sender := fingersEngine.Sender(func(data []byte) ([]byte, bool) {
+		sender := cachingSender(fingersEngine.Sender(func(data []byte) ([]byte, bool) {
 			sendPath := string(data)
 			if sendPath == "" {
 				sendPath = "/"
+			}
+			if !strings.HasPrefix(sendPath, "/") {
+				sendPath = "/" + sendPath
 			}
 			fullURL := strings.TrimSuffix(baseURL, "/") + sendPath
 
@@ -488,7 +496,7 @@ func (e *Engine) ActiveMatch(baseURL string, level int, transport http.RoundTrip
 			if err != nil {
 				return nil, false
 			}
-			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+			sdkhttpx.ApplyBrowserProfileHeaders(req.Header)
 
 			resp, err := client.Do(req)
 			if err != nil {
@@ -497,7 +505,7 @@ func (e *Engine) ActiveMatch(baseURL string, level int, transport http.RoundTrip
 			defer resp.Body.Close()
 
 			return httputils.ReadRaw(resp), true
-		})
+		}))
 
 		for _, finger := range fEngine.HTTPFingers {
 			frame, vuln, ok := finger.ActiveMatch(level, sender)
@@ -559,6 +567,310 @@ func (e *Engine) HTTPMatch(ctx *Context, urls []string) ([]*TargetResult, error)
 	return results, nil
 }
 
+// HTTPFocusedMatch runs active HTTP template matching with a path-derived
+// template subset. It is intended for scanner enrichment paths where the
+// caller already has a live URL such as /mas/ or /smartbi/ and must avoid
+// executing every template in a large remote corpus.
+func (e *Engine) HTTPFocusedMatch(ctx *Context, urls []string) ([]*TargetResult, error) {
+	if e == nil || e.config == nil || e.config.FullFingers.Len() == 0 {
+		return nil, nil
+	}
+
+	var results []*TargetResult
+	for _, rawURL := range urls {
+		tokens := uniqueActiveTemplateTokens(append(activeTemplatePathTokens(rawURL), activeTemplateProbeTokens(ctx, rawURL)...))
+		if len(tokens) == 0 {
+			continue
+		}
+		focused := e.config.FullFingers.Filter(func(item *FullFinger) bool {
+			if item == nil || item.Template == nil || item.RawContent == "" {
+				return false
+			}
+			return templateContentMatchesAnyPathToken(item.RawContent, tokens)
+		})
+		if focused.Len() == 0 {
+			continue
+		}
+		focusedEngine, err := NewEngineWithFingers(focused)
+		if err != nil {
+			return results, err
+		}
+		matches, err := focusedEngine.HTTPMatch(ctx, []string{rawURL})
+		if err != nil {
+			return results, err
+		}
+		results = append(results, matches...)
+	}
+	return results, nil
+}
+
+func activeTemplateProbeTokens(ctx *Context, rawURL string) []string {
+	if ctx == nil {
+		return nil
+	}
+	req, err := http.NewRequestWithContext(ctx.Context(), http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil
+	}
+	sdkhttpx.ApplyBrowserProfileHeaders(req.Header)
+
+	resp, err := ctx.GetClient().Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var samples []string
+	for _, key := range []string{"Server", "Content-Type", "X-Powered-By", "WWW-Authenticate", "Location"} {
+		if value := resp.Header.Get(key); value != "" {
+			samples = append(samples, value)
+		}
+	}
+	if body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024)); err == nil && len(body) > 0 {
+		samples = append(samples, string(body))
+	}
+	return activeTemplateTokensFromText(strings.Join(samples, "\n"))
+}
+
+func activeTemplatePathTokens(rawURL string) []string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return nil
+	}
+	path := parsed.EscapedPath()
+	if path == "" || path == "/" {
+		return nil
+	}
+	if unescaped, err := url.PathUnescape(path); err == nil {
+		path = unescaped
+	}
+
+	seen := make(map[string]struct{})
+	var out []string
+	add := func(token string) {
+		token = strings.ToLower(strings.Trim(token, " \t\r\n/._-"))
+		if token == "" || activeTemplatePathTokenTooBroad(token) {
+			return
+		}
+		if _, ok := seen[token]; ok {
+			return
+		}
+		seen[token] = struct{}{}
+		out = append(out, token)
+	}
+	for _, part := range strings.Split(path, "/") {
+		add(part)
+	}
+	return out
+}
+
+func activeTemplateTokensFromText(text string) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	var token strings.Builder
+	flush := func() {
+		value := strings.ToLower(strings.Trim(token.String(), " \t\r\n/._-"))
+		token.Reset()
+		if value == "" || activeTemplatePathTokenTooBroad(value) {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
+			token.WriteRune(r)
+			continue
+		}
+		flush()
+		if len(out) >= 64 {
+			return out
+		}
+	}
+	flush()
+	if len(out) > 64 {
+		return out[:64]
+	}
+	return out
+}
+
+func activeTemplatePathTokenTooBroad(token string) bool {
+	if len(token) < 3 {
+		return true
+	}
+	switch token {
+	case "api", "app", "apps", "assets", "console", "css", "dist", "home", "html", "index", "js", "login", "main", "portal", "public", "service", "services", "static", "web":
+		return true
+	default:
+		return false
+	}
+}
+
+func uniqueActiveTemplateTokens(tokens []string) []string {
+	seen := make(map[string]struct{}, len(tokens))
+	out := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		token = strings.ToLower(strings.Trim(token, " \t\r\n/._-"))
+		if token == "" || activeTemplatePathTokenTooBroad(token) {
+			continue
+		}
+		if _, ok := seen[token]; ok {
+			continue
+		}
+		seen[token] = struct{}{}
+		out = append(out, token)
+	}
+	return out
+}
+
+func templateContentMatchesAnyPathToken(rawContent string, tokens []string) bool {
+	raw := strings.ToLower(rawContent)
+	for _, token := range tokens {
+		if token == "" {
+			continue
+		}
+		if strings.Contains(raw, "/"+token+"/") ||
+			strings.Contains(raw, "/"+token) ||
+			strings.Contains(raw, token+"/") {
+			return true
+		}
+		if len(token) >= 5 && strings.Contains(raw, token) {
+			return true
+		}
+	}
+	return false
+}
+
+// cachingSender wraps a fingersEngine.Sender with a send_data-level cache so
+// that multiple fingers probing the same path share a single HTTP round-trip.
+func cachingSender(sender fingersEngine.Sender) fingersEngine.Sender {
+	type cached struct {
+		resp []byte
+	}
+	m := make(map[string]cached)
+	return func(data []byte) ([]byte, bool) {
+		key := string(data)
+		if entry, found := m[key]; found {
+			return entry.resp, true
+		}
+		resp, ok := sender(data)
+		if ok {
+			m[key] = cached{resp: resp}
+		}
+		return resp, ok
+	}
+}
+
+// pathCachedTransport wraps an http.RoundTripper with request-level response
+// caching so that FingerPrintHub and Xray engines sharing the same instance
+// avoid duplicate HTTP requests without conflating distinct probes.
+type pathCachedTransport struct {
+	base  http.RoundTripper
+	mu    sync.Mutex
+	cache map[string]*pathCachedEntry
+}
+
+type pathCachedEntry struct {
+	resp *http.Response
+	body []byte
+}
+
+func (t *pathCachedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	key, cacheable := pathCachedTransportKey(req)
+	if !cacheable {
+		return t.baseTransport().RoundTrip(req)
+	}
+
+	t.mu.Lock()
+	if entry, ok := t.cache[key]; ok {
+		t.mu.Unlock()
+		resp := *entry.resp
+		resp.Header = entry.resp.Header.Clone()
+		resp.Body = io.NopCloser(bytes.NewReader(entry.body))
+		resp.Request = req
+		return &resp, nil
+	}
+	t.mu.Unlock()
+
+	resp, err := t.baseTransport().RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var body []byte
+	if resp.Body != nil {
+		body, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	hdr := *resp
+	hdr.Body = nil
+	hdr.Header = resp.Header.Clone()
+	t.mu.Lock()
+	if t.cache == nil {
+		t.cache = make(map[string]*pathCachedEntry)
+	}
+	t.cache[key] = &pathCachedEntry{resp: &hdr, body: body}
+	t.mu.Unlock()
+
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	return resp, nil
+}
+
+func (t *pathCachedTransport) baseTransport() http.RoundTripper {
+	if t.base != nil {
+		return t.base
+	}
+	return http.DefaultTransport
+}
+
+func pathCachedTransportKey(req *http.Request) (string, bool) {
+	if req == nil || req.URL == nil {
+		return "", false
+	}
+	if req.Body != nil && req.Body != http.NoBody {
+		return "", false
+	}
+
+	method := req.Method
+	if method == "" {
+		method = http.MethodGet
+	}
+
+	var b strings.Builder
+	b.WriteString(method)
+	b.WriteByte(' ')
+	b.WriteString(req.URL.Scheme)
+	b.WriteString("://")
+	b.WriteString(req.URL.Host)
+	b.WriteString(req.URL.RequestURI())
+	if req.Host != "" {
+		b.WriteString("\nhost: ")
+		b.WriteString(req.Host)
+	}
+
+	keys := make([]string, 0, len(req.Header))
+	for key := range req.Header {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		values := req.Header.Values(key)
+		b.WriteByte('\n')
+		b.WriteString(http.CanonicalHeaderKey(key))
+		b.WriteString(": ")
+		b.WriteString(strings.Join(values, "\x00"))
+	}
+
+	return b.String(), true
+}
+
 // scanHTTPTarget 扫描单个 HTTP 目标，自动对所有注册引擎执行主动探测。
 func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResult {
 	result := &TargetResult{
@@ -580,6 +892,8 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
+	transport = wrapRedirectResolvingTransport(transport)
+	transport = &pathCachedTransport{base: transport, cache: make(map[string]*pathCachedEntry)}
 
 	result.Results = e.ActiveMatch(baseURL, level, transport)
 	return result
@@ -898,3 +1212,23 @@ func pathJoin(base, append string) string {
 	return base + append
 }
 
+type redirectResolvingTransport struct {
+	base http.RoundTripper
+}
+
+func wrapRedirectResolvingTransport(base http.RoundTripper) http.RoundTripper {
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return redirectResolvingTransport{base: base}
+}
+
+func (t redirectResolvingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	client := &http.Client{
+		Transport: t.base,
+	}
+	clone := req.Clone(req.Context())
+	clone.Body = req.Body
+	clone.GetBody = req.GetBody
+	return client.Do(clone)
+}

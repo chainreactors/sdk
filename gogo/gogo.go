@@ -11,10 +11,10 @@ import (
 	"github.com/chainreactors/gogo/v2/engine"
 	"github.com/chainreactors/gogo/v2/pkg"
 	"github.com/chainreactors/logs"
-	"github.com/chainreactors/utils"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/types"
+	"github.com/chainreactors/utils"
 	"github.com/panjf2000/ants/v2"
 )
 
@@ -149,6 +149,16 @@ func (e *Engine) applyInjectedFingers() bool {
 		return false
 	}
 	pkg.FingerEngine = fingerImpl
+
+	// 同时注入 FingerprintHubEngine，使 CyberHub 的 fingerprinthub
+	// 模板在 gogo 的被动和主动指纹匹配阶段都能生效。
+	libEngine := e.fingersEngine.Get()
+	if libEngine != nil {
+		if fpHub := libEngine.FingerPrintHub(); fpHub != nil {
+			pkg.FingerprintHubEngine = fpHub
+		}
+	}
+
 	return true
 }
 
