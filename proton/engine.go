@@ -88,6 +88,9 @@ func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Resul
 		if !ok {
 			return nil, fmt.Errorf("unsupported context type: %T", ctx)
 		}
+		if runCtx == nil {
+			runCtx = NewContext()
+		}
 	}
 
 	switch t := task.(type) {
@@ -178,10 +181,10 @@ func (e *Engine) executeScanData(ctx *Context, task *ScanDataTask) (<-chan types
 		}
 
 		ctx.emitStats(types.Stats{
-			Engine:  e.Name(),
-			Task:    task.Type(),
-			Targets: 1,
-			Results: findingCount,
+			Engine:   e.Name(),
+			Task:     task.Type(),
+			Targets:  1,
+			Results:  findingCount,
 			Duration: time.Since(started),
 		})
 	}()

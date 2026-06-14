@@ -216,6 +216,9 @@ func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Resul
 		if !ok {
 			return nil, fmt.Errorf("unsupported context type: %T", ctx)
 		}
+		if runCtx == nil {
+			runCtx = NewContext()
+		}
 	}
 
 	switch t := task.(type) {

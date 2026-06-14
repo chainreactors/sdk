@@ -43,10 +43,20 @@ func NewContext() *Context {
 	}
 }
 
+func normalizeContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 // WithContext 基于给定的 context.Context 复制 Context
 func (c *Context) WithContext(ctx context.Context) *Context {
+	if c == nil {
+		return NewContext().WithContext(ctx)
+	}
 	return &Context{
-		ctx:          ctx,
+		ctx:          normalizeContext(ctx),
 		threads:      c.threads,
 		mod:          c.mod,
 		excludes:     c.excludes,
@@ -69,6 +79,9 @@ func (c *Context) SetExcludes(excludes ...string) *Context {
 }
 
 func (c *Context) Context() context.Context {
+	if c == nil || c.ctx == nil {
+		return context.Background()
+	}
 	return c.ctx
 }
 
@@ -101,7 +114,7 @@ func (c *Context) SetStatsHandler(handler func(types.Stats)) *Context {
 
 func (c *Context) emitStats(stats types.Stats) {
 	// ctx 已取消（consumer 已拆掉它的 channel）时跳过统计回调，避免 send on closed channel panic
-	if c == nil || c.statsHandler == nil || c.ctx == nil || c.ctx.Err() != nil {
+	if c == nil || c.statsHandler == nil || c.Context().Err() != nil {
 		return
 	}
 	c.statsHandler(stats)

@@ -35,9 +35,19 @@ func NewContext() *Context {
 	}
 }
 
+func normalizeContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 func (c *Context) WithContext(ctx context.Context) *Context {
+	if c == nil {
+		return NewContext().WithContext(ctx)
+	}
 	return &Context{
-		ctx:          ctx,
+		ctx:          normalizeContext(ctx),
 		statsHandler: c.statsHandler,
 	}
 }
@@ -48,13 +58,17 @@ func (c *Context) SetStatsHandler(handler func(types.Stats)) *Context {
 }
 
 func (c *Context) Context() context.Context {
+	if c == nil || c.ctx == nil {
+		return context.Background()
+	}
 	return c.ctx
 }
 
 func (c *Context) emitStats(stats types.Stats) {
-	if c != nil && c.statsHandler != nil {
-		c.statsHandler(stats)
+	if c == nil || c.statsHandler == nil || c.Context().Err() != nil {
+		return
 	}
+	c.statsHandler(stats)
 }
 
 // ========================================

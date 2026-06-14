@@ -23,9 +23,19 @@ func NewContext() *Context {
 	}
 }
 
+func normalizeContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 func (c *Context) WithContext(ctx context.Context) *Context {
+	if c == nil {
+		return NewContext().WithContext(ctx)
+	}
 	return &Context{
-		ctx:          ctx,
+		ctx:          normalizeContext(ctx),
 		opt:          types.CloneZombieOption(c.opt),
 		statsHandler: c.statsHandler,
 		proxy:        c.proxy,
@@ -41,6 +51,9 @@ func (c *Context) SetProxy(proxies ...string) *Context {
 }
 
 func (c *Context) Context() context.Context {
+	if c == nil || c.ctx == nil {
+		return context.Background()
+	}
 	return c.ctx
 }
 
@@ -87,7 +100,7 @@ func (c *Context) SetStatsHandler(handler func(types.Stats)) *Context {
 
 func (c *Context) emitStats(stats types.Stats) {
 	// ctx 已取消（consumer 已拆掉它的 channel）时跳过统计回调，避免 send on closed channel panic
-	if c == nil || c.statsHandler == nil || c.ctx == nil || c.ctx.Err() != nil {
+	if c == nil || c.statsHandler == nil || c.Context().Err() != nil {
 		return
 	}
 	c.statsHandler(stats)

@@ -40,14 +40,24 @@ func NewContext() *Context {
 	}
 }
 
+func normalizeContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 // WithContext 基于给定的 context.Context 复制 Context
 func (c *Context) WithContext(ctx context.Context) *Context {
 	return &Context{
-		ctx: ctx,
+		ctx: normalizeContext(ctx),
 	}
 }
 
 func (c *Context) Context() context.Context {
+	if c == nil || c.ctx == nil {
+		return context.Background()
+	}
 	return c.ctx
 }
 
