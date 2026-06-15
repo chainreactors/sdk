@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.3.2 (2026-06-15)
+
+优化 HTTP 主动指纹探测的请求特征与缓存策略，重构 httpx 为通用 client generator，强化 nil context 防御。
+
+### Breaking Changes
+
+- **全引擎**: `Execute(nil, task)` 不再静默 fallback 到 `NewContext()`，而是返回 `fmt.Errorf("nil context")`。typed nil `*Context` 同理。调用方必须显式传入 `NewContext()` 或自定义 Context
+- **httpx**: 移除 `ApplyBrowserProfileHeaders` 和 `ProfileBrowser` 导出符号，改为 `BrowserConfig()` 预设 + `headerTransport` 自动注入
+
+### New Features
+
+- **httpx**: 重构为通用 client generator
+  - 新增 `BrowserConfig()` 预设：自动注入浏览器 UA/Accept/Accept-Language headers
+  - 新增 `Config.Headers` 字段，通过 `headerTransport` 透明注入，不覆盖调用方已设置的 header
+  - 新增 `WithTimeout` / `WithProxy` / `WithRedirects` / `WithHeaders` builder 方法，链式配置
+  - `NewClient` 内聚 proxy fallback：代理解析失败时自动回退到无代理 client，调用方无需重复 try/fallback
+- **fingers**: `ActiveMatch` 中 native fingers 引擎的 Sender 增加 `cachingSender` 包装，跨 finger 的相同 `send_data` 路径共享单次 HTTP 请求，补充 fingers 库内 per-finger `respCache` 的不足
+- **fingers**: 主动探测请求路径规范化：空路径自动补 `/`，无前缀路径自动补 `/` 前缀
+
+### Bug Fixes
+
+- **gogo/proton/zombie**: `emitStats` 在 context 取消后跳过回调，避免 consumer 已关闭 channel 后 send on closed channel panic
+- **spray**: `emitStats` 改为通过 `Context()` 方法访问 ctx（带 nil 守护），修复直接访问 `c.ctx` 在 nil 时 panic 的问题
+- **spray**: `handler` 方法改为接收 `*Context`（而非 `context.Context`），通过 `ctx.Context().Done()` 获取 done channel，nil context 时不阻塞
+
+### Refactoring
+
+- 移除 6 个包中重复的 `normalizeContext` 函数，nil context 校验统一收口到 `Execute` 入口
+- 移除未调用的 `HTTPFocusedMatch` 及 6 个辅助函数（约 170 行死代码）
+- 移除 `pathCachedTransport` 和 `redirectResolvingTransport`：跨引擎 HTTP 缓存因 cache key 含全部 headers 导致命中率极低，`cachingSender` 已覆盖跨 finger 去重需求
+- 移除 gogo `applyInjectedFingers` 中通过 `FingerPrintHub()` 反向取子引擎塞全局变量的隐式注入
+- 移除 spray 中两处 `EnableAllFingerEngine = true` 的 hack 及未调用的 `mergeActiveFingers`
+- 删除 `pkg/httpx/profile.go`，功能全部吸收进 `httpx.go` 的 `BrowserConfig()` + `headerTransport`
+
+### Dependencies
+
+- 无变更
+
 ## v0.3.1 (2026-06-12)
 
 修复 xray 指纹引擎的模板路由和误报问题，新增统一主动探测 API。
