@@ -11,6 +11,7 @@ import (
 	"github.com/chainreactors/fingers/resources"
 	"github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/sdk/pkg/types"
+	"github.com/facebookincubator/nvdtools/wfn"
 )
 
 type entityKind uint8
@@ -61,6 +62,10 @@ type Index struct {
 	aliasByName  map[string]int
 	templateByID map[string]int
 	aliasLookup  map[string][]int
+
+	// cpeAliases / cpeTemplates: vendor/product -> entity IDs for CPE auto-linking.
+	cpeAliases   map[string][]int
+	cpeTemplates map[string][]int
 
 	termIndex map[term][]entityRef
 
@@ -150,6 +155,7 @@ func (idx *Index) BuildWithFingers(fingers fingersEngine.Fingers, aliases []*ali
 	for aliasID := range idx.aliases {
 		idx.linkAliasPOCs(aliasID)
 	}
+	idx.linkByCPE()
 }
 
 func (idx *Index) setOptions(options IndexOptions) {
@@ -174,6 +180,9 @@ func (idx *Index) clear() {
 	idx.aliasByName = make(map[string]int)
 	idx.templateByID = make(map[string]int)
 	idx.aliasLookup = make(map[string][]int)
+
+	idx.cpeAliases = make(map[string][]int)
+	idx.cpeTemplates = make(map[string][]int)
 
 	idx.termIndex = make(map[term][]entityRef)
 
@@ -232,7 +241,9 @@ func (idx *Index) addAlias(a *alias.Alias) {
 	idx.addTerm("vendor", a.Vendor, ref)
 	idx.addTerm("product", a.Product, ref)
 	if a.Vendor != "" && a.Product != "" {
-		idx.addTerm("cpe", a.Vendor+"/"+a.Product, ref)
+		key := cpeKey(nameKey(a.Vendor), nameKey(a.Product))
+		idx.addTerm("cpe", key, ref)
+		idx.cpeAliases[key] = appendUniqueInt(idx.cpeAliases[key], id)
 	}
 	for _, tag := range a.Tags {
 		idx.addTerm("tag", tag, ref)
@@ -277,9 +288,20 @@ func (idx *Index) addTemplate(t *templates.Template) {
 	if t.Info.Classification != nil {
 		idx.addTerm("cve", t.Info.Classification.CVEID, ref)
 		idx.addTerm("cwe", t.Info.Classification.CWEID, ref)
-		idx.addTerm("cpe", t.Info.Classification.CPE, ref)
+		if v, p := parseCPEKey(t.Info.Classification.CPE); v != "" && p != "" {
+			key := cpeKey(v, p)
+			idx.addTerm("cpe", key, ref)
+			idx.cpeTemplates[key] = appendUniqueInt(idx.cpeTemplates[key], id)
+		}
 	}
 	if t.Info.Metadata != nil {
+		if rawCPE, ok := t.Info.Metadata["cpe"].(string); ok {
+			if v, p := parseCPEKey(rawCPE); v != "" && p != "" {
+				key := cpeKey(v, p)
+				idx.addTerm("cpe", key, ref)
+				idx.cpeTemplates[key] = appendUniqueInt(idx.cpeTemplates[key], id)
+			}
+		}
 		idx.addWhitelistedMetadataTerms(t.Info.Metadata, ref)
 	}
 }
@@ -314,6 +336,20 @@ func (idx *Index) linkTemplateFingers(templateID int) {
 		}
 		for _, aliasID := range idx.lookupAliasIDs(fingerName) {
 			idx.linkAliasTemplate(aliasID, templateID)
+		}
+	}
+}
+
+func (idx *Index) linkByCPE() {
+	for key, aliasIDs := range idx.cpeAliases {
+		templateIDs, ok := idx.cpeTemplates[key]
+		if !ok {
+			continue
+		}
+		for _, aliasID := range aliasIDs {
+			for _, templateID := range templateIDs {
+				idx.linkAliasTemplate(aliasID, templateID)
+			}
 		}
 	}
 }
@@ -462,4 +498,38 @@ func appendUniqueRef(slice []entityRef, ref entityRef) []entityRef {
 		}
 	}
 	return append(slice, ref)
+}
+
+func parseCPEKey(raw string) (vendor, product string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+
+	if strings.HasPrefix(raw, "cpe:/") || strings.HasPrefix(raw, "cpe:2.3:") {
+		attr, err := wfn.Parse(raw)
+		if err != nil || attr == nil {
+			return "", ""
+		}
+		vendor = strings.ToLower(strings.TrimSpace(attr.Vendor))
+		product = strings.ToLower(strings.TrimSpace(attr.Product))
+		if vendor == "" || vendor == "*" || product == "" || product == "*" {
+			return "", ""
+		}
+		return vendor, product
+	}
+
+	if idx := strings.IndexByte(raw, ':'); idx > 0 && idx < len(raw)-1 {
+		vendor = strings.ToLower(strings.TrimSpace(raw[:idx]))
+		product = strings.ToLower(strings.TrimSpace(raw[idx+1:]))
+		if vendor != "" && product != "" {
+			return vendor, product
+		}
+	}
+
+	return "", ""
+}
+
+func cpeKey(vendor, product string) string {
+	return vendor + ":" + product
 }
