@@ -7,11 +7,11 @@ import (
 	"sync"
 
 	"github.com/chainreactors/fingers/alias"
+	"github.com/chainreactors/fingers/common"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/resources"
 	"github.com/chainreactors/neutron/templates"
 	"github.com/chainreactors/sdk/pkg/types"
-	"github.com/facebookincubator/nvdtools/wfn"
 )
 
 type entityKind uint8
@@ -511,8 +511,8 @@ func parseCPEKey(raw string) (vendor, product string) {
 	}
 
 	if strings.HasPrefix(raw, "cpe:/") || strings.HasPrefix(raw, "cpe:2.3:") {
-		attr, err := wfn.Parse(raw)
-		if err != nil || attr == nil {
+		attr := common.NewAttributesWithCPE(raw)
+		if attr == nil {
 			return "", ""
 		}
 		vendor = strings.ToLower(strings.TrimSpace(attr.Vendor))
