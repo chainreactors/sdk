@@ -70,18 +70,15 @@ func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Resul
 		return nil, err
 	}
 
-	var runCtx *Context
 	if ctx == nil {
-		runCtx = NewContext()
-	} else {
-		var ok bool
-		runCtx, ok = ctx.(*Context)
-		if !ok {
-			return nil, fmt.Errorf("unsupported context type: %T", ctx)
-		}
-		if runCtx == nil {
-			runCtx = NewContext()
-		}
+		return nil, fmt.Errorf("nil context")
+	}
+	runCtx, ok := ctx.(*Context)
+	if !ok {
+		return nil, fmt.Errorf("unsupported context type: %T", ctx)
+	}
+	if runCtx == nil {
+		return nil, fmt.Errorf("nil context: typed nil *zombie.Context passed via interface")
 	}
 
 	switch t := task.(type) {

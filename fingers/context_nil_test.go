@@ -7,11 +7,7 @@ import (
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
-func TestContextNormalizesNilContext(t *testing.T) {
-	if NewContext().WithContext(nil).Context() == nil {
-		t.Fatal("WithContext(nil) returned nil context")
-	}
-
+func TestNilReceiverContextDoesNotPanic(t *testing.T) {
 	var ctx *Context
 	if ctx.Context() == nil {
 		t.Fatal("nil receiver Context returned nil")
@@ -30,7 +26,7 @@ func TestContextPreservesCancelledContext(t *testing.T) {
 	}
 }
 
-func TestExecuteHandlesTypedNilContext(t *testing.T) {
+func TestExecuteRejectsTypedNilContext(t *testing.T) {
 	eng := newDetailTestEngine(t, NewConfig(), &types.Finger{
 		Name:     "typed-nil-app",
 		Protocol: "http",
@@ -40,13 +36,8 @@ func TestExecuteHandlesTypedNilContext(t *testing.T) {
 	})
 
 	var ctx *Context
-	resultCh, err := eng.Execute(ctx, NewMatchTask(rawHTTP("TypedNilMarker")))
-	if err != nil {
-		t.Fatalf("execute with typed nil context: %v", err)
-	}
-
-	result := <-resultCh
-	if result == nil || !result.Success() {
-		t.Fatalf("expected successful result, got %#v err=%v", result, result.Error())
+	_, err := eng.Execute(ctx, NewMatchTask(rawHTTP("TypedNilMarker")))
+	if err == nil {
+		t.Fatal("expected error for typed nil context, got nil")
 	}
 }

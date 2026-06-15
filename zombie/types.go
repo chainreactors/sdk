@@ -23,19 +23,12 @@ func NewContext() *Context {
 	}
 }
 
-func normalizeContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
-}
-
 func (c *Context) WithContext(ctx context.Context) *Context {
 	if c == nil {
 		return NewContext().WithContext(ctx)
 	}
 	return &Context{
-		ctx:          normalizeContext(ctx),
+		ctx:          ctx,
 		opt:          types.CloneZombieOption(c.opt),
 		statsHandler: c.statsHandler,
 		proxy:        c.proxy,

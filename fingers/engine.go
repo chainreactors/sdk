@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"encoding/json"
 
@@ -567,183 +566,6 @@ func (e *Engine) HTTPMatch(ctx *Context, urls []string) ([]*TargetResult, error)
 	return results, nil
 }
 
-// HTTPFocusedMatch runs active HTTP template matching with a path-derived
-// template subset. It is intended for scanner enrichment paths where the
-// caller already has a live URL such as /mas/ or /smartbi/ and must avoid
-// executing every template in a large remote corpus.
-func (e *Engine) HTTPFocusedMatch(ctx *Context, urls []string) ([]*TargetResult, error) {
-	if e == nil || e.config == nil || e.config.FullFingers.Len() == 0 {
-		return nil, nil
-	}
-
-	var results []*TargetResult
-	for _, rawURL := range urls {
-		tokens := uniqueActiveTemplateTokens(append(activeTemplatePathTokens(rawURL), activeTemplateProbeTokens(ctx, rawURL)...))
-		if len(tokens) == 0 {
-			continue
-		}
-		focused := e.config.FullFingers.Filter(func(item *FullFinger) bool {
-			if item == nil || item.Template == nil || item.RawContent == "" {
-				return false
-			}
-			return templateContentMatchesAnyPathToken(item.RawContent, tokens)
-		})
-		if focused.Len() == 0 {
-			continue
-		}
-		focusedEngine, err := NewEngineWithFingers(focused)
-		if err != nil {
-			return results, err
-		}
-		matches, err := focusedEngine.HTTPMatch(ctx, []string{rawURL})
-		if err != nil {
-			return results, err
-		}
-		results = append(results, matches...)
-	}
-	return results, nil
-}
-
-func activeTemplateProbeTokens(ctx *Context, rawURL string) []string {
-	if ctx == nil {
-		return nil
-	}
-	req, err := http.NewRequestWithContext(ctx.Context(), http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil
-	}
-	sdkhttpx.ApplyBrowserProfileHeaders(req.Header)
-
-	resp, err := ctx.GetClient().Do(req)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-
-	var samples []string
-	for _, key := range []string{"Server", "Content-Type", "X-Powered-By", "WWW-Authenticate", "Location"} {
-		if value := resp.Header.Get(key); value != "" {
-			samples = append(samples, value)
-		}
-	}
-	if body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024)); err == nil && len(body) > 0 {
-		samples = append(samples, string(body))
-	}
-	return activeTemplateTokensFromText(strings.Join(samples, "\n"))
-}
-
-func activeTemplatePathTokens(rawURL string) []string {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil {
-		return nil
-	}
-	path := parsed.EscapedPath()
-	if path == "" || path == "/" {
-		return nil
-	}
-	if unescaped, err := url.PathUnescape(path); err == nil {
-		path = unescaped
-	}
-
-	seen := make(map[string]struct{})
-	var out []string
-	add := func(token string) {
-		token = strings.ToLower(strings.Trim(token, " \t\r\n/._-"))
-		if token == "" || activeTemplatePathTokenTooBroad(token) {
-			return
-		}
-		if _, ok := seen[token]; ok {
-			return
-		}
-		seen[token] = struct{}{}
-		out = append(out, token)
-	}
-	for _, part := range strings.Split(path, "/") {
-		add(part)
-	}
-	return out
-}
-
-func activeTemplateTokensFromText(text string) []string {
-	seen := make(map[string]struct{})
-	var out []string
-	var token strings.Builder
-	flush := func() {
-		value := strings.ToLower(strings.Trim(token.String(), " \t\r\n/._-"))
-		token.Reset()
-		if value == "" || activeTemplatePathTokenTooBroad(value) {
-			return
-		}
-		if _, ok := seen[value]; ok {
-			return
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	for _, r := range text {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
-			token.WriteRune(r)
-			continue
-		}
-		flush()
-		if len(out) >= 64 {
-			return out
-		}
-	}
-	flush()
-	if len(out) > 64 {
-		return out[:64]
-	}
-	return out
-}
-
-func activeTemplatePathTokenTooBroad(token string) bool {
-	if len(token) < 3 {
-		return true
-	}
-	switch token {
-	case "api", "app", "apps", "assets", "console", "css", "dist", "home", "html", "index", "js", "login", "main", "portal", "public", "service", "services", "static", "web":
-		return true
-	default:
-		return false
-	}
-}
-
-func uniqueActiveTemplateTokens(tokens []string) []string {
-	seen := make(map[string]struct{}, len(tokens))
-	out := make([]string, 0, len(tokens))
-	for _, token := range tokens {
-		token = strings.ToLower(strings.Trim(token, " \t\r\n/._-"))
-		if token == "" || activeTemplatePathTokenTooBroad(token) {
-			continue
-		}
-		if _, ok := seen[token]; ok {
-			continue
-		}
-		seen[token] = struct{}{}
-		out = append(out, token)
-	}
-	return out
-}
-
-func templateContentMatchesAnyPathToken(rawContent string, tokens []string) bool {
-	raw := strings.ToLower(rawContent)
-	for _, token := range tokens {
-		if token == "" {
-			continue
-		}
-		if strings.Contains(raw, "/"+token+"/") ||
-			strings.Contains(raw, "/"+token) ||
-			strings.Contains(raw, token+"/") {
-			return true
-		}
-		if len(token) >= 5 && strings.Contains(raw, token) {
-			return true
-		}
-	}
-	return false
-}
-
 // cachingSender wraps a fingersEngine.Sender with a send_data-level cache so
 // that multiple fingers probing the same path share a single HTTP round-trip.
 func cachingSender(sender fingersEngine.Sender) fingersEngine.Sender {
@@ -1083,18 +905,15 @@ func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Resul
 		return nil, fmt.Errorf("unsupported task type: %s", task.Type())
 	}
 
-	var runCtx *Context
 	if ctx == nil {
-		runCtx = NewContext()
-	} else {
-		var ok bool
-		runCtx, ok = ctx.(*Context)
-		if !ok {
-			return nil, fmt.Errorf("unsupported context type: %T", ctx)
-		}
-		if runCtx == nil {
-			runCtx = NewContext()
-		}
+		return nil, fmt.Errorf("nil context")
+	}
+	runCtx, ok := ctx.(*Context)
+	if !ok {
+		return nil, fmt.Errorf("unsupported context type: %T", ctx)
+	}
+	if runCtx == nil {
+		return nil, fmt.Errorf("nil context: typed nil *fingers.Context passed via interface")
 	}
 
 	return e.executeMatch(runCtx, matchTask)

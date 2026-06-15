@@ -2,16 +2,10 @@ package spray
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 )
 
-func TestContextNormalizesNilContext(t *testing.T) {
-	if NewContext().WithContext(nil).Context() == nil {
-		t.Fatal("WithContext(nil) returned nil context")
-	}
-
+func TestNilReceiverContextDoesNotPanic(t *testing.T) {
 	var ctx *Context
 	if ctx.Context() == nil {
 		t.Fatal("nil receiver Context returned nil")
@@ -30,22 +24,15 @@ func TestContextPreservesCancelledContext(t *testing.T) {
 	}
 }
 
-func TestExecuteHandlesTypedNilContext(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("spray typed nil"))
-	}))
-	defer server.Close()
-
+func TestExecuteRejectsTypedNilContext(t *testing.T) {
 	eng, err := NewEngine(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	var ctx *Context
-	resultCh, err := eng.Execute(ctx, NewCheckTask([]string{server.URL}))
-	if err != nil {
-		t.Fatalf("execute with typed nil context: %v", err)
-	}
-	for range resultCh {
+	_, err = eng.Execute(ctx, NewCheckTask([]string{"http://127.0.0.1:1"}))
+	if err == nil {
+		t.Fatal("expected error for typed nil context, got nil")
 	}
 }

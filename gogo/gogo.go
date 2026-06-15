@@ -149,16 +149,6 @@ func (e *Engine) applyInjectedFingers() bool {
 		return false
 	}
 	pkg.FingerEngine = fingerImpl
-
-	// 同时注入 FingerprintHubEngine，使 CyberHub 的 fingerprinthub
-	// 模板在 gogo 的被动和主动指纹匹配阶段都能生效。
-	libEngine := e.fingersEngine.Get()
-	if libEngine != nil {
-		if fpHub := libEngine.FingerPrintHub(); fpHub != nil {
-			pkg.FingerprintHubEngine = fpHub
-		}
-	}
-
 	return true
 }
 
@@ -207,18 +197,15 @@ func (e *Engine) Execute(ctx types.Context, task types.Task) (<-chan types.Resul
 		return nil, err
 	}
 
-	var runCtx *Context
 	if ctx == nil {
-		runCtx = NewContext()
-	} else {
-		var ok bool
-		runCtx, ok = ctx.(*Context)
-		if !ok {
-			return nil, fmt.Errorf("unsupported context type: %T", ctx)
-		}
-		if runCtx == nil {
-			runCtx = NewContext()
-		}
+		return nil, fmt.Errorf("nil context")
+	}
+	runCtx, ok := ctx.(*Context)
+	if !ok {
+		return nil, fmt.Errorf("unsupported context type: %T", ctx)
+	}
+	if runCtx == nil {
+		return nil, fmt.Errorf("nil context: typed nil *gogo.Context passed via interface")
 	}
 
 	switch t := task.(type) {
@@ -248,9 +235,6 @@ func newResult(success bool, err error, data *types.GOGOResult) types.Result {
 // ========================================
 
 func (e *Engine) executeScan(ctx *Context, task *ScanTask) (<-chan types.Result, error) {
-	if ctx == nil {
-		ctx = NewContext()
-	}
 	runCtx := ctx
 
 	workflow := &types.Workflow{
@@ -262,11 +246,7 @@ func (e *Engine) executeScan(ctx *Context, task *ScanTask) (<-chan types.Result,
 }
 
 func (e *Engine) executeWorkflow(ctx *Context, task *WorkflowTask) (<-chan types.Result, error) {
-	if ctx == nil {
-		ctx = NewContext()
-	}
-	runCtx := ctx
-	return e.workflowStream(runCtx.Context(), task.Workflow, runCtx)
+	return e.workflowStream(ctx.Context(), task.Workflow, ctx)
 }
 
 // applyProxy 按 Context > Config 优先级解析代理，并把拨号器写入 opt 的实例级
@@ -475,7 +455,7 @@ func (e *Engine) workflowStream(ctx context.Context, workflow *types.Workflow, r
 func (e *Engine) ScanOne(ctx *Context, ip, port string) *types.GOGOResult {
 	result := pkg.NewResult(ip, port)
 	if ctx == nil {
-		ctx = NewContext()
+		return result.GOGOResult
 	}
 	runCtx := ctx
 
@@ -507,10 +487,6 @@ func (e *Engine) Scan(ctx *Context, ip, ports string) ([]*types.GOGOResult, erro
 		return nil, err
 	}
 
-	if ctx == nil {
-		ctx = NewContext()
-	}
-
 	task := NewScanTask(ip, ports)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -531,10 +507,6 @@ func (e *Engine) Scan(ctx *Context, ip, ports string) ([]*types.GOGOResult, erro
 func (e *Engine) ScanStream(ctx *Context, ip, ports string) (<-chan *types.GOGOResult, error) {
 	if err := e.Init(); err != nil {
 		return nil, err
-	}
-
-	if ctx == nil {
-		ctx = NewContext()
 	}
 
 	task := NewScanTask(ip, ports)
@@ -563,10 +535,6 @@ func (e *Engine) Workflow(ctx *Context, workflow *types.Workflow) ([]*types.GOGO
 		return nil, err
 	}
 
-	if ctx == nil {
-		ctx = NewContext()
-	}
-
 	task := NewWorkflowTask(workflow)
 	resultCh, err := e.Execute(ctx, task)
 	if err != nil {
@@ -587,10 +555,6 @@ func (e *Engine) Workflow(ctx *Context, workflow *types.Workflow) ([]*types.GOGO
 func (e *Engine) WorkflowStream(ctx *Context, workflow *types.Workflow) (<-chan *types.GOGOResult, error) {
 	if err := e.Init(); err != nil {
 		return nil, err
-	}
-
-	if ctx == nil {
-		ctx = NewContext()
 	}
 
 	task := NewWorkflowTask(workflow)

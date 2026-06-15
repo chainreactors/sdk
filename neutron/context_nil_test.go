@@ -9,11 +9,7 @@ import (
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
-func TestContextNormalizesNilContext(t *testing.T) {
-	if NewContext().WithContext(nil).Context() == nil {
-		t.Fatal("WithContext(nil) returned nil context")
-	}
-
+func TestNilReceiverContextDoesNotPanic(t *testing.T) {
 	var ctx *Context
 	if ctx.Context() == nil {
 		t.Fatal("nil receiver Context returned nil")
@@ -32,7 +28,7 @@ func TestContextPreservesCancelledContext(t *testing.T) {
 	}
 }
 
-func TestExecuteHandlesTypedNilContext(t *testing.T) {
+func TestExecuteRejectsTypedNilContext(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("typed nil neutron marker"))
 	}))
@@ -56,10 +52,8 @@ http:
 	eng.SetCapacity(1)
 
 	var ctx *Context
-	resultCh, err := eng.Execute(ctx, NewExecuteTask(server.URL))
-	if err != nil {
-		t.Fatalf("execute with typed nil context: %v", err)
-	}
-	for range resultCh {
+	_, err := eng.Execute(ctx, NewExecuteTask(server.URL))
+	if err == nil {
+		t.Fatal("expected error for typed nil context, got nil")
 	}
 }

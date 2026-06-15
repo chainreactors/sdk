@@ -37,20 +37,13 @@ func NewContext() *Context {
 	}
 }
 
-func normalizeContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
-}
-
 // WithContext 基于给定的 context.Context 复制 Context
 func (c *Context) WithContext(ctx context.Context) *Context {
 	if c == nil {
 		return NewContext().WithContext(ctx)
 	}
 	return &Context{
-		ctx:           normalizeContext(ctx),
+		ctx:           ctx,
 		httpSender:    c.httpSender,
 		client:        c.client,
 		defaultClient: c.defaultClient,

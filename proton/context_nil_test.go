@@ -5,11 +5,7 @@ import (
 	"testing"
 )
 
-func TestContextNormalizesNilContext(t *testing.T) {
-	if NewContext().WithContext(nil).Context() == nil {
-		t.Fatal("WithContext(nil) returned nil context")
-	}
-
+func TestNilReceiverContextDoesNotPanic(t *testing.T) {
 	var ctx *Context
 	if ctx.Context() == nil {
 		t.Fatal("nil receiver Context returned nil")
@@ -28,16 +24,14 @@ func TestContextPreservesCancelledContext(t *testing.T) {
 	}
 }
 
-func TestExecuteHandlesTypedNilContext(t *testing.T) {
+func TestExecuteRejectsTypedNilContext(t *testing.T) {
 	eng := mustEngine(t, NewConfig().
 		WithCapacity(1).
 		WithTemplatePaths(writeTempTemplate(t, tmplPrivateKey)))
 
 	var ctx *Context
-	resultCh, err := eng.Execute(ctx, NewScanDataTask([]byte("PRIVATE KEY\n"), "test.txt"))
-	if err != nil {
-		t.Fatalf("execute with typed nil context: %v", err)
-	}
-	for range resultCh {
+	_, err := eng.Execute(ctx, NewScanDataTask([]byte("PRIVATE KEY\n"), "test.txt"))
+	if err == nil {
+		t.Fatal("expected error for typed nil context, got nil")
 	}
 }
