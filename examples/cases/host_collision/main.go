@@ -1,5 +1,3 @@
-//go:build hostspray
-
 package main
 
 import (
@@ -14,8 +12,8 @@ import (
 
 func main() {
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: host_spray_sdk <target_ip> <hosts_file> [limit]")
-		fmt.Println("Example: host_spray_sdk 110.75.231.10 domain.txt 10000")
+		fmt.Println("Usage: host_collision <target_ip> <hosts_file> [limit]")
+		fmt.Println("Example: host_collision 110.75.231.10 domain.txt 10000")
 		os.Exit(1)
 	}
 
@@ -44,7 +42,7 @@ func main() {
 		fmt.Printf("Error initializing engine: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("✓ Engine initialized\n")
+	fmt.Println("Engine initialized")
 
 	// 配置上下文 - 关键：设置 Mod 为 "host"
 	fmt.Println("⚙️  Configuring spray context...")
