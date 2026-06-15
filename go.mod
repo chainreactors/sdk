@@ -3,11 +3,11 @@ module github.com/chainreactors/sdk
 go 1.25.4
 
 require (
-	github.com/chainreactors/fingers v1.2.2-0.20260611155635-f5c144ea1c12
+	github.com/chainreactors/fingers v1.2.2-0.20260615064219-7e07a99c93e0
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/neutron v0.0.0-20260612092850-1a0a5a8b4280
-	github.com/chainreactors/neutron/operators/full v0.0.0-20260612092850-1a0a5a8b4280
+	github.com/chainreactors/neutron v0.0.0-20260615055126-a9bbe4fc3e95
+	github.com/chainreactors/neutron/operators/full v0.0.0-20260615055126-a9bbe4fc3e95
 	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe
 	github.com/chainreactors/proton v0.3.1-0.20260611174627-89c10c8c27e5
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
