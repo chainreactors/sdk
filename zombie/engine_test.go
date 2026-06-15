@@ -94,11 +94,9 @@ func TestExecuteNilContext(t *testing.T) {
 	task := NewBruteTask([]Target{{IP: "127.0.0.1", Port: "1", Service: "redis"}})
 	task.Passwords = []string{"x"}
 
-	resultCh, err := engine.Execute(nil, task)
-	if err != nil {
-		t.Fatalf("execute with nil context: %v", err)
-	}
-	for range resultCh {
+	_, err := engine.Execute(nil, task)
+	if err == nil {
+		t.Fatal("expected error for nil context, got nil")
 	}
 }
 
