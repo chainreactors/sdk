@@ -382,9 +382,9 @@ func TestParseCPEKey(t *testing.T) {
 		{"cpe:2.3:a:*:*:*:*:*:*:*:*:*:*", "", ""},
 	}
 	for _, tc := range tests {
-		v, p := parseCPEKey(tc.input)
+		v, p := common.ParseCPEKey(tc.input)
 		if v != tc.wantVendor || p != tc.wantProduct {
-			t.Errorf("parseCPEKey(%q) = (%q, %q), want (%q, %q)",
+			t.Errorf("ParseCPEKey(%q) = (%q, %q), want (%q, %q)",
 				tc.input, v, p, tc.wantVendor, tc.wantProduct)
 		}
 	}

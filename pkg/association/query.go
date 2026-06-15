@@ -128,8 +128,8 @@ func (q *Query) terms() []term {
 	appendTerms("tag", q.Tags)
 	appendTerms("service", q.Services)
 	for _, raw := range q.CPEs {
-		if v, p := parseCPEKey(raw); v != "" && p != "" {
-			t := newTerm("cpe", cpeKey(v, p))
+		if v, p := common.ParseCPEKey(raw); v != "" && p != "" {
+			t := newTerm("cpe", common.CPEKey(v, p))
 			if t.valid() {
 				terms = append(terms, t)
 			}
