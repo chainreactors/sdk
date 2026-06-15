@@ -31,34 +31,17 @@ type DefaultHTTPSender struct {
 //   - proxy: 代理地址（可选，如 "socks5://127.0.0.1:1080"）
 func NewDefaultHTTPSender(timeout time.Duration, proxy string) *DefaultHTTPSender {
 	if timeout <= 0 {
-		timeout = 10 * time.Second // 默认10秒超时
+		timeout = 10 * time.Second
 	}
 
 	var proxies []string
 	if proxy != "" {
 		proxies = []string{proxy}
 	}
-	// 委托 SDK 统一 httpx 桥接（底层 utils/httpx，零全局、并发安全）。
-	// 代理解析失败时回退到无代理客户端，保持原有“尽力而为”语义。
-	client, err := sdkhttpx.NewClient(sdkhttpx.Config{
-		Timeout:             timeout,
-		Proxy:               proxies,
-		FollowRedirects:     false,
-		InsecureSkipVerify:  true,
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     90 * time.Second,
-	})
-	if err != nil {
-		client, _ = sdkhttpx.NewClient(sdkhttpx.Config{
-			Timeout:             timeout,
-			FollowRedirects:     false,
-			InsecureSkipVerify:  true,
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     90 * time.Second,
-		})
-	}
+	client, _ := sdkhttpx.NewClient(sdkhttpx.BrowserConfig().
+		WithTimeout(timeout).
+		WithProxy(proxies...).
+		WithRedirects(false))
 
 	return &DefaultHTTPSender{
 		timeout: timeout,
@@ -74,8 +57,6 @@ func (s *DefaultHTTPSender) Send(url string) (*http.Response, error) {
 		return nil, fmt.Errorf("create request failed: %w", err)
 	}
 
-	sdkhttpx.ApplyBrowserProfileHeaders(req.Header)
-
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("send request failed: %w", err)
@@ -90,8 +71,6 @@ func (s *DefaultHTTPSender) SendWithMethod(url, method string, body io.Reader) (
 	if err != nil {
 		return nil, fmt.Errorf("create request failed: %w", err)
 	}
-
-	sdkhttpx.ApplyBrowserProfileHeaders(req.Header)
 
 	resp, err := s.client.Do(req)
 	if err != nil {

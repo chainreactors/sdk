@@ -1,9 +1,6 @@
-// Package httpx is the SDK-layer bridge that turns proxyclient proxy specs
-// (`[]string`) into concurrency-safe *http.Client instances built on the
+// Package httpx is the SDK-layer HTTP client generator that turns proxy specs
+// and profile presets into concurrency-safe *http.Client instances built on the
 // shared, zero-global utils/httpx foundation.
-//
-// proxyclient 的依赖只停留在本层（SDK，go1.24）；utils/httpx 保持 go1.10、
-// 不感知 proxyclient。
 package httpx
 
 import (
@@ -15,19 +12,21 @@ import (
 	"github.com/chainreactors/sdk/pkg/types"
 )
 
-// Config 描述一个 SDK HTTP 客户端的构造参数。
+// Config describes the parameters for constructing an SDK HTTP client.
 type Config struct {
 	Timeout             time.Duration
-	Proxy               []string // 经 types.NewProxyDialer 解析，支持多级链/全协议
+	Proxy               []string
 	FollowRedirects     bool
 	InsecureSkipVerify  bool
 	MaxIdleConns        int
 	MaxIdleConnsPerHost int
 	IdleConnTimeout     time.Duration
 	DisableKeepAlives   bool
+	Headers             map[string]string
 }
 
-// DefaultConfig 返回一组通用默认参数（无代理）。每次返回新值，无全局状态。
+// DefaultConfig returns a general-purpose preset: no redirects, skip TLS
+// verification, sensible connection pool defaults.
 func DefaultConfig() Config {
 	return Config{
 		Timeout:             10 * time.Second,
@@ -39,16 +38,71 @@ func DefaultConfig() Config {
 	}
 }
 
-// DefaultClient 用默认参数构造一个【全新的】*http.Client（无代理）。
-// 非全局单例——每次返回独立实例。需要代理时用 NewClient(Config{Proxy: ...})。
+// BrowserConfig returns a preset that mimics a mainstream browser: redirects
+// enabled, browser-grade UA/Accept/Accept-Language headers injected on every
+// request.
+func BrowserConfig() Config {
+	return Config{
+		Timeout:             10 * time.Second,
+		FollowRedirects:     true,
+		InsecureSkipVerify:  true,
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		Headers: map[string]string{
+			"User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+			"Accept-Language": "en-US,en;q=0.9",
+			"Connection":      "keep-alive",
+		},
+	}
+}
+
+func (c Config) WithTimeout(d time.Duration) Config {
+	c.Timeout = d
+	return c
+}
+
+func (c Config) WithProxy(proxy ...string) Config {
+	c.Proxy = proxy
+	return c
+}
+
+func (c Config) WithRedirects(follow bool) Config {
+	c.FollowRedirects = follow
+	return c
+}
+
+func (c Config) WithHeaders(headers map[string]string) Config {
+	c.Headers = headers
+	return c
+}
+
+// DefaultClient constructs a new *http.Client with DefaultConfig.
 func DefaultClient() *http.Client {
 	c, _ := NewClient(DefaultConfig())
 	return c
 }
 
-// NewClient 构造一个 *http.Client：若 Proxy 非空则注入 proxyclient 拨号器，
-// 底层委托 utils/httpx（每次全新实例，零全局，并发安全）。
+// NewClient constructs a new *http.Client from cfg. If Proxy is set but fails
+// to resolve, the client is built without proxy (best-effort fallback).
 func NewClient(cfg Config) (*http.Client, error) {
+	client, err := newClientInner(cfg)
+	if err != nil && len(cfg.Proxy) > 0 {
+		cfg.Proxy = nil
+		client, _ = newClientInner(cfg)
+		err = nil
+	}
+	if client != nil && len(cfg.Headers) > 0 {
+		client.Transport = &headerTransport{
+			base:    client.Transport,
+			headers: cfg.Headers,
+		}
+	}
+	return client, err
+}
+
+func newClientInner(cfg Config) (*http.Client, error) {
 	uc := utilshttpx.ClientConfig{
 		Timeout:             cfg.Timeout,
 		FollowRedirects:     cfg.FollowRedirects,
@@ -67,7 +121,39 @@ func NewClient(cfg Config) (*http.Client, error) {
 			uc.DialContext = dialer.DialContext
 		}
 	}
-	client := utilshttpx.NewHTTPClient(uc)
-	wrapProfileTransport(client)
-	return client, nil
+	return utilshttpx.NewHTTPClient(uc), nil
+}
+
+// SetDefaultHeaders applies BrowserConfig headers to an http.Header, without
+// overriding keys the caller has already set. Use this for requests sent
+// through a raw *http.Client that was not created via NewClient.
+func SetDefaultHeaders(header http.Header) {
+	if header == nil {
+		return
+	}
+	for key, value := range BrowserConfig().Headers {
+		if header.Get(key) == "" {
+			header.Set(key, value)
+		}
+	}
+}
+
+// headerTransport injects default headers into every outgoing request without
+// overriding headers the caller has already set.
+type headerTransport struct {
+	base    http.RoundTripper
+	headers map[string]string
+}
+
+func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	for key, value := range t.headers {
+		if req.Header.Get(key) == "" {
+			req.Header.Set(key, value)
+		}
+	}
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(req)
 }

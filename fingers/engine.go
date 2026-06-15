@@ -42,12 +42,9 @@ func (e *Engine) resolveClient(ctx *Context) *http.Client {
 		if timeout <= 0 {
 			timeout = 10 * time.Second
 		}
-		if client, err := sdkhttpx.NewClient(sdkhttpx.Config{
-			Timeout:            timeout,
-			Proxy:              e.config.Proxy,
-			FollowRedirects:    true,
-			InsecureSkipVerify: true,
-		}); err == nil {
+		if client, err := sdkhttpx.NewClient(sdkhttpx.BrowserConfig().
+			WithTimeout(timeout).
+			WithProxy(e.config.Proxy...)); err == nil {
 			return client
 		}
 	}
@@ -495,7 +492,7 @@ func (e *Engine) ActiveMatch(baseURL string, level int, transport http.RoundTrip
 			if err != nil {
 				return nil, false
 			}
-			sdkhttpx.ApplyBrowserProfileHeaders(req.Header)
+			sdkhttpx.SetDefaultHeaders(req.Header)
 
 			resp, err := client.Do(req)
 			if err != nil {

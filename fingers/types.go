@@ -127,21 +127,9 @@ func (c *Context) buildDefaultClient() {
 	if c.proxy != "" {
 		proxies = []string{c.proxy}
 	}
-	client, err := sdkhttpx.NewClient(sdkhttpx.Config{
-		Timeout:            timeout,
-		Proxy:              proxies,
-		FollowRedirects:    true,
-		InsecureSkipVerify: true,
-	})
-	if err != nil {
-		// 代理解析失败时回退到无代理客户端，保持尽力而为语义。
-		client, _ = sdkhttpx.NewClient(sdkhttpx.Config{
-			Timeout:            timeout,
-			FollowRedirects:    true,
-			InsecureSkipVerify: true,
-		})
-	}
-	c.defaultClient = client
+	c.defaultClient, _ = sdkhttpx.NewClient(sdkhttpx.BrowserConfig().
+		WithTimeout(timeout).
+		WithProxy(proxies...))
 }
 
 // GetTimeout 获取超时时间（秒）
