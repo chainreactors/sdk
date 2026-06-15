@@ -39,29 +39,6 @@ func TestExampleMainPackagesBuild(t *testing.T) {
 	}
 }
 
-func TestExampleSpecialBuilds(t *testing.T) {
-	root := repoRoot(t)
-	commands := []struct {
-		name string
-		args []string
-	}{
-		{"host_spray_sdk", []string{"./examples/spray/host_spray_sdk.go"}},
-	}
-
-	for _, tc := range commands {
-		t.Run(tc.name, func(t *testing.T) {
-			output := filepath.Join(t.TempDir(), tc.name)
-			if runtime.GOOS == "windows" {
-				output += ".exe"
-			}
-			args := append([]string{"build", "-o", output}, tc.args...)
-			if out, err := runGo(t, root, 2*time.Minute, args...); err != nil {
-				t.Fatalf("go %s failed: %v\n%s", strings.Join(args, " "), err, out)
-			}
-		})
-	}
-}
-
 func TestExampleCommandUsageSmoke(t *testing.T) {
 	root := repoRoot(t)
 	commands := []struct {
@@ -70,13 +47,14 @@ func TestExampleCommandUsageSmoke(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"fingers", []string{"run", "./examples/fingers/main.go"}, "Usage: fingers", true},
-		{"neutron", []string{"run", "./examples/neutron/main.go"}, "Usage: neutron", true},
-		{"gogo", []string{"run", "./examples/gogo/main.go"}, "Usage: gogo", true},
-		{"gogo_cyberhub", []string{"run", "./examples/gogo_cyberhub/main.go"}, "Usage: gogo_cyberhub", true},
-		{"spray", []string{"run", "./examples/spray/main.go"}, "Usage: spray", true},
-		{"host_spray_sdk", []string{"run", "./examples/spray/host_spray_sdk.go"}, "Usage: host_spray_sdk", true},
-		{"cyberhub", []string{"run", "./examples/cyberhub/main.go"}, "Usage: go run ./examples/cyberhub", false},
+		{"fingers", []string{"run", "./examples/engines/fingers"}, "Usage: fingers", true},
+		{"neutron", []string{"run", "./examples/engines/neutron"}, "Usage: neutron", true},
+		{"gogo", []string{"run", "./examples/engines/gogo"}, "Usage: gogo", true},
+		{"spray", []string{"run", "./examples/engines/spray"}, "Usage: spray", true},
+		{"zombie", []string{"run", "./examples/engines/zombie"}, "Usage: zombie", true},
+		{"sniper", []string{"run", "./examples/sniper"}, "Usage: sniper", true},
+		{"host_collision", []string{"run", "./examples/cases/host_collision"}, "Usage: host_collision", true},
+		{"cyberhub_provider", []string{"run", "./examples/cases/cyberhub_provider"}, "Usage: go run", false},
 		{"match_detail_case", []string{"run", "./examples/cases/match_detail"}, "-target", true},
 		{"request_response_case", []string{"run", "./examples/cases/request_response"}, "-target", true},
 		{"spray_crawl_finger_case", []string{"run", "./examples/cases/spray_crawl_finger"}, "-target", true},
@@ -105,7 +83,7 @@ func TestExampleCommandUsageSmoke(t *testing.T) {
 
 func TestAssociationExampleInlineSmoke(t *testing.T) {
 	root := repoRoot(t)
-	out, err := runGo(t, root, time.Minute, "run", "./examples/association/main.go")
+	out, err := runGo(t, root, time.Minute, "run", "./examples/cases/association/main.go")
 	if err != nil {
 		t.Fatalf("association example failed: %v\n%s", err, out)
 	}
@@ -123,7 +101,7 @@ func TestAssociationExampleInlineSmoke(t *testing.T) {
 
 func TestAssociationExampleQuerySmoke(t *testing.T) {
 	root := repoRoot(t)
-	out, err := runGo(t, root, time.Minute, "run", "./examples/association/main.go", "-finger", "apache tomcat")
+	out, err := runGo(t, root, time.Minute, "run", "./examples/cases/association/main.go", "-finger", "apache tomcat")
 	if err != nil {
 		t.Fatalf("association query example failed: %v\n%s", err, out)
 	}
@@ -140,7 +118,7 @@ func TestAssociationExampleQuerySmoke(t *testing.T) {
 
 func TestFilterExampleSmoke(t *testing.T) {
 	root := repoRoot(t)
-	out, err := runGo(t, root, time.Minute, "run", "./examples/filter/main.go")
+	out, err := runGo(t, root, time.Minute, "run", "./examples/cases/filter/main.go")
 	if err != nil {
 		t.Fatalf("filter example failed: %v\n%s", err, out)
 	}
@@ -168,7 +146,7 @@ func TestSprayExampleChecksLocalHTTP(t *testing.T) {
 		root,
 		2*time.Minute,
 		"run",
-		"./examples/spray/main.go",
+		"./examples/engines/spray",
 		"-u",
 		srv.URL,
 		"-json",

@@ -128,9 +128,10 @@ func applyFilterParams(params url.Values, filter *ExportFilter) {
 	}
 }
 
-// applyDefaultPOCStatus 在没有显式指定状态时默认注入 status=active
+// applyDefaultPOCStatus 在没有显式指定状态时默认注入 status=active。
+// 当 with_draft=true 时跳过，允许加载全量数据。
 func applyDefaultPOCStatus(params url.Values) {
-	if len(params["statuses"]) > 0 || params.Get("review_status") != "" {
+	if len(params["statuses"]) > 0 || params.Get("review_status") != "" || params.Get("with_draft") == "true" {
 		return
 	}
 	params.Set("status", "active")

@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/chainreactors/fingers/alias"
+	"github.com/chainreactors/fingers/common"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/fingers/resources"
 	"github.com/chainreactors/neutron/templates"
@@ -62,6 +63,10 @@ type Index struct {
 	templateByID map[string]int
 	aliasLookup  map[string][]int
 
+	// cpeAliases / cpeTemplates: vendor/product -> entity IDs for CPE auto-linking.
+	cpeAliases   map[string][]int
+	cpeTemplates map[string][]int
+
 	termIndex map[term][]entityRef
 
 	fingerAliases   [][]int
@@ -93,28 +98,32 @@ func NewIndexWithOptions(options IndexOptions) *Index {
 	return idx
 }
 
-// BuildFromProvider loads data from a Provider and builds an index.
-func BuildFromProvider(ctx context.Context, p types.Provider) (*Index, error) {
-	return BuildFromProviderWithOptions(ctx, p, IndexOptions{})
-}
-
-// BuildFromProviderWithOptions loads data from a Provider and builds an index.
-func BuildFromProviderWithOptions(ctx context.Context, p types.Provider, options IndexOptions) (*Index, error) {
-	if p == nil {
-		return nil, fmt.Errorf("provider is nil")
+// BuildFromProvider builds an index from one or more Providers.
+// With one provider, it loads both fingerprints and POCs from the same source.
+// With two providers, the first supplies fingerprints and the second supplies POCs,
+// allowing different filters for each.
+func BuildFromProvider(ctx context.Context, providers ...types.Provider) (*Index, error) {
+	if len(providers) == 0 || providers[0] == nil {
+		return nil, fmt.Errorf("at least one provider is required")
 	}
 
-	fingers, aliases, err := p.Fingers(ctx)
+	fingerProvider := providers[0]
+	pocProvider := fingerProvider
+	if len(providers) > 1 && providers[1] != nil {
+		pocProvider = providers[1]
+	}
+
+	fingers, aliases, err := fingerProvider.Fingers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load fingers: %w", err)
 	}
 
-	tpls, err := p.POCs(ctx)
+	tpls, err := pocProvider.POCs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load pocs: %w", err)
 	}
 
-	idx := NewIndexWithOptions(options)
+	idx := NewIndex()
 	idx.BuildWithFingers(fingers, aliases, tpls)
 	return idx, nil
 }
@@ -150,6 +159,7 @@ func (idx *Index) BuildWithFingers(fingers fingersEngine.Fingers, aliases []*ali
 	for aliasID := range idx.aliases {
 		idx.linkAliasPOCs(aliasID)
 	}
+	idx.linkByCPE()
 }
 
 func (idx *Index) setOptions(options IndexOptions) {
@@ -174,6 +184,9 @@ func (idx *Index) clear() {
 	idx.aliasByName = make(map[string]int)
 	idx.templateByID = make(map[string]int)
 	idx.aliasLookup = make(map[string][]int)
+
+	idx.cpeAliases = make(map[string][]int)
+	idx.cpeTemplates = make(map[string][]int)
 
 	idx.termIndex = make(map[term][]entityRef)
 
@@ -232,7 +245,9 @@ func (idx *Index) addAlias(a *alias.Alias) {
 	idx.addTerm("vendor", a.Vendor, ref)
 	idx.addTerm("product", a.Product, ref)
 	if a.Vendor != "" && a.Product != "" {
-		idx.addTerm("cpe", a.Vendor+"/"+a.Product, ref)
+		key := common.CPEKey(nameKey(a.Vendor), nameKey(a.Product))
+		idx.addTerm("cpe", key, ref)
+		idx.cpeAliases[key] = appendUniqueInt(idx.cpeAliases[key], id)
 	}
 	for _, tag := range a.Tags {
 		idx.addTerm("tag", tag, ref)
@@ -277,9 +292,20 @@ func (idx *Index) addTemplate(t *templates.Template) {
 	if t.Info.Classification != nil {
 		idx.addTerm("cve", t.Info.Classification.CVEID, ref)
 		idx.addTerm("cwe", t.Info.Classification.CWEID, ref)
-		idx.addTerm("cpe", t.Info.Classification.CPE, ref)
+		if v, p := common.ParseCPEKey(t.Info.Classification.CPE); v != "" && p != "" {
+			key := common.CPEKey(v, p)
+			idx.addTerm("cpe", key, ref)
+			idx.cpeTemplates[key] = appendUniqueInt(idx.cpeTemplates[key], id)
+		}
 	}
 	if t.Info.Metadata != nil {
+		if rawCPE, ok := t.Info.Metadata["cpe"].(string); ok {
+			if v, p := common.ParseCPEKey(rawCPE); v != "" && p != "" {
+				key := common.CPEKey(v, p)
+				idx.addTerm("cpe", key, ref)
+				idx.cpeTemplates[key] = appendUniqueInt(idx.cpeTemplates[key], id)
+			}
+		}
 		idx.addWhitelistedMetadataTerms(t.Info.Metadata, ref)
 	}
 }
@@ -314,6 +340,20 @@ func (idx *Index) linkTemplateFingers(templateID int) {
 		}
 		for _, aliasID := range idx.lookupAliasIDs(fingerName) {
 			idx.linkAliasTemplate(aliasID, templateID)
+		}
+	}
+}
+
+func (idx *Index) linkByCPE() {
+	for key, aliasIDs := range idx.cpeAliases {
+		templateIDs, ok := idx.cpeTemplates[key]
+		if !ok {
+			continue
+		}
+		for _, aliasID := range aliasIDs {
+			for _, templateID := range templateIDs {
+				idx.linkAliasTemplate(aliasID, templateID)
+			}
 		}
 	}
 }
@@ -463,3 +503,4 @@ func appendUniqueRef(slice []entityRef, ref entityRef) []entityRef {
 	}
 	return append(slice, ref)
 }
+

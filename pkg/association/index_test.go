@@ -174,7 +174,7 @@ func TestQueryBuilder(t *testing.T) {
 		WithTemplates("CVE-2022-0001").
 		WithTags("database").
 		WithServices("mysql").
-		WithCPEs("oracle/mysql").
+		WithCPEs("oracle:mysql").
 		WithCVEs("CVE-2021-44228").
 		WithAttr("severity", "medium")
 
@@ -301,7 +301,7 @@ func TestLookupByTagServiceAndCPE(t *testing.T) {
 		t.Fatalf("expected mysql template by service, got %v", byService.Templates)
 	}
 
-	byCPE := idx.Lookup(NewQuery().WithCPEs("oracle/mysql"))
+	byCPE := idx.Lookup(NewQuery().WithCPEs("oracle:mysql"))
 	if len(byCPE.Aliases) != 1 || byCPE.Aliases[0].Name != "mysql" {
 		t.Fatalf("expected mysql alias by cpe, got %v", byCPE.Aliases)
 	}
@@ -363,5 +363,122 @@ func TestLookupNil(t *testing.T) {
 	r := idx.Lookup(nil)
 	if r == nil || len(r.Fingers) != 0 || len(r.Aliases) != 0 || len(r.Templates) != 0 {
 		t.Fatal("expected empty result for nil query")
+	}
+}
+
+func TestParseCPEKey(t *testing.T) {
+	tests := []struct {
+		input       string
+		wantVendor  string
+		wantProduct string
+	}{
+		{"hr-soft:hr-soft-ehr", "hr-soft", "hr-soft-ehr"},
+		{"spring:actuator", "spring", "actuator"},
+		{"hr_soft:ehr", "hr_soft", "ehr"},
+		{"cpe:2.3:a:apache:tomcat:9.0:*:*:*:*:*:*:*", "apache", "tomcat"},
+		{"cpe:/a:oracle:mysql:5.7", "oracle", "mysql"},
+		{"", "", ""},
+		{"nocolon", "", ""},
+		{"cpe:2.3:a:*:*:*:*:*:*:*:*:*:*", "", ""},
+	}
+	for _, tc := range tests {
+		v, p := common.ParseCPEKey(tc.input)
+		if v != tc.wantVendor || p != tc.wantProduct {
+			t.Errorf("ParseCPEKey(%q) = (%q, %q), want (%q, %q)",
+				tc.input, v, p, tc.wantVendor, tc.wantProduct)
+		}
+	}
+}
+
+func TestLinkByCPEMetadata(t *testing.T) {
+	fingers := fingersEngine.Fingers{
+		{Name: "hr-soft-ehr", Protocol: "http", Tags: []string{"ehr"}},
+	}
+	aliases := []*alias.Alias{
+		{
+			Name: "hr-soft-ehr",
+			Attributes: common.Attributes{Vendor: "hr-soft", Product: "hr-soft-ehr"},
+			Tags:       []string{"ehr"},
+		},
+	}
+	for _, a := range aliases {
+		a.Compile()
+	}
+	tpls := []*templates.Template{
+		{
+			Id: "CVE-2024-HRSOFT",
+			Info: templates.Info{
+				Name:     "HR Soft EHR Vuln",
+				Severity: "high",
+				Tags:     "cve",
+				Metadata: map[string]interface{}{
+					"cpe": "hr-soft:hr-soft-ehr",
+				},
+			},
+		},
+	}
+
+	idx := NewIndex()
+	idx.BuildWithFingers(fingers, aliases, tpls)
+
+	r := idx.Lookup(NewQuery().WithFingers("hr-soft-ehr"))
+	if len(r.Templates) != 1 || r.Templates[0].Id != "CVE-2024-HRSOFT" {
+		t.Fatalf("expected CPE-linked template, got %v", r.Templates)
+	}
+
+	r2 := idx.Lookup(NewQuery().WithTemplates("CVE-2024-HRSOFT"))
+	if len(r2.Fingers) != 1 || r2.Fingers[0].Name != "hr-soft-ehr" {
+		t.Fatalf("expected finger via CPE link, got %v", r2.Fingers)
+	}
+}
+
+func TestLinkByCPEClassification(t *testing.T) {
+	aliases := []*alias.Alias{
+		{
+			Name:       "spring-actuator",
+			Attributes: common.Attributes{Vendor: "spring", Product: "actuator"},
+		},
+	}
+	for _, a := range aliases {
+		a.Compile()
+	}
+	tpls := []*templates.Template{
+		{
+			Id: "CVE-2024-SPRING",
+			Info: templates.Info{
+				Name:     "Spring Actuator Vuln",
+				Severity: "high",
+				Tags:     "cve",
+				Classification: &templates.Classification{
+					CVEID: "CVE-2024-SPRING",
+					CPE:   "cpe:2.3:a:spring:actuator:*:*:*:*:*:*:*:*",
+				},
+			},
+		},
+	}
+
+	idx := NewIndex()
+	idx.Build(aliases, tpls)
+
+	r := idx.Lookup(NewQuery().WithCPEs("spring:actuator"))
+	if len(r.Templates) != 1 {
+		t.Fatalf("expected template via CPE, got %v", r.Templates)
+	}
+	if len(r.Aliases) != 1 || r.Aliases[0].Name != "spring-actuator" {
+		t.Fatalf("expected alias via CPE, got %v", r.Aliases)
+	}
+}
+
+func TestWithCPEsNormalization(t *testing.T) {
+	idx := buildTestIndex()
+
+	r1 := idx.Lookup(NewQuery().WithCPEs("oracle:mysql"))
+	if len(r1.Aliases) != 1 || r1.Aliases[0].Name != "mysql" {
+		t.Fatalf("colon-format CPE should match, got aliases=%v", r1.Aliases)
+	}
+
+	r2 := idx.Lookup(NewQuery().WithCPEs("oracle:mysql"))
+	if len(r2.Aliases) != 1 || r2.Aliases[0].Name != "mysql" {
+		t.Fatalf("slash-format CPE should still match, got aliases=%v", r2.Aliases)
 	}
 }

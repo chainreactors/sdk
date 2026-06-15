@@ -49,9 +49,7 @@ func main() {
 
 	ctx := context.Background()
 	hub := cyberhub.NewProvider(*hubURL, *apiKey).WithTimeout(*timeout)
-	idx, err := association.BuildFromProviderWithOptions(ctx, hub, association.IndexOptions{
-		MetadataKeys: splitCSV(*metadataKeys),
-	})
+	idx, err := association.BuildFromProvider(ctx, hub)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build association index failed: %v\n", err)
 		os.Exit(1)

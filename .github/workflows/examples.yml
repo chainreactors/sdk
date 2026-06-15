@@ -1,0 +1,39 @@
+name: Examples E2E
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'examples/**'
+      - 'scripts/ci-examples.sh'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'examples/**'
+      - 'scripts/ci-examples.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  examples-e2e:
+    name: Build & smoke-run examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: E2E examples
+        run: bash scripts/ci-examples.sh

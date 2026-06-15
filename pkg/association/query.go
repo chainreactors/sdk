@@ -127,7 +127,19 @@ func (q *Query) terms() []term {
 	appendTerms("template", q.Templates)
 	appendTerms("tag", q.Tags)
 	appendTerms("service", q.Services)
-	appendTerms("cpe", q.CPEs)
+	for _, raw := range q.CPEs {
+		if v, p := common.ParseCPEKey(raw); v != "" && p != "" {
+			t := newTerm("cpe", common.CPEKey(v, p))
+			if t.valid() {
+				terms = append(terms, t)
+			}
+		} else {
+			t := newTerm("cpe", raw)
+			if t.valid() {
+				terms = append(terms, t)
+			}
+		}
+	}
 	appendTerms("cve", q.CVEs)
 	for kind, values := range q.Attributes {
 		appendTerms(kind, values)
