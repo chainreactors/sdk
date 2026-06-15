@@ -124,20 +124,6 @@ func newClientInner(cfg Config) (*http.Client, error) {
 	return utilshttpx.NewHTTPClient(uc), nil
 }
 
-// SetDefaultHeaders applies BrowserConfig headers to an http.Header, without
-// overriding keys the caller has already set. Use this for requests sent
-// through a raw *http.Client that was not created via NewClient.
-func SetDefaultHeaders(header http.Header) {
-	if header == nil {
-		return
-	}
-	for key, value := range BrowserConfig().Headers {
-		if header.Get(key) == "" {
-			header.Set(key, value)
-		}
-	}
-}
-
 // headerTransport injects default headers into every outgoing request without
 // overriding headers the caller has already set.
 type headerTransport struct {

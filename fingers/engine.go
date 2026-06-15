@@ -1,16 +1,12 @@
 package fingers
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"encoding/json"
@@ -492,7 +488,6 @@ func (e *Engine) ActiveMatch(baseURL string, level int, transport http.RoundTrip
 			if err != nil {
 				return nil, false
 			}
-			sdkhttpx.SetDefaultHeaders(req.Header)
 
 			resp, err := client.Do(req)
 			if err != nil {
@@ -583,113 +578,6 @@ func cachingSender(sender fingersEngine.Sender) fingersEngine.Sender {
 	}
 }
 
-// pathCachedTransport wraps an http.RoundTripper with request-level response
-// caching so that FingerPrintHub and Xray engines sharing the same instance
-// avoid duplicate HTTP requests without conflating distinct probes.
-type pathCachedTransport struct {
-	base  http.RoundTripper
-	mu    sync.Mutex
-	cache map[string]*pathCachedEntry
-}
-
-type pathCachedEntry struct {
-	resp *http.Response
-	body []byte
-}
-
-func (t *pathCachedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	key, cacheable := pathCachedTransportKey(req)
-	if !cacheable {
-		return t.baseTransport().RoundTrip(req)
-	}
-
-	t.mu.Lock()
-	if entry, ok := t.cache[key]; ok {
-		t.mu.Unlock()
-		resp := *entry.resp
-		resp.Header = entry.resp.Header.Clone()
-		resp.Body = io.NopCloser(bytes.NewReader(entry.body))
-		resp.Request = req
-		return &resp, nil
-	}
-	t.mu.Unlock()
-
-	resp, err := t.baseTransport().RoundTrip(req)
-	if err != nil {
-		return nil, err
-	}
-
-	var body []byte
-	if resp.Body != nil {
-		body, err = io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	hdr := *resp
-	hdr.Body = nil
-	hdr.Header = resp.Header.Clone()
-	t.mu.Lock()
-	if t.cache == nil {
-		t.cache = make(map[string]*pathCachedEntry)
-	}
-	t.cache[key] = &pathCachedEntry{resp: &hdr, body: body}
-	t.mu.Unlock()
-
-	resp.Body = io.NopCloser(bytes.NewReader(body))
-	return resp, nil
-}
-
-func (t *pathCachedTransport) baseTransport() http.RoundTripper {
-	if t.base != nil {
-		return t.base
-	}
-	return http.DefaultTransport
-}
-
-func pathCachedTransportKey(req *http.Request) (string, bool) {
-	if req == nil || req.URL == nil {
-		return "", false
-	}
-	if req.Body != nil && req.Body != http.NoBody {
-		return "", false
-	}
-
-	method := req.Method
-	if method == "" {
-		method = http.MethodGet
-	}
-
-	var b strings.Builder
-	b.WriteString(method)
-	b.WriteByte(' ')
-	b.WriteString(req.URL.Scheme)
-	b.WriteString("://")
-	b.WriteString(req.URL.Host)
-	b.WriteString(req.URL.RequestURI())
-	if req.Host != "" {
-		b.WriteString("\nhost: ")
-		b.WriteString(req.Host)
-	}
-
-	keys := make([]string, 0, len(req.Header))
-	for key := range req.Header {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		values := req.Header.Values(key)
-		b.WriteByte('\n')
-		b.WriteString(http.CanonicalHeaderKey(key))
-		b.WriteString(": ")
-		b.WriteString(strings.Join(values, "\x00"))
-	}
-
-	return b.String(), true
-}
-
 // scanHTTPTarget 扫描单个 HTTP 目标，自动对所有注册引擎执行主动探测。
 func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResult {
 	result := &TargetResult{
@@ -711,9 +599,6 @@ func (e *Engine) scanHTTPTarget(ctx *Context, url string, level int) *TargetResu
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
-	transport = wrapRedirectResolvingTransport(transport)
-	transport = &pathCachedTransport{base: transport, cache: make(map[string]*pathCachedEntry)}
-
 	result.Results = e.ActiveMatch(baseURL, level, transport)
 	return result
 }
@@ -1031,23 +916,3 @@ func pathJoin(base, append string) string {
 	return base + append
 }
 
-type redirectResolvingTransport struct {
-	base http.RoundTripper
-}
-
-func wrapRedirectResolvingTransport(base http.RoundTripper) http.RoundTripper {
-	if base == nil {
-		base = http.DefaultTransport
-	}
-	return redirectResolvingTransport{base: base}
-}
-
-func (t redirectResolvingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	client := &http.Client{
-		Transport: t.base,
-	}
-	clone := req.Clone(req.Context())
-	clone.Body = req.Body
-	clone.GetBody = req.GetBody
-	return client.Do(clone)
-}
