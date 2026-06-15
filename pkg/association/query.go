@@ -173,6 +173,12 @@ type QueryResult struct {
 	Templates []*templates.Template
 }
 
+// LookupFrameworks is a convenience wrapper that builds a Query from Frameworks
+// and delegates to Lookup.
+func (idx *Index) LookupFrameworks(fws common.Frameworks) *QueryResult {
+	return idx.Lookup(NewQuery().WithFrameworks(fws))
+}
+
 // Lookup finds seed entities from Query terms, then adds directly associated entities.
 func (idx *Index) Lookup(q *Query) *QueryResult {
 	if q == nil {

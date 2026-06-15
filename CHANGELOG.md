@@ -2,7 +2,7 @@
 
 ## v0.3.2 (2026-06-15)
 
-重构 httpx 为通用 client generator，新增 CPE 自动关联机制，升级 neutron/fingers 大幅提升主动指纹匹配准确率。
+新增 CPE 自动关联机制，重构 httpx 为通用 client generator，升级 neutron/fingers 大幅提升主动指纹匹配准确率。
 
 ### Breaking Changes
 
@@ -10,13 +10,52 @@
 
 ### New Features
 
-- **association**: 新增基于 CPE 的指纹-POC 自动关联机制。`BuildFromProvider` 从 CyberHub 加载指纹与 POC 数据，通过 CPE vendor:product 自动建立关联索引，支持按指纹名、CPE、POC ID 等多维度查询
-- **httpx**: 重构为通用 client generator，新增 `BrowserConfig()` 预设与 `WithTimeout`/`WithProxy`/`WithRedirects` builder 方法；`NewClient` 内聚 proxy fallback
-- **fingers**: 主动探测新增跨 finger 的 `cachingSender` 请求缓存，相同探测路径只发一次 HTTP 请求
-- **neutron**: per-context CookieJar，redirect 链内 Set-Cookie 正确传递，不同执行间隔离
-- **neutron**: redirect 策略三态化（DontFollow / FollowAll / FollowSameHost），对齐 nuclei RedirectFlow 语义，修复 `redirects: false` 模板漏匹配
-- **neutron**: xray 转换器修正 `follow_redirects` 默认行为，自动检测依赖跳转响应的规则并保留 3xx 原始响应
-- **fingers(lib)**: hub/xray 主动探测改用 `ExecuteWithTransport` 整模板执行，修复多请求模板 `body_N` 塌陷为 `body_1` 的漏匹配
+**association — CPE 自动关联（新模块）**
+
+- 新增 `pkg/association` 模块，基于 CPE vendor:product 自动建立指纹 ↔ POC 关联索引
+- `BuildFromProvider` 一行代码从 CyberHub 加载指纹与 POC 数据并构建索引
+- 支持按指纹名、CPE、POC ID、tag、CVE 等多维度查询，结果包含关联的指纹、别名和 POC 模板
+- `LookupFrameworks` 直接从扫描结果的 Frameworks 查询关联 POC
+- `QueryFromResult` 从 gogo/spray/zombie 的 `types.Result` 自动提取查询条件
+
+```go
+// 构建关联索引
+idx, _ := association.BuildFromProvider(ctx, cyberhub.NewProvider(url, key))
+
+// 指纹名查询关联 POC
+result := idx.Lookup(association.NewQuery().WithFingers("tomcat"))
+for _, tpl := range result.Templates {
+    fmt.Println(tpl.ID) // "CVE-2017-12615"
+}
+
+// 直接从 Frameworks 查询
+related := idx.LookupFrameworks(scanResult.Frameworks)
+
+// 从扫描结果自动提取查询条件
+related = idx.Lookup(association.QueryFromResult(engineResult))
+```
+
+**httpx — 通用 client generator**
+
+- 重构 `pkg/httpx` 为带预设的 HTTP client 工厂
+- 新增 `BrowserConfig()` 预设（自动注入浏览器 UA/Accept/Accept-Language）和 `DefaultConfig()` 裸配置
+- 新增 `WithTimeout`/`WithProxy`/`WithRedirects`/`WithHeaders` builder 方法
+- `NewClient` 内聚 proxy fallback：代理解析失败自动回退无代理 client
+
+```go
+client, _ := httpx.NewClient(httpx.BrowserConfig().WithProxy("socks5://127.0.0.1:1080"))
+```
+
+**neutron — redirect 策略对齐 + per-context CookieJar**
+
+- redirect 策略三态化（DontFollow / FollowAll / FollowSameHost），对齐 nuclei RedirectFlow 语义
+- per-context CookieJar：每次模板执行自动创建独立 CookieJar，redirect 链内 Set-Cookie 正确传递
+- xray 转换器修正 `follow_redirects` 默认行为，自动检测依赖跳转响应的规则并保留原始响应
+
+**fingers — 主动探测优化**
+
+- 主动探测新增跨 finger 的 `cachingSender` 请求缓存，相同 send_data 路径只发一次 HTTP 请求
+- hub/xray 引擎改用 `ExecuteWithTransport` 整模板执行，修复多请求模板 `body_N` 塌陷为 `body_1` 的漏匹配
 
 ### Bug Fixes
 
