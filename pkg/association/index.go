@@ -98,28 +98,32 @@ func NewIndexWithOptions(options IndexOptions) *Index {
 	return idx
 }
 
-// BuildFromProvider loads data from a Provider and builds an index.
-func BuildFromProvider(ctx context.Context, p types.Provider) (*Index, error) {
-	return BuildFromProviderWithOptions(ctx, p, IndexOptions{})
-}
-
-// BuildFromProviderWithOptions loads data from a Provider and builds an index.
-func BuildFromProviderWithOptions(ctx context.Context, p types.Provider, options IndexOptions) (*Index, error) {
-	if p == nil {
-		return nil, fmt.Errorf("provider is nil")
+// BuildFromProvider builds an index from one or more Providers.
+// With one provider, it loads both fingerprints and POCs from the same source.
+// With two providers, the first supplies fingerprints and the second supplies POCs,
+// allowing different filters for each.
+func BuildFromProvider(ctx context.Context, providers ...types.Provider) (*Index, error) {
+	if len(providers) == 0 || providers[0] == nil {
+		return nil, fmt.Errorf("at least one provider is required")
 	}
 
-	fingers, aliases, err := p.Fingers(ctx)
+	fingerProvider := providers[0]
+	pocProvider := fingerProvider
+	if len(providers) > 1 && providers[1] != nil {
+		pocProvider = providers[1]
+	}
+
+	fingers, aliases, err := fingerProvider.Fingers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load fingers: %w", err)
 	}
 
-	tpls, err := p.POCs(ctx)
+	tpls, err := pocProvider.POCs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load pocs: %w", err)
 	}
 
-	idx := NewIndexWithOptions(options)
+	idx := NewIndex()
 	idx.BuildWithFingers(fingers, aliases, tpls)
 	return idx, nil
 }
