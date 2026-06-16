@@ -11,9 +11,9 @@ require (
 	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe
 	github.com/chainreactors/proton v0.3.1-0.20260611174627-89c10c8c27e5
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
-	github.com/chainreactors/spray v1.3.1-0.20260608085629-66dafe7eab4f
+	github.com/chainreactors/spray v1.3.1-0.20260616101714-a52580bd9040
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
-	github.com/chainreactors/zombie v1.2.3-0.20260611172539-bdd2cdfd5a21
+	github.com/chainreactors/zombie v1.2.3-0.20260616102212-9bcfed7622ab
 	github.com/panjf2000/ants/v2 v2.12.1
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -60,6 +60,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
@@ -126,9 +127,4 @@ require (
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
-)
-
-replace (
-	github.com/chainreactors/spray => /mnt/chainreactors/spray
-	github.com/chainreactors/zombie => /mnt/chainreactors/zombie
 )
