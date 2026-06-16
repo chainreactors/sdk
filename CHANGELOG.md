@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.3.3 (2026-06-16)
+
+新增 association 模糊搜索机制，支持对索引内所有实体的子串模糊匹配；修复 CyberHub POC 导出默认状态过滤导致零结果的问题。
+
+### New Features
+
+**association — 模糊搜索**
+
+- 新增 `WithSearch` 查询构建器，支持跨指纹/别名/模板的子串模糊搜索
+- `Lookup` 空查询（无 terms 且无 search）返回索引内全部实体
+- 新增 `FingersWithTemplates` 便捷方法，返回有关联模板的指纹及模板数量
+- 模糊搜索可与精确 terms 组合使用，结果自动去重并展开关联实体
+
+```go
+// 模糊搜索
+result := idx.Lookup(association.NewQuery().WithSearch("nginx"))
+// 模糊 + 精确组合
+result = idx.Lookup(association.NewQuery().WithSearch("splunk").WithTags("webserver"))
+// 查询有关联模板的指纹
+fwt := result.FingersWithTemplates(idx)
+```
+
+### Bug Fixes
+
+- **cyberhub**: `applyDefaultPOCStatus` 不再默认注入 `status=active`，修复 CyberHub 实例 POC 无 status 字段时导出零结果的问题
+
+### Tests
+
+- 新增 8 个 search 机制单元测试（子串匹配、去重、大小写无关、组合查询等）
+- 新增 7 个 CyberHub 集成测试（真实数据验证，通过 `CYBERHUB_URL`/`CYBERHUB_KEY` 环境变量控制）
+
 ## v0.3.2 (2026-06-15)
 
 新增 CPE 自动关联机制，重构 httpx 为通用 client generator，升级 neutron/fingers 大幅提升主动指纹匹配准确率。
