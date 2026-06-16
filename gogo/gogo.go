@@ -346,6 +346,7 @@ func (e *Engine) workflowStream(ctx context.Context, workflow *types.Workflow, r
 				}
 			}
 
+			initConfig.Ctx = ctx
 			core.RunTask(*initConfig)
 		}()
 		return resultCh, nil
