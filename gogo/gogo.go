@@ -119,6 +119,9 @@ func (e *Engine) Init() error {
 	e.applyInjectedFingers()
 	e.applyInjectedNeutron()
 
+	// Resources are already loaded via SDK injection. Tell RunWithArgs not to reload.
+	pkg.SetResourceLoader(func() error { return nil })
+
 	e.inited = true
 	return nil
 }

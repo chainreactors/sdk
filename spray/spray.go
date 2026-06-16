@@ -79,6 +79,9 @@ func (e *Engine) Init() error {
 	e.applyMatchDetail()
 	e.refreshActivePath()
 	e.configureSDKGlobals()
+
+	pkg.SetResourceLoader(func() error { return nil })
+
 	e.inited = true
 	return nil
 }
