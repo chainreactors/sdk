@@ -469,6 +469,154 @@ func TestLinkByCPEClassification(t *testing.T) {
 	}
 }
 
+func TestSearchRefsSubstring(t *testing.T) {
+	idx := buildTestIndex()
+
+	refs := idx.searchRefs("ngin")
+	if len(refs) == 0 {
+		t.Fatal("expected refs matching 'ngin'")
+	}
+	kinds := make(map[entityKind]bool)
+	for _, ref := range refs {
+		kinds[ref.kind] = true
+	}
+	if !kinds[entityFinger] || !kinds[entityAlias] {
+		t.Fatalf("expected both finger and alias refs, got kinds=%v", kinds)
+	}
+
+	if refs := idx.searchRefs("zzz-nonexistent"); len(refs) != 0 {
+		t.Fatalf("expected no refs for nonexistent text, got %d", len(refs))
+	}
+
+	if refs := idx.searchRefs("  "); len(refs) != 0 {
+		t.Fatalf("expected no refs for blank text, got %d", len(refs))
+	}
+}
+
+func TestSearchRefsDedup(t *testing.T) {
+	idx := buildTestIndex()
+
+	refs := idx.searchRefs("nginx")
+	seen := make(map[entityRef]int)
+	for _, ref := range refs {
+		seen[ref]++
+	}
+	for ref, count := range seen {
+		if count > 1 {
+			t.Fatalf("duplicate ref %+v appeared %d times", ref, count)
+		}
+	}
+}
+
+func TestWithSearchBuilder(t *testing.T) {
+	q := NewQuery().WithSearch("mysql")
+	if q.Search != "mysql" {
+		t.Fatalf("expected Search='mysql', got %q", q.Search)
+	}
+}
+
+func TestQueryEmptyWithSearch(t *testing.T) {
+	q := NewQuery()
+	if !q.empty() {
+		t.Fatal("new query should be empty")
+	}
+	q.WithSearch("test")
+	if q.empty() {
+		t.Fatal("query with search text should not be empty")
+	}
+}
+
+func TestLookupWithSearch(t *testing.T) {
+	idx := buildTestIndex()
+
+	r := idx.Lookup(NewQuery().WithSearch("ngin"))
+	if len(r.Fingers) == 0 {
+		t.Fatal("expected fingers matching 'ngin'")
+	}
+	found := false
+	for _, f := range r.Fingers {
+		if f.Name == "nginx" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected nginx finger in search results")
+	}
+	if len(r.Aliases) == 0 {
+		t.Fatal("expected associated aliases from search")
+	}
+	if len(r.Templates) == 0 {
+		t.Fatal("expected associated templates from search")
+	}
+}
+
+func TestLookupSearchCaseInsensitive(t *testing.T) {
+	idx := buildTestIndex()
+
+	r := idx.Lookup(NewQuery().WithSearch("MYSQL"))
+	foundFinger := false
+	for _, f := range r.Fingers {
+		if f.Name == "mysql" {
+			foundFinger = true
+			break
+		}
+	}
+	foundAlias := false
+	for _, a := range r.Aliases {
+		if a.Name == "mysql" {
+			foundAlias = true
+			break
+		}
+	}
+	if !foundFinger {
+		t.Fatal("case-insensitive search should find mysql finger")
+	}
+	if !foundAlias {
+		t.Fatal("case-insensitive search should find mysql alias")
+	}
+}
+
+func TestLookupSearchCombinedWithTerms(t *testing.T) {
+	idx := buildTestIndex()
+
+	r := idx.Lookup(NewQuery().WithSearch("ngin").WithTags("database"))
+	fingerNames := make(map[string]bool)
+	for _, f := range r.Fingers {
+		fingerNames[f.Name] = true
+	}
+	if !fingerNames["nginx"] {
+		t.Fatal("expected nginx from search")
+	}
+	if !fingerNames["mysql"] {
+		t.Fatal("expected mysql from tag query")
+	}
+}
+
+func TestFingersWithTemplates(t *testing.T) {
+	idx := buildTestIndex()
+
+	r := idx.Lookup(NewQuery().WithSearch("ngin"))
+	fwt := r.FingersWithTemplates(idx)
+	if len(fwt) == 0 {
+		t.Fatal("expected at least one finger with templates")
+	}
+	found := false
+	for _, entry := range fwt {
+		if entry.Finger.Name == "nginx" && entry.TemplateCount > 0 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected nginx with template count > 0")
+	}
+
+	if fwt := (*QueryResult)(nil).FingersWithTemplates(idx); len(fwt) != 0 {
+		t.Fatal("nil result should return empty")
+	}
+}
+
 func TestWithCPEsNormalization(t *testing.T) {
 	idx := buildTestIndex()
 
