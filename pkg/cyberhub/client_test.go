@@ -126,32 +126,12 @@ func TestApplyFilterParams_Limit(t *testing.T) {
 	}
 }
 
-func TestApplyDefaultPOCStatus_NoStatuses(t *testing.T) {
+func TestApplyDefaultPOCStatus_NoOp(t *testing.T) {
 	params := url.Values{}
-	applyDefaultPOCStatus(params)
-
-	if params.Get("status") != "active" {
-		t.Fatalf("expected default status=active, got %q", params.Get("status"))
-	}
-}
-
-func TestApplyDefaultPOCStatus_WithStatuses(t *testing.T) {
-	params := url.Values{}
-	params.Add("statuses", "pending")
 	applyDefaultPOCStatus(params)
 
 	if params.Get("status") != "" {
-		t.Fatalf("expected no default status when statuses set, got %q", params.Get("status"))
-	}
-}
-
-func TestApplyDefaultPOCStatus_WithReviewStatus(t *testing.T) {
-	params := url.Values{}
-	params.Set("review_status", "approved")
-	applyDefaultPOCStatus(params)
-
-	if params.Get("status") != "" {
-		t.Fatalf("expected no default status when review_status set, got %q", params.Get("status"))
+		t.Fatalf("expected no status injection, got %q", params.Get("status"))
 	}
 }
 

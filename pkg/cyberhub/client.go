@@ -128,14 +128,11 @@ func applyFilterParams(params url.Values, filter *ExportFilter) {
 	}
 }
 
-// applyDefaultPOCStatus 在没有显式指定状态时默认注入 status=active。
-// 当 with_draft=true 时跳过，允许加载全量数据。
-func applyDefaultPOCStatus(params url.Values) {
-	if len(params["statuses"]) > 0 || params.Get("review_status") != "" || params.Get("with_draft") == "true" {
-		return
-	}
-	params.Set("status", "active")
-}
+// applyDefaultPOCStatus is a no-op placeholder. Previously it injected
+// status=active by default, but production CyberHub instances often have
+// no status field set on POC records, causing the filter to return zero
+// results. Callers that need status filtering should use ExportFilter.Statuses.
+func applyDefaultPOCStatus(params url.Values) {}
 
 type requestBodyProvider struct {
 	data    []byte

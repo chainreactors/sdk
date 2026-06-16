@@ -19,6 +19,7 @@ type Query struct {
 	CPEs       []string
 	CVEs       []string
 	Attributes map[string][]string
+	Search     string
 }
 
 func NewQuery() *Query {
@@ -180,6 +181,8 @@ func (idx *Index) LookupFrameworks(fws common.Frameworks) *QueryResult {
 }
 
 // Lookup finds seed entities from Query terms, then adds directly associated entities.
+// An empty query (no terms, no search text) returns all entities in the index.
+// A query with Search text performs substring matching across all indexed terms.
 func (idx *Index) Lookup(q *Query) *QueryResult {
 	if q == nil {
 		return &QueryResult{}
@@ -188,8 +191,24 @@ func (idx *Index) Lookup(q *Query) *QueryResult {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
+	if q.empty() {
+		collector := newResultCollector(idx)
+		for _, ref := range idx.allRefs() {
+			collector.addRef(ref)
+		}
+		return collector.result()
+	}
+
 	seeds := make([]entityRef, 0)
 	seenSeed := make(map[entityRef]struct{})
+
+	if q.Search != "" {
+		for _, ref := range idx.searchRefs(q.Search) {
+			seenSeed[ref] = struct{}{}
+			seeds = append(seeds, ref)
+		}
+	}
+
 	for _, t := range q.terms() {
 		for _, variant := range termVariants(t) {
 			for _, ref := range idx.termIndex[variant] {
