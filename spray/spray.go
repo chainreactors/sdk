@@ -318,7 +318,9 @@ func (e *Engine) execute(ctx *Context, taskType string, urls []string, wordlist 
 		return nil, fmt.Errorf("create runner failed: %v", err)
 	}
 
+	e.mu.Lock()
 	e.applyInjectedFingers()
+	e.mu.Unlock()
 
 	if wordlist != nil {
 		runner.Wordlist = wordlist
