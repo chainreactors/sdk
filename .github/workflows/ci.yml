@@ -34,8 +34,13 @@ jobs:
           go list -m all | tee modules.txt
           ! grep -E '=>|00010101000000|000000000000' modules.txt
 
-      - name: Run CI tests
-        run: bash scripts/ci-test.sh
+      - name: Run tests
+        run: |
+          go test -timeout 20m ./...
+          if [ -d cmd ]; then
+            go test -timeout 20m ./cmd/...
+            go build ./cmd/...
+          fi
 
   consumer-build:
     name: External consumer build
