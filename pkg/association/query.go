@@ -5,7 +5,7 @@ import (
 	"github.com/chainreactors/fingers/common"
 	fingersEngine "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/neutron/templates"
-	"github.com/chainreactors/parsers"
+	"github.com/chainreactors/utils/parsers"
 	"github.com/chainreactors/sdk/pkg/types"
 )
 

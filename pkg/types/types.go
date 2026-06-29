@@ -15,7 +15,7 @@ import (
 	templateNetwork "github.com/chainreactors/neutron/protocols/network"
 	templateSSL "github.com/chainreactors/neutron/protocols/ssl"
 	"github.com/chainreactors/neutron/templates"
-	"github.com/chainreactors/parsers"
+	"github.com/chainreactors/utils/parsers"
 	protonFile "github.com/chainreactors/proton/proton/file"
 	zombiecore "github.com/chainreactors/zombie/core"
 )
