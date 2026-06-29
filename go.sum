@@ -116,6 +116,8 @@ github.com/chainreactors/neutron v0.1.1-0.20260629055246-979be130dcaa h1:hUn4Xbo
 github.com/chainreactors/neutron v0.1.1-0.20260629055246-979be130dcaa/go.mod h1:UzB5SHkaz7/6Is8nU8NbXEMRbTbWmk44JFhk1M7qNns=
 github.com/chainreactors/neutron/operators/full v0.1.0 h1:friDqZuSOzLnoFXDGfc6FAlBYABG+ghInOm3ZvyKISM=
 github.com/chainreactors/neutron/operators/full v0.1.0/go.mod h1:75U5+U+Ya27UXQkjf11brRtrKkxjgaGSWQuAMhC3taU=
+github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe h1:n1pFLHHYXMiX5rCVWeciOTJUFggWXOrLtCu9jhq5Mbs=
+github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe/go.mod h1:ygxMqZQ/hGY2uegUvC0LbR538hbgNH7HP4dTuv/jfSM=
 github.com/chainreactors/proton v0.3.1-0.20260629055539-f6509337ef42 h1:BWq1L0VoBL4kuLEBnXcRMCyGi+JHIRkE9w93rS/BTrE=
 github.com/chainreactors/proton v0.3.1-0.20260629055539-f6509337ef42/go.mod h1:nvN+th20FMRye1GrK74ggkGiQohMpPgvnMc+bcnJnfU=
 github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593 h1:tnXa9DobeX30xGIkiAcH+BOKKwvscvxy6GfI0Q0qu8Q=
@@ -129,8 +131,8 @@ github.com/chainreactors/utils/parsers v0.0.0-20260629054935-23a3e0a235f9 h1:IOq
 github.com/chainreactors/utils/parsers v0.0.0-20260629054935-23a3e0a235f9/go.mod h1:S9lkpQ1I4wcBq0YEBde/UPmR061IPok3bLl7aPz6Vkk=
 github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4 h1:lvnDYEkatmZFHP5i321qQXK9L4vKRfso/uUfr5tOeC8=
 github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4/go.mod h1:zfz367PUmyaX6oAqV9SktVqyRXKlEh0sel9Wsq9dd2c=
-github.com/chainreactors/zombie v1.2.3-0.20260629062908-99a0f34ed031 h1:5TJrk8E9HPjH+M7X5LOfrgRIHVNVIdkQTTZ2F6WBQnA=
-github.com/chainreactors/zombie v1.2.3-0.20260629062908-99a0f34ed031/go.mod h1:wSWu6V9fUX3ECI/xyKiBAFBGoITqOmpyIrb9XD/B9sc=
+github.com/chainreactors/zombie v1.3.0 h1:gUIrV3syRlqGmNptAi5oKvrctxU/MybWMAVwIfd77SY=
+github.com/chainreactors/zombie v1.3.0/go.mod h1:Wujeh8zRhINbM/COIjgOaX7V1IYvFJoIgkEq7nh19Lg=
 github.com/charlievieth/fastwalk v1.0.14 h1:3Eh5uaFGwHZd8EGwTjJnSpBkfwfsak9h6ICgnWlhAyg=
 github.com/charlievieth/fastwalk v1.0.14/go.mod h1:diVcUreiU1aQ4/Wu3NbxxH4/KYdKpLDojrQ1Bb2KgNY=
 github.com/charmbracelet/colorprofile v0.4.3 h1:QPa1IWkYI+AOB+fE+mg/5/4HRMZcaXex9t5KX76i20Q=
