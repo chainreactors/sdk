@@ -8,12 +8,12 @@ require (
 	github.com/chainreactors/logs v0.0.0-20260624034259-9aaea4aa52cc
 	github.com/chainreactors/neutron v0.1.1-0.20260629055246-979be130dcaa
 	github.com/chainreactors/neutron/operators/full v0.1.0
-	github.com/chainreactors/proton v0.3.1-0.20260629055539-f6509337ef42
+	github.com/chainreactors/proton v0.3.1
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/spray v1.3.3-0.20260629055610-b618acf15bb6
 	github.com/chainreactors/utils v0.0.0-20260629054935-23a3e0a235f9
-	github.com/chainreactors/utils/parsers v0.0.0-20260629054935-23a3e0a235f9
-	github.com/chainreactors/zombie v1.2.3-0.20260629062908-99a0f34ed031
+	github.com/chainreactors/utils/parsers v0.0.0-20260630095004-c4fb7a13ed39
+	github.com/chainreactors/zombie v1.3.0
 	github.com/panjf2000/ants/v2 v2.12.1
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -33,6 +33,7 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20260422231931-4d751bb6e37c // indirect
 	github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 // indirect
+	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe // indirect
 	github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4 // indirect
 	github.com/charlievieth/fastwalk v1.0.14 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
