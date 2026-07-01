@@ -42,7 +42,6 @@ func (e *Engine) init() error {
 	if err := zombiepkg.Load(); err != nil {
 		return err
 	}
-	zombiepkg.SetResourceLoader(func() error { return nil })
 	e.inited = true
 	return nil
 }
